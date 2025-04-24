@@ -7,7 +7,7 @@ import logging
 import stepper
 from . import idex_modes
 
-class CartKinematics:
+class Cart3ZKinematics:
     def __init__(self, toolhead, config):
         self.printer = config.get_printer()
         # Setup axis rails
@@ -157,4 +157,4 @@ class CartKinematics:
         }
 
 def load_kinematics(toolhead, config):
-    return CartKinematics(toolhead, config)
+    return Cart3ZKinematics(toolhead, config)
