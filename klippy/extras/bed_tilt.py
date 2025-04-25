@@ -15,6 +15,8 @@ class BedTilt:
         self.x_adjust = config.getfloat('x_adjust', 0.)
         self.y_adjust = config.getfloat('y_adjust', 0.)
         self.z_adjust = config.getfloat('z_adjust', 0.)
+        self.z1_adjust = config.getfloat('z1_adjust', 0.)
+        self.z2_adjust = config.getfloat('z2_adjust', 0.)
         if config.get('points', None) is not None:
             BedTiltCalibrate(config, self)
         self.toolhead = None
@@ -24,22 +26,32 @@ class BedTilt:
     def handle_connect(self):
         self.toolhead = self.printer.lookup_object('toolhead')
     def get_position(self):
-        x, y, z, e = self.toolhead.get_position()
-        return [x, y, z - x*self.x_adjust - y*self.y_adjust - self.z_adjust, e]
+        x, y, z, z1, z2, e = self.toolhead.get_position()
+        return [x, y, z - x*self.x_adjust - y*self.y_adjust - self.z_adjust,
+        , z1 - x*self.x_adjust - y*self.y_adjust - self.z1_adjust
+        , z2 - x*self.x_adjust - y*self.y_adjust - self.z2_adjust,
+        e]
     def move(self, newpos, speed):
-        x, y, z, e = newpos
-        self.toolhead.move([x, y, z + x*self.x_adjust + y*self.y_adjust
-                            + self.z_adjust, e], speed)
-    def update_adjust(self, x_adjust, y_adjust, z_adjust):
+        x, y, z, z1, z2, e = newpos
+        self.toolhead.move([x, y, z + x*self.x_adjust + y*self.y_adjust + self.z_adjust,
+                            z1 + x*self.x_adjust + y*self.y_adjust + self.z1_adjust,
+                            z2 + x*self.x_adjust + y*self.y_adjust + self.z2_adjust,
+                             e], speed)
+    def update_adjust(self, x_adjust, y_adjust, z_adjust, z1_adjust, z2_adjust):
         self.x_adjust = x_adjust
         self.y_adjust = y_adjust
         self.z_adjust = z_adjust
+        self.z1_adjust = z1_adjust
+        self.z2_adjust = z2_adjust
         gcode_move = self.printer.lookup_object('gcode_move')
         gcode_move.reset_last_position()
         configfile = self.printer.lookup_object('configfile')
         configfile.set('bed_tilt', 'x_adjust', "%.6f" % (x_adjust,))
         configfile.set('bed_tilt', 'y_adjust', "%.6f" % (y_adjust,))
         configfile.set('bed_tilt', 'z_adjust', "%.6f" % (z_adjust,))
+        configfile.set('bed_tilt', 'z1_adjust', "%.6f" % (z1_adjust,))
+        configfile.set('bed_tilt', 'z2_adjust', "%.6f" % (z2_adjust,))
+        
 
 # Helper script to calibrate the bed tilt
 class BedTiltCalibrate:
