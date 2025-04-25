@@ -35,7 +35,9 @@ move_get_coord(struct move *m, double move_time)
     return (struct coord) {
         .x = m->start_pos.x + m->axes_r.x * move_dist,
         .y = m->start_pos.y + m->axes_r.y * move_dist,
-        .z = m->start_pos.z + m->axes_r.z * move_dist };
+        .z = m->start_pos.z + m->axes_r.z * move_dist,
+        .z1 = m->start_pos.z1 + m->axes_r.z1 * move_dist,
+        .z2 = m->start_pos.z2 + m->axes_r.z2 * move_dist};
 }
 
 #define NEVER_TIME 9999999999999999.9
@@ -119,12 +121,12 @@ trapq_add_move(struct trapq *tq, struct move *m)
 void __visible
 trapq_append(struct trapq *tq, double print_time
              , double accel_t, double cruise_t, double decel_t
-             , double start_pos_x, double start_pos_y, double start_pos_z
-             , double axes_r_x, double axes_r_y, double axes_r_z
+             , double start_pos_x, double start_pos_y, double start_pos_z, double start_pos_z1, double start_pos_z2
+             , double axes_r_x, double axes_r_y, double axes_r_z, double axes_r_z1, double axes_r_z2
              , double start_v, double cruise_v, double accel)
 {
-    struct coord start_pos = { .x=start_pos_x, .y=start_pos_y, .z=start_pos_z };
-    struct coord axes_r = { .x=axes_r_x, .y=axes_r_y, .z=axes_r_z };
+    struct coord start_pos = { .x=start_pos_x, .y=start_pos_y, .z=start_pos_z, .z=start_pos_z1 , .z=start_pos_z2  };
+    struct coord axes_r = { .x=axes_r_x, .y=axes_r_y, .z=axes_r_z , .z=axes_r_z1 , .z=axes_r_z2 };
     if (accel_t) {
         struct move *m = move_alloc();
         m->print_time = print_time;
@@ -201,7 +203,7 @@ trapq_finalize_moves(struct trapq *tq, double print_time
 // Note a position change in the trapq history
 void __visible
 trapq_set_position(struct trapq *tq, double print_time
-                   , double pos_x, double pos_y, double pos_z)
+                   , double pos_x, double pos_y, double pos_z, double pos_z1, double pos_z2)
 {
     // Flush all moves from trapq
     trapq_finalize_moves(tq, NEVER_TIME, 0);
@@ -224,6 +226,8 @@ trapq_set_position(struct trapq *tq, double print_time
     m->start_pos.x = pos_x;
     m->start_pos.y = pos_y;
     m->start_pos.z = pos_z;
+    m->start_pos.z = pos_z1;
+    m->start_pos.z = pos_z2;
     list_add_head(&m->node, &tq->history);
 }
 
@@ -246,9 +250,13 @@ trapq_extract_old(struct trapq *tq, struct pull_move *p, int max
         p->start_x = m->start_pos.x;
         p->start_y = m->start_pos.y;
         p->start_z = m->start_pos.z;
+        p->start_z = m->start_pos.z1;
+        p->start_z = m->start_pos.z2;
         p->x_r = m->axes_r.x;
         p->y_r = m->axes_r.y;
         p->z_r = m->axes_r.z;
+        p->z_r = m->axes_r.z1;
+        p->z_r = m->axes_r.z2;
         p++;
         res++;
     }
