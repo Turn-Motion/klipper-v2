@@ -38,7 +38,7 @@ class ForceMove:
         self.trapq_append = ffi_lib.trapq_append
         self.trapq_finalize_moves = ffi_lib.trapq_finalize_moves
         self.stepper_kinematics = ffi_main.gc(
-            ffi_lib.cartesian_stepper_alloc(b'x'), ffi_lib.free)
+            ffi_lib.cartesian_xy3z_stepper_alloc(b'x'), ffi_lib.free) #CHANGED: changed the stepper kinematics to xy3z
         # Register commands
         gcode = self.printer.lookup_object('gcode')
         gcode.register_command('STEPPER_BUZZ', self.cmd_STEPPER_BUZZ,
@@ -79,11 +79,11 @@ class ForceMove:
         toolhead.flush_step_generation()
         prev_sk = stepper.set_stepper_kinematics(self.stepper_kinematics)
         prev_trapq = stepper.set_trapq(self.trapq)
-        stepper.set_position((0., 0., 0.))
+        stepper.set_position((0., 0., 0., 0., 0.)) #CHANGED: added 0., 0. 2 axis
         axis_r, accel_t, cruise_t, cruise_v = calc_move_time(dist, speed, accel)
         print_time = toolhead.get_last_move_time()
         self.trapq_append(self.trapq, print_time, accel_t, cruise_t, accel_t,
-                          0., 0., 0., axis_r, 0., 0., 0., cruise_v, accel)
+                          0., 0., 0., 0., 0., axis_r, 0., 0., 0., 0., 0., cruise_v, accel)
         print_time = print_time + accel_t + cruise_t + accel_t
         stepper.generate_steps(print_time)
         self.trapq_finalize_moves(self.trapq, print_time + 99999.9,
@@ -131,15 +131,19 @@ class ForceMove:
         x = gcmd.get_float('X', curpos[0])
         y = gcmd.get_float('Y', curpos[1])
         z = gcmd.get_float('Z', curpos[2])
-        set_homed = gcmd.get('SET_HOMED', 'xyz').lower()
-        set_homed_axes = "".join([a for a in "xyz" if a in set_homed])
+        z1 = gcmd.get_float('Z1', curpos[3])
+        z2 = gcmd.get_float('Z2', curpos[4])
+        AXES = ["x", "y", "z", "z1", "z2"]
+        set_homed = gcmd.get('SET_HOMED', ' '.join(AXES)).lower().replace(',', ' ') #CHANGED: added z1 and z2 and replace the original character-finding
+        requested_axes = set(set_homed.split())
+        set_homed_axes = [a for a in AXES if a in requested_axes]
         if gcmd.get('CLEAR_HOMED', None) is None:
             # "CLEAR" is an alias for "CLEAR_HOMED"; should deprecate
             clear_homed = gcmd.get('CLEAR', '').lower()
         else:
             clear_homed = gcmd.get('CLEAR_HOMED', '').lower()
         clear_homed_axes = "".join([a for a in "xyz" if a in clear_homed])
-        logging.info("SET_KINEMATIC_POSITION pos=%.3f,%.3f,%.3f"
+        logging.info("SET_KINEMATIC_POSITION pos=%.3f,%.3f,%.3f,%.3f,%.3f"
                      " set_homed=%s clear_homed=%s",
                      x, y, z, set_homed_axes, clear_homed_axes)
         toolhead.set_position([x, y, z, curpos[3]], homing_axes=set_homed_axes)
