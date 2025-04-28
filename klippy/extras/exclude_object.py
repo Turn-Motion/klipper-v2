@@ -166,8 +166,8 @@ class ExcludeObject:
         # This adjustment value is used to compensate for any retraction
         # differences between the last object printed and excluded one.
         self.extruder_adj = self.max_position_excluded \
-            - self.last_position_excluded[3] \
-            - (self.max_position_extruded - self.last_position_extruded[3])
+            - self.last_position_excluded[5] \
+            - (self.max_position_extruded - self.last_position_extruded[5])
         self._normal_move(newpos, speed)
 
     def _test_in_excluded_region(self):

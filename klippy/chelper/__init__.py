@@ -74,9 +74,9 @@ defs_itersolve = """
     void itersolve_set_stepcompress(struct stepper_kinematics *sk
         , struct stepcompress *sc, double step_dist);
     double itersolve_calc_position_from_coord(struct stepper_kinematics *sk
-        , double x, double y, double z, double z2, double z3);
+        , double x, double y, double z, double a, double b);
     void itersolve_set_position(struct stepper_kinematics *sk
-        , double x, double y, double z, double z2, double z3);
+        , double x, double y, double z, double a, double b);
     double itersolve_get_commanded_pos(struct stepper_kinematics *sk);
 """
 
@@ -84,21 +84,21 @@ defs_trapq = """
     struct pull_move {
         double print_time, move_t;
         double start_v, accel;
-        double start_x, start_y, start_z, start_z1, start_z2;
-        double x_r, y_r, z_r, z1_r, z2_r;
+        double start_x, start_y, start_z, start_a, start_b;
+        double x_r, y_r, z_r, a_r, b_r;
     };
 
     struct trapq *trapq_alloc(void);
     void trapq_free(struct trapq *tq);
     void trapq_append(struct trapq *tq, double print_time
         , double accel_t, double cruise_t, double decel_t
-        , double start_pos_x, double start_pos_y, double start_pos_z, double start_pos_z1, double start_pos_z2
-        , double axes_r_x, double axes_r_y, double axes_r_z, double axes_r_z1, double axes_r_z2
+        , double start_pos_x, double start_pos_y, double start_pos_z, double start_pos_a, double start_pos_b
+        , double axes_r_x, double axes_r_y, double axes_r_z, double axes_r_a, double axes_r_b
         , double start_v, double cruise_v, double accel);
     void trapq_finalize_moves(struct trapq *tq, double print_time
         , double clear_history_time);
     void trapq_set_position(struct trapq *tq, double print_time
-        , double pos_x, double pos_y, double pos_z, double pos_z1, double pos_z2);
+        , double pos_x, double pos_y, double pos_z, double pos_a, double pos_b);
     int trapq_extract_old(struct trapq *tq, struct pull_move *p, int max
         , double start_time, double end_time);
 """

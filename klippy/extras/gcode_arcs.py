@@ -21,8 +21,9 @@ ARC_PLANE_Y_Z = 2
 X_AXIS = 0
 Y_AXIS = 1
 Z_AXIS = 2
-E_AXIS = 3
-
+A_AXIS = 3
+B_AXIS = 4
+E_AXIS = 5
 
 class ArcSupport:
 

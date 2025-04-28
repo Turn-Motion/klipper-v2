@@ -131,22 +131,20 @@ class ForceMove:
         x = gcmd.get_float('X', curpos[0])
         y = gcmd.get_float('Y', curpos[1])
         z = gcmd.get_float('Z', curpos[2])
-        z1 = gcmd.get_float('Z1', curpos[3])
-        z2 = gcmd.get_float('Z2', curpos[4])
-        AXES = ["x", "y", "z", "z1", "z2"]
-        set_homed = gcmd.get('SET_HOMED', ' '.join(AXES)).lower().replace(',', ' ') #CHANGED: added z1 and z2 and replace the original character-finding
-        requested_axes = set(set_homed.split())
-        set_homed_axes = [a for a in AXES if a in requested_axes]
+        a = gcmd.get_float('A', curpos[3])
+        b = gcmd.get_float('B', curpos[4])
+        set_homed = gcmd.get('SET_HOMED', 'xyzab').lower()
+        set_homed_axes = "".join([a for a in "xyzab" if a in set_homed])
         if gcmd.get('CLEAR_HOMED', None) is None:
             # "CLEAR" is an alias for "CLEAR_HOMED"; should deprecate
             clear_homed = gcmd.get('CLEAR', '').lower()
         else:
             clear_homed = gcmd.get('CLEAR_HOMED', '').lower()
-        clear_homed_axes = "".join([a for a in "xyz" if a in clear_homed])
+        clear_homed_axes = "".join([a for a in "xyzab" if a in clear_homed])
         logging.info("SET_KINEMATIC_POSITION pos=%.3f,%.3f,%.3f,%.3f,%.3f"
                      " set_homed=%s clear_homed=%s",
-                     x, y, z, set_homed_axes, clear_homed_axes)
-        toolhead.set_position([x, y, z, curpos[3]], homing_axes=set_homed_axes)
+                     x, y, z, a, b, set_homed_axes, clear_homed_axes)
+        toolhead.set_position([x, y, z, a, b, curpos[5]], homing_axes=set_homed_axes)
         toolhead.get_kinematics().clear_homing_state(clear_homed_axes)
 
 def load_config(config):

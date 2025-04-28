@@ -33,17 +33,17 @@ cart_stepper_z_calc_position(struct stepper_kinematics *sk, struct move *m
 }
 
 static double
-cart_stepper_z1_calc_position(struct stepper_kinematics *sk, struct move *m
+cart_stepper_a_calc_position(struct stepper_kinematics *sk, struct move *m
                              , double move_time)
 {
-    return move_get_coord(m, move_time).z1;
+    return move_get_coord(m, move_time).a;
 }
 
 static double
-cart_stepper_z2_calc_position(struct stepper_kinematics *sk, struct move *m
+cart_stepper_b_calc_position(struct stepper_kinematics *sk, struct move *m
                              , double move_time)
 {
-    return move_get_coord(m, move_time).2;
+    return move_get_coord(m, move_time).b;
 }
 
 struct stepper_kinematics * __visible
@@ -60,12 +60,12 @@ cartesian_stepper_alloc(char axis)
     } else if (axis == 'z') {
         sk->calc_position_cb = cart_stepper_z_calc_position;
         sk->active_flags = AF_Z;
-    } else if (axis == 'z1') {
-        sk->calc_position_cb = cart_stepper_z1_calc_position;
-        sk->active_flags = AF_Z1;
-    } else if (axis == 'z2') {
-        sk->calc_position_cb = cart_stepper_z2_calc_position;
-        sk->active_flags = AF_Z2;
+    }else if (axis == 'a') {
+        sk->calc_position_cb = cart_stepper_a_calc_position;
+        sk->active_flags = AF_A;
+    } else if (axis == 'b') {
+        sk->calc_position_cb = cart_stepper_b_calc_position;
+        sk->active_flags = AF_B;
     }
     return sk;
 }
