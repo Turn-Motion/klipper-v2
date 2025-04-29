@@ -19,11 +19,11 @@ class Cart3ZKinematics:
             stepper.LookupMultiRail(config.getsection('stepper_y')),
             # Three independent Z-axis rails
             stepper.LookupMultiRail(config.getsection('stepper_z')),
-            stepper.LookupMultiRail(config.getsection('stepper_z1')),
-            stepper.LookupMultiRail(config.getsection('stepper_z2'))
+            stepper.LookupMultiRail(config.getsection('stepper_a')),
+            stepper.LookupMultiRail(config.getsection('stepper_b'))
         ]
         # CHANGED: Configure kinematic solvers for each axis
-        axis_names = ['x', 'y', 'z', 'z1', 'z2']
+        axis_names = ['x', 'y', 'z', 'a', 'b']
         for rail, axis in zip(self.rails, axis_names):  # 'z' repeated for 3 Z axes
             rail.setup_itersolve('cartesian_stepper_alloc', axis.encode())
         # Calculate axis limits
@@ -60,7 +60,7 @@ class Cart3ZKinematics:
                                               above=0., maxval=max_velocity)
         self.max_z_accel = config.getfloat('max_z_accel', max_accel,
                                            above=0., maxval=max_accel)
-        self.limits = [(1.0, -1.0)] * 5 # CHANGED: 5 axes (X, Y, Z, Z1, Z2)
+        self.limits = [(1.0, -1.0)] * 5 # CHANGED: 5 axes (X, Y, Z, A, B)
     def get_steppers(self):
         return [s for rail in self.rails for s in rail.get_steppers()]
     def calc_position(self, stepper_positions):
@@ -95,8 +95,8 @@ class Cart3ZKinematics:
         'x': 0,
         'y': 1,
         'z': 2,
-        'z1': 3,  # Your additional Z axis 1
-        'z2': 4   # Your additional Z axis 2
+        'a': 3,  # Your additional A axis (was Z1)
+        'b': 4   # Your additional B axis (was Z2)
         }
         for axis_name in clear_axes:
             axis = axis_map.get(axis_name)
@@ -148,7 +148,7 @@ class Cart3ZKinematics:
         move.limit_speed(
             self.max_z_velocity * z_ratio, self.max_z_accel * z_ratio)
     def get_status(self, eventtime):
-        axis_names = ['x', 'y', 'z', 'z1', 'z2']  # Explicit 5-axis list
+        axis_names = ['x', 'y', 'z', 'a', 'b']  # Explicit 5-axis list
         axes = [a for a, (l, h) in zip(axis_names, self.limits) if l <= h]
         return {
             'homed_axes': "".join(axes),
