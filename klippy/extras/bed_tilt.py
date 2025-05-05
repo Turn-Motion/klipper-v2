@@ -15,8 +15,8 @@ class BedTilt:
         self.x_adjust = config.getfloat('x_adjust', 0.)
         self.y_adjust = config.getfloat('y_adjust', 0.)
         self.z_adjust = config.getfloat('z_adjust', 0.)
-        self.z1_adjust = config.getfloat('z1_adjust', 0.)
-        self.z2_adjust = config.getfloat('z2_adjust', 0.)
+        self.a_adjust = config.getfloat('a_adjust', 0.)
+        self.b_adjust = config.getfloat('b_adjust', 0.)
         if config.get('points', None) is not None:
             BedTiltCalibrate(config, self)
         self.toolhead = None
