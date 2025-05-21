@@ -34,31 +34,23 @@ class SafeZHoming:
             kin_status = toolhead.get_kinematics().get_status(curtime)
             pos = toolhead.get_position()
 
-            z_axes = ['z', 'a', 'b']
-            not_homed = [ax for ax in z_axes if ax not in kin_status['homed_axes']]
-            if not_homed:
-                # Always perform the z_hop if any Z-like axis is not homed
-                for idx, ax in enumerate(z_axes, start=2):
-                    pos[idx] = 0
-                toolhead.set_position(pos, homing_axes="zab")
-                hop_pos = pos[:]
-                for idx in range(2, 5):
-                    hop_pos[idx] = self.z_hop
-                toolhead.manual_move(hop_pos, self.z_hop_speed)
-                toolhead.get_kinematics().clear_homing_state("zab")
-            elif any(pos[idx] < self.z_hop for idx in range(2, 5)):
-                # If any Z-like axis is homed, and below z_hop, lift it to z_hop
-                hop_pos = pos[:]
-                for idx in range(2, 5):
-                    if pos[idx] < self.z_hop:
-                        hop_pos[idx] = self.z_hop
-                toolhead.manual_move(hop_pos, self.z_hop_speed)
+            if 'z' not in kin_status['homed_axes']:
+                # Always perform the z_hop if the Z axis is not homed
+                pos[2] = 0
+                toolhead.set_position(pos, homing_axes="z")
+                toolhead.manual_move([None, None, self.z_hop],
+                                     self.z_hop_speed)
+                toolhead.get_kinematics().clear_homing_state("z")
+            elif pos[2] < self.z_hop:
+                # If the Z axis is homed, and below z_hop, lift it to z_hop
+                toolhead.manual_move([None, None, self.z_hop],
+                                     self.z_hop_speed)
 
         # Determine which axes we need to home
-        need_x, need_y, need_z, need_a, need_b = [gcmd.get(axis, None) is not None
-                                  for axis in "XYZAB"]
-        if not need_x and not need_y and not need_z and not need_a and not need_b:
-            need_x = need_y = need_z = need_a = need_b = True
+        need_x, need_y, need_z = [gcmd.get(axis, None) is not None
+                                  for axis in "XYZ"]
+        if not need_x and not need_y and not need_z:
+            need_x = need_y = need_z = True
 
         # Home XY axes if necessary
         new_params = {}
@@ -87,12 +79,9 @@ class SafeZHoming:
             # Perform Z Hop again for pressure-based probes
             if self.z_hop:
                 pos = toolhead.get_position()
-                if any(pos[idx] < self.z_hop for idx in range(2, 5)):
-                    hop_pos = pos[:]
-                    for idx in range(2, 5):
-                        if pos[idx] < self.z_hop:
-                            hop_pos[idx] = self.z_hop
-                    toolhead.manual_move(hop_pos, self.z_hop_speed)
+                if pos[2] < self.z_hop:
+                    toolhead.manual_move([None, None, self.z_hop],
+                                         self.z_hop_speed)
             # Move XY back to previous positions
             if self.move_to_previous:
                 toolhead.manual_move(prevpos[:2], self.speed)

@@ -8,8 +8,8 @@ class HomingOverride:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.start_pos = [config.getfloat('set_position_' + a, None)
-                          for a in 'xyzab']
-        self.axes = config.get('axes', 'XYZAB').upper()
+                          for a in 'xyz']
+        self.axes = config.get('axes', 'XYZ').upper()
         gcode_macro = self.printer.load_object(config, 'gcode_macro')
         self.template = gcode_macro.load_template(config, 'gcode')
         self.in_script = False
@@ -25,7 +25,7 @@ class HomingOverride:
 
         # if no axis is given as parameter we assume the override
         no_axis = True
-        for axis in 'XYZAB':
+        for axis in 'XYZ':
             if gcmd.get(axis, None) is not None:
                 no_axis = False
                 break
@@ -50,7 +50,7 @@ class HomingOverride:
         for axis, loc in enumerate(self.start_pos):
             if loc is not None:
                 pos[axis] = loc
-                homing_axes += "xyzab"[axis]
+                homing_axes += "xyz"[axis]
         toolhead.set_position(pos, homing_axes=homing_axes)
         # Perform homing
         context = self.template.create_template_context()
