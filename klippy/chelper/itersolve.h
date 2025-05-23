@@ -5,6 +5,7 @@
 
 enum {
     AF_X = 1 << 0, AF_Y = 1 << 1, AF_Z = 1 << 2,
+    AF_A = 1 << 3, AF_B = 1 << 4,
 };
 
 struct stepper_kinematics;

@@ -22,6 +22,7 @@ SOURCE_FILES = [
     'kin_cartesian.c', 'kin_corexy.c', 'kin_corexz.c', 'kin_delta.c',
     'kin_deltesian.c', 'kin_polar.c', 'kin_rotary_delta.c', 'kin_winch.c',
     'kin_extruder.c', 'kin_shaper.c', 'kin_idex.c',
+    'kin_cartesianxy3z.c',  # Add our new kinematics file
 ]
 DEST_LIB = "c_helper.so"
 OTHER_FILES = [
@@ -105,6 +106,10 @@ defs_trapq = """
 
 defs_kin_cartesian = """
     struct stepper_kinematics *cartesian_stepper_alloc(char axis);
+"""
+
+defs_kin_cartesianxy3z = """
+    struct stepper_kinematics *cartesianxy3z_stepper_alloc(char axis);
 """
 
 defs_kin_corexy = """
