@@ -15,8 +15,6 @@ class BedTilt:
         self.x_adjust = config.getfloat('x_adjust', 0.)
         self.y_adjust = config.getfloat('y_adjust', 0.)
         self.z_adjust = config.getfloat('z_adjust', 0.)
-        self.a_adjust = config.getfloat('a_adjust', 0.)
-        self.b_adjust = config.getfloat('b_adjust', 0.)
         if config.get('points', None) is not None:
             BedTiltCalibrate(config, self)
         self.toolhead = None
@@ -26,26 +24,23 @@ class BedTilt:
     def handle_connect(self):
         self.toolhead = self.printer.lookup_object('toolhead')
     def get_position(self):
-        x, y, z, a, b, e = self.toolhead.get_position()
-        return [x, y, z - x*self.x_adjust - y*self.y_adjust - self.z_adjust, a, b, e]
+        x, y, z, e = self.toolhead.get_position()
+        return [x, y, z - x*self.x_adjust - y*self.y_adjust - self.z_adjust, e]
     def move(self, newpos, speed):
-        x, y, z, a, b, e = newpos
+        x, y, z, e = newpos
         self.toolhead.move([x, y, z + x*self.x_adjust + y*self.y_adjust
-                            + self.z_adjust, a, b, e], speed) #CHANGED: added a and b, but need to check if it's correct for bed tilt
-    def update_adjust(self, x_adjust, y_adjust, z_adjust, a_adjust, b_adjust):
+                            + self.z_adjust, e], speed)
+    def update_adjust(self, x_adjust, y_adjust, z_adjust):
         self.x_adjust = x_adjust
         self.y_adjust = y_adjust
         self.z_adjust = z_adjust
-        self.a_adjust = a_adjust
-        self.b_adjust = b_adjust
         gcode_move = self.printer.lookup_object('gcode_move')
         gcode_move.reset_last_position()
         configfile = self.printer.lookup_object('configfile')
         configfile.set('bed_tilt', 'x_adjust', "%.6f" % (x_adjust,))
         configfile.set('bed_tilt', 'y_adjust', "%.6f" % (y_adjust,))
         configfile.set('bed_tilt', 'z_adjust', "%.6f" % (z_adjust,))
-        configfile.set('bed_tilt', 'a_adjust', "%.6f" % (a_adjust,))
-        configfile.set('bed_tilt', 'b_adjust', "%.6f" % (b_adjust,))
+
 # Helper script to calibrate the bed tilt
 class BedTiltCalibrate:
     def __init__(self, config, bedtilt):

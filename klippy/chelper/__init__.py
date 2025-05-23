@@ -1,7 +1,6 @@
 # Wrapper around C helper code
 #
 # Copyright (C) 2016-2021  Kevin O'Connor <kevin@koconnor.net>
-# Copyright (C) 2024  Modified for additional axes
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import os, logging
@@ -20,7 +19,7 @@ SSE_FLAGS = "-mfpmath=sse -msse2"
 SOURCE_FILES = [
     'pyhelper.c', 'serialqueue.c', 'stepcompress.c', 'itersolve.c', 'trapq.c',
     'pollreactor.c', 'msgblock.c', 'trdispatch.c',
-    'kin_cartesian.c', 'kin_cartesian_xy3z.c', 'kin_corexy.c', 'kin_corexz.c', 'kin_delta.c',
+    'kin_cartesian.c', 'kin_corexy.c', 'kin_corexz.c', 'kin_delta.c',
     'kin_deltesian.c', 'kin_polar.c', 'kin_rotary_delta.c', 'kin_winch.c',
     'kin_extruder.c', 'kin_shaper.c', 'kin_idex.c',
 ]
@@ -75,9 +74,9 @@ defs_itersolve = """
     void itersolve_set_stepcompress(struct stepper_kinematics *sk
         , struct stepcompress *sc, double step_dist);
     double itersolve_calc_position_from_coord(struct stepper_kinematics *sk
-        , double x, double y, double z, double a, double b);
+        , double x, double y, double z);
     void itersolve_set_position(struct stepper_kinematics *sk
-        , double x, double y, double z, double a, double b);
+        , double x, double y, double z);
     double itersolve_get_commanded_pos(struct stepper_kinematics *sk);
 """
 
@@ -85,39 +84,27 @@ defs_trapq = """
     struct pull_move {
         double print_time, move_t;
         double start_v, accel;
-        double start_x, start_y, start_z, start_a, start_b;
-        double x_r, y_r, z_r, a_r, b_r;
+        double start_x, start_y, start_z;
+        double x_r, y_r, z_r;
     };
 
     struct trapq *trapq_alloc(void);
     void trapq_free(struct trapq *tq);
     void trapq_append(struct trapq *tq, double print_time
         , double accel_t, double cruise_t, double decel_t
-        , double start_pos_x, double start_pos_y, double start_pos_z, double start_pos_a, double start_pos_b
-        , double axes_r_x, double axes_r_y, double axes_r_z, double axes_r_a, double axes_r_b
+        , double start_pos_x, double start_pos_y, double start_pos_z
+        , double axes_r_x, double axes_r_y, double axes_r_z
         , double start_v, double cruise_v, double accel);
     void trapq_finalize_moves(struct trapq *tq, double print_time
         , double clear_history_time);
     void trapq_set_position(struct trapq *tq, double print_time
-        , double pos_x, double pos_y, double pos_z, double pos_a, double pos_b);
+        , double pos_x, double pos_y, double pos_z);
     int trapq_extract_old(struct trapq *tq, struct pull_move *p, int max
         , double start_time, double end_time);
 """
 
 defs_kin_cartesian = """
     struct stepper_kinematics *cartesian_stepper_alloc(char axis);
-"""
-
-defs_kin_cartesian_xy3z = """
-<<<<<<< HEAD
-<<<<<<< HEAD
-    struct stepper_kinematics *cartesian_stepper_alloc(char axis);
-=======
-    struct stepper_kinematics *cartesian_xy3z_stepper_alloc(char axis);
->>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
-=======
-    struct stepper_kinematics *cartesian_xy3z_stepper_alloc(char axis);
->>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 """
 
 defs_kin_corexy = """
@@ -234,7 +221,7 @@ defs_std = """
 defs_all = [
     defs_pyhelper, defs_serialqueue, defs_std, defs_stepcompress,
     defs_itersolve, defs_trapq, defs_trdispatch,
-    defs_kin_cartesian, defs_kin_cartesian_xy3z, defs_kin_corexy, defs_kin_corexz, defs_kin_delta,
+    defs_kin_cartesian, defs_kin_corexy, defs_kin_corexz, defs_kin_delta,
     defs_kin_deltesian, defs_kin_polar, defs_kin_rotary_delta, defs_kin_winch,
     defs_kin_extruder, defs_kin_shaper, defs_kin_idex,
 ]

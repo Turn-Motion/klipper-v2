@@ -121,7 +121,7 @@ class HallFilamentWidthSensor:
     def extrude_factor_update_event(self, eventtime):
         # Update extrude factor
         pos = self.toolhead.get_position()
-        last_epos = pos[5]
+        last_epos = pos[3]
         # Update filament array for lastFilamentWidthReading
         self.update_filament_array(last_epos)
         # Check runout
@@ -209,12 +209,10 @@ class HallFilamentWidthSensor:
                       +self.lastFilamentWidthReading2))
         gcmd.respond_info(response)
     def get_status(self, eventtime):
-        status = self.runout_helper.get_status(eventtime)
-        status.update({'Diameter': self.diameter,
+        return {'Diameter': self.diameter,
                 'Raw':(self.lastFilamentWidthReading+
                  self.lastFilamentWidthReading2),
-                'is_active':self.is_active})
-        return status
+                'is_active':self.is_active}
     def cmd_log_enable(self, gcmd):
         self.is_log = True
         gcmd.respond_info("Filament width logging Turned On")
