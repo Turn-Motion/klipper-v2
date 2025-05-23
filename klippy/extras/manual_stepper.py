@@ -26,7 +26,7 @@ class ManualStepper:
         self.trapq = ffi_main.gc(ffi_lib.trapq_alloc(), ffi_lib.trapq_free)
         self.trapq_append = ffi_lib.trapq_append
         self.trapq_finalize_moves = ffi_lib.trapq_finalize_moves
-        self.rail.setup_itersolve('cartesian_stepper_alloc', b'x')
+        self.rail.setup_itersolve('cartesian_xy3z_stepper_alloc', b'x')
         self.rail.set_trapq(self.trapq)
         # Register commands
         stepper_name = config.get_name().split()[1]
@@ -54,18 +54,21 @@ class ManualStepper:
                 se.motor_disable(self.next_cmd_time)
         self.sync_print_time()
     def do_set_position(self, setpos):
-        self.rail.set_position([setpos, 0., 0.])
-    def do_move(self, movepos, speed, accel, sync=True):
-        self.sync_print_time()
+        self.rail.set_position([0., setpos, 0., 0., 0., 0.])
+    def _submit_move(self, movetime, movepos, speed, accel):
         cp = self.rail.get_commanded_position()
         dist = movepos - cp
         axis_r, accel_t, cruise_t, cruise_v = force_move.calc_move_time(
             dist, speed, accel)
-        self.trapq_append(self.trapq, self.next_cmd_time,
+        self.trapq_append(self.trapq, movetime,
                           accel_t, cruise_t, accel_t,
-                          cp, 0., 0., axis_r, 0., 0.,
+                          0., cp, 0., 0., 0., axis_r, 0., 0., 0., 0.,
                           0., cruise_v, accel)
-        self.next_cmd_time = self.next_cmd_time + accel_t + cruise_t + accel_t
+        return movetime + accel_t + cruise_t + accel_t
+    def do_move(self, movepos, speed, accel, sync=True):
+        self.sync_print_time()
+        self.next_cmd_time = self._submit_move(self.next_cmd_time, movepos,
+                                               speed, accel)
         self.rail.generate_steps(self.next_cmd_time)
         self.trapq_finalize_moves(self.trapq, self.next_cmd_time + 99999.9,
                                   self.next_cmd_time + 99999.9)
@@ -78,7 +81,7 @@ class ManualStepper:
             raise self.printer.command_error(
                 "No endstop for this manual stepper")
         self.homing_accel = accel
-        pos = [movepos, 0., 0., 0.]
+        pos = [0., movepos, 0., 0., 0., 0.]
         endstops = self.rail.get_endstops()
         phoming = self.printer.lookup_object('homing')
         phoming.manual_home(self, endstops, pos, speed,
@@ -108,22 +111,33 @@ class ManualStepper:
     def flush_step_generation(self):
         self.sync_print_time()
     def get_position(self):
-        return [self.rail.get_commanded_position(), 0., 0., 0.]
+        return [0., self.rail.get_commanded_position(), 0., 0., 0., 0.]
     def set_position(self, newpos, homing_axes=""):
-        self.do_set_position(newpos[0])
+        self.do_set_position(newpos[1])
     def get_last_move_time(self):
         self.sync_print_time()
         return self.next_cmd_time
     def dwell(self, delay):
         self.next_cmd_time += max(0., delay)
     def drip_move(self, newpos, speed, drip_completion):
-        self.do_move(newpos[0], speed, self.homing_accel)
+        # Submit move to trapq
+        self.sync_print_time()
+        maxtime = self._submit_move(self.next_cmd_time, newpos[1],
+                                    speed, self.homing_accel)
+        # Drip updates to motors
+        toolhead = self.printer.lookup_object('toolhead')
+        toolhead.drip_update_time(maxtime, drip_completion, self.steppers)
+        # Clear trapq of any remaining parts of movement
+        reactor = self.printer.get_reactor()
+        self.trapq_finalize_moves(self.trapq, reactor.NEVER, 0)
+        self.rail.set_position([0., newpos[1], 0., 0., 0., 0.])
+        self.sync_print_time()
     def get_kinematics(self):
         return self
     def get_steppers(self):
         return self.steppers
     def calc_position(self, stepper_positions):
-        return [stepper_positions[self.rail.get_name()], 0., 0.]
+        return [0., stepper_positions[self.rail.get_name()], 0., 0., 0., 0.]
 
 def load_config_prefix(config):
     return ManualStepper(config)

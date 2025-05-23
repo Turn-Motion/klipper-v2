@@ -1,4 +1,11 @@
-Welcome to the Klipper project!
+Turn-Motion Klipper Firmware (Private Fork)
+Welcome to the Turn-Motion Klipper project, a major update of the Klipper firmware with support for two-axis motion.
+
+This repository is a private fork of the original Klipper firmware, based on the version as of 18.04.2025.
+The fork has been detached from the original repository in order to make this project private.
+
+Klipper software is Free Software. See the license or read the documentation.
+Klipper depends on the generous support from its sponsors.
 
 [![Klipper](docs/img/klipper-logo-small.png)](https://www.klipper3d.org/)
 
@@ -15,3 +22,5 @@ Klipper software is Free Software. See the [license](COPYING) or read
 the [documentation](https://www.klipper3d.org/Overview.html). We
 depend on the generous support from our
 [sponsors](https://www.klipper3d.org/Sponsors.html).
+
+--Update Test commit

@@ -89,7 +89,7 @@ class BedMesh:
         self.printer = config.get_printer()
         self.printer.register_event_handler("klippy:connect",
                                             self.handle_connect)
-        self.last_position = [0., 0., 0., 0.]
+        self.last_position = [0., 0., 0., 0., 0., 0.]
         self.bmc = BedMeshCalibrate(config, self)
         self.z_mesh = None
         self.toolhead = None
@@ -170,7 +170,7 @@ class BedMesh:
         gcode_move = self.printer.lookup_object('gcode_move')
         gcode_move.reset_last_position()
         self.update_status()
-    def get_z_factor(self, z_pos):
+    def get_z_factor(self, z_pos): #should this be changed?
         z_pos += self.tool_offset
         if z_pos >= self.fade_end:
             return 0.
@@ -186,7 +186,7 @@ class BedMesh:
             self.last_position[2] -= self.fade_target
         else:
             # return current position minus the current z-adjustment
-            x, y, z, e = self.toolhead.get_position()
+            x, y, z, a, b, e = self.toolhead.get_position()
             max_adj = self.z_mesh.calc_z(x, y)
             factor = 1.
             z_adj = max_adj - self.fade_target
@@ -202,19 +202,19 @@ class BedMesh:
                           (self.fade_dist - z_adj))
                 factor = constrain(factor, 0., 1.)
             final_z_adj = factor * z_adj + self.fade_target
-            self.last_position[:] = [x, y, z - final_z_adj, e]
+            self.last_position[:] = [x, y, z - final_z_adj, a, b, e]
         return list(self.last_position)
     def move(self, newpos, speed):
         factor = self.get_z_factor(newpos[2])
         if self.z_mesh is None or not factor:
             # No mesh calibrated, or mesh leveling phased out.
-            x, y, z, e = newpos
+            x, y, z, a, b, e = newpos
             if self.log_fade_complete:
                 self.log_fade_complete = False
                 logging.info(
                     "bed_mesh fade complete: Current Z: %.4f fade_target: %.4f "
                     % (z, self.fade_target))
-            self.toolhead.move([x, y, z + self.fade_target, e], speed)
+            self.toolhead.move([x, y, z + self.fade_target, a, b, e], speed)
         else:
             self.splitter.build_move(self.last_position, newpos, factor)
             while not self.splitter.traverse_complete:
@@ -1273,8 +1273,8 @@ class MoveSplitter:
         self.z_offset = self._calc_z_offset(prev_pos)
         self.traverse_complete = False
         self.distance_checked = 0.
-        axes_d = [self.next_pos[i] - self.prev_pos[i] for i in range(4)]
-        self.total_move_length = math.sqrt(sum([d*d for d in axes_d[:3]]))
+        axes_d = [self.next_pos[i] - self.prev_pos[i] for i in range(6)]
+        self.total_move_length = math.sqrt(sum([d*d for d in axes_d[:3]])) #should change?
         self.axis_move = [not isclose(d, 0., abs_tol=1e-10) for d in axes_d]
     def _calc_z_offset(self, pos):
         z = self.z_mesh.calc_z(pos[0], pos[1])
@@ -1286,7 +1286,7 @@ class MoveSplitter:
             raise self.gcode.error(
                 "bed_mesh: Slice distance is negative "
                 "or greater than entire move length")
-        for i in range(4):
+        for i in range(6):
             if self.axis_move[i]:
                 self.current_pos[i] = lerp(
                     t, self.prev_pos[i], self.next_pos[i])
@@ -1303,7 +1303,7 @@ class MoveSplitter:
                         self.z_offset = next_z
                         return self.current_pos[0], self.current_pos[1], \
                             self.current_pos[2] + self.z_offset, \
-                            self.current_pos[3]
+                            self.current_pos[3], self.current_pos[4], self.current_pos[5]
             # end of move reached
             self.current_pos[:] = self.next_pos
             self.z_offset = self._calc_z_offset(self.current_pos)
