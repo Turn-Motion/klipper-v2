@@ -1,15 +1,17 @@
 # Run user defined actions in place of a normal G28 homing command
 #
-# Copyright (C) 2018  Kevin O'Connor <kevin@koconnor.net>
+# Copyright (C) 2018-2024  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
 class HomingOverride:
     def __init__(self, config):
         self.printer = config.get_printer()
+        # Get position for all axes (XYZAB)
         self.start_pos = [config.getfloat('set_position_' + a, None)
-                          for a in 'xyz']
-        self.axes = config.get('axes', 'XYZ').upper()
+                          for a in 'xyzab']
+        # Get axes to override (default to XYZAB)
+        self.axes = config.get('axes', 'XYZAB').upper()
         gcode_macro = self.printer.load_object(config, 'gcode_macro')
         self.template = gcode_macro.load_template(config, 'gcode')
         self.in_script = False
@@ -25,7 +27,7 @@ class HomingOverride:
 
         # if no axis is given as parameter we assume the override
         no_axis = True
-        for axis in 'XYZ':
+        for axis in 'XYZAB':  # Check all axes
             if gcmd.get(axis, None) is not None:
                 no_axis = False
                 break
@@ -50,7 +52,7 @@ class HomingOverride:
         for axis, loc in enumerate(self.start_pos):
             if loc is not None:
                 pos[axis] = loc
-                homing_axes += "xyz"[axis]
+                homing_axes += "xyzab"[axis]  # Use correct axis names
         toolhead.set_position(pos, homing_axes=homing_axes)
         # Perform homing
         context = self.template.create_template_context()
