@@ -38,7 +38,11 @@ move_get_coord(struct move *m, double move_time)
         .y = m->start_pos.y + m->axes_r.y * move_dist,
         .z = m->start_pos.z + m->axes_r.z * move_dist,
         .a = m->start_pos.a + m->axes_r.a * move_dist,
+<<<<<<< HEAD
         .b = m->start_pos.b + m->axes_r.b * move_dist };
+=======
+        .b = m->start_pos.b + m->axes_r.b * move_dist};
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 }
 
 #define NEVER_TIME 9999999999999999.9
@@ -122,6 +126,7 @@ trapq_add_move(struct trapq *tq, struct move *m)
 void __visible
 trapq_append(struct trapq *tq, double print_time
              , double accel_t, double cruise_t, double decel_t
+<<<<<<< HEAD
              , double start_pos_x, double start_pos_y, double start_pos_z
              , double start_pos_a, double start_pos_b
              , double axes_r_x, double axes_r_y, double axes_r_z
@@ -136,6 +141,14 @@ trapq_append(struct trapq *tq, double print_time
         .x=axes_r_x, .y=axes_r_y, .z=axes_r_z,
         .a=axes_r_a, .b=axes_r_b
     };
+=======
+             , double start_pos_x, double start_pos_y, double start_pos_z, double start_pos_a, double start_pos_b
+             , double axes_r_x, double axes_r_y, double axes_r_z, double axes_r_a, double axes_r_b
+             , double start_v, double cruise_v, double accel)
+{
+    struct coord start_pos = { .x=start_pos_x, .y=start_pos_y, .z=start_pos_z, .a=start_pos_a, .b=start_pos_b };
+    struct coord axes_r = { .x=axes_r_x, .y=axes_r_y, .z=axes_r_z, .a=axes_r_a, .b=axes_r_b };
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
     if (accel_t) {
         struct move *m = move_alloc();
         m->print_time = print_time;
@@ -212,8 +225,12 @@ trapq_finalize_moves(struct trapq *tq, double print_time
 // Note a position change in the trapq history
 void __visible
 trapq_set_position(struct trapq *tq, double print_time
+<<<<<<< HEAD
                    , double pos_x, double pos_y, double pos_z
                    , double pos_a, double pos_b)
+=======
+                   , double pos_x, double pos_y, double pos_z, double pos_a, double pos_b)
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 {
     // Flush all moves from trapq
     trapq_finalize_moves(tq, NEVER_TIME, 0);

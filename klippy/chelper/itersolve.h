@@ -4,8 +4,12 @@
 #include <stdint.h> // int32_t
 
 enum {
+<<<<<<< HEAD
     AF_X = 1 << 0, AF_Y = 1 << 1, AF_Z = 1 << 2,
     AF_A = 1 << 3, AF_B = 1 << 4,  // Added flags for a and b axes
+=======
+    AF_X = 1 << 0, AF_Y = 1 << 1, AF_Z = 1 << 2, AF_A = 1 << 3, AF_B = 1 << 4,
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 };
 
 struct stepper_kinematics;
@@ -34,11 +38,17 @@ void itersolve_set_trapq(struct stepper_kinematics *sk, struct trapq *tq);
 void itersolve_set_stepcompress(struct stepper_kinematics *sk
                                 , struct stepcompress *sc, double step_dist);
 double itersolve_calc_position_from_coord(struct stepper_kinematics *sk
+<<<<<<< HEAD
                                           , double x, double y, double z
                                           , double a, double b);  // Updated to include a and b
 void itersolve_set_position(struct stepper_kinematics *sk
                             , double x, double y, double z
                             , double a, double b);  // Updated to include a and b
+=======
+                                          , double x, double y, double z, double a, double b);
+void itersolve_set_position(struct stepper_kinematics *sk
+                            , double x, double y, double z, double a, double b);
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 double itersolve_get_commanded_pos(struct stepper_kinematics *sk);
 
 #endif // itersolve.h

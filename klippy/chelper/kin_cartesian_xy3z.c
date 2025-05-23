@@ -1,7 +1,13 @@
+<<<<<<< HEAD
 // Cartesian kinematics stepper pulse time generation (with additional a and b axes)
 //
 // Copyright (C) 2018-2019  Kevin O'Connor <kevin@koconnor.net>
 // Copyright (C) 2024  Modified for additional axes
+=======
+// Cartesian kinematics stepper pulse time generation
+//
+// Copyright (C) 2018-2019  Kevin O'Connor <kevin@koconnor.net>
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 //
 // This file may be distributed under the terms of the GNU GPLv3 license.
 
@@ -61,6 +67,7 @@ cartesian_stepper_alloc(char axis)
     } else if (axis == 'z') {
         sk->calc_position_cb = cart_stepper_z_calc_position;
         sk->active_flags = AF_Z;
+<<<<<<< HEAD
     } else if (axis == 'a') {
         sk->calc_position_cb = cart_stepper_a_calc_position;
         sk->active_flags = AF_A;  // Note: AF_A needs to be defined in itersolve.h
@@ -70,3 +77,14 @@ cartesian_stepper_alloc(char axis)
     }
     return sk;
 } 
+=======
+    }else if (axis == 'a') {
+        sk->calc_position_cb = cart_stepper_a_calc_position;
+        sk->active_flags = AF_A;
+    } else if (axis == 'b') {
+        sk->calc_position_cb = cart_stepper_b_calc_position;
+        sk->active_flags = AF_B;
+    }
+    return sk;
+}
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
