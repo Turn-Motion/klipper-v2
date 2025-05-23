@@ -17,7 +17,7 @@ class CartesianXY3Z:
         self.rails = [stepper.LookupMultiRail(config.getsection('stepper_' + n))
                       for n in 'xyzab']
         for rail, axis in zip(self.rails, 'xyzab'):
-            rail.setup_itersolve('cartesian_stepper_alloc', axis.encode())
+            rail.setup_itersolve('cartesianxy3z_stepper_alloc', axis.encode())
         ranges = [r.get_range() for r in self.rails]
         self.axes_min = toolhead.Coord(*[r[0] for r in ranges], e=0.)
         self.axes_max = toolhead.Coord(*[r[1] for r in ranges], e=0.)
@@ -28,7 +28,7 @@ class CartesianXY3Z:
             self.dual_carriage_axis = {'x': 0, 'y': 1}[dc_axis]
             # setup second dual carriage rail
             self.rails.append(stepper.LookupMultiRail(dc_config))
-            self.rails[5].setup_itersolve('cartesian_stepper_alloc',
+            self.rails[5].setup_itersolve('cartesianxy3z_stepper_alloc',
                                           dc_axis.encode())
             dc_rail_0 = idex_modes.DualCarriagesRail(
                     self.rails[self.dual_carriage_axis],
