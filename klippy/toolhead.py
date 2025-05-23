@@ -21,14 +21,16 @@ class Move:
         self.timing_callbacks = []
         velocity = min(speed, toolhead.max_velocity)
         self.is_kinematic_move = True
-        self.axes_d = axes_d = [end_pos[i] - start_pos[i] for i in (0, 1, 2, 3)]
-        self.move_d = move_d = math.sqrt(sum([d*d for d in axes_d[:3]]))
+        # Calculate movement for all axes (XYZABE)
+        self.axes_d = axes_d = [end_pos[i] - start_pos[i] for i in (0, 1, 2, 3, 4)]
+        # Calculate total movement distance (excluding E axis)
+        self.move_d = move_d = math.sqrt(sum([d*d for d in axes_d[:5]]))
         if move_d < .000000001:
             # Extrude only move
             self.end_pos = (start_pos[0], start_pos[1], start_pos[2],
-                            end_pos[3])
-            axes_d[0] = axes_d[1] = axes_d[2] = 0.
-            self.move_d = move_d = abs(axes_d[3])
+                           start_pos[3], start_pos[4], end_pos[5])
+            axes_d[0] = axes_d[1] = axes_d[2] = axes_d[3] = axes_d[4] = 0.
+            self.move_d = move_d = abs(axes_d[5])
             inv_move_d = 0.
             if move_d:
                 inv_move_d = 1. / move_d
@@ -73,9 +75,12 @@ class Move:
         # Find max velocity using "approximated centripetal velocity"
         axes_r = self.axes_r
         prev_axes_r = prev_move.axes_r
+        # Calculate junction angle for all motion axes (XYZAB)
         junction_cos_theta = -(axes_r[0] * prev_axes_r[0]
                                + axes_r[1] * prev_axes_r[1]
-                               + axes_r[2] * prev_axes_r[2])
+                               + axes_r[2] * prev_axes_r[2]
+                               + axes_r[3] * prev_axes_r[3]
+                               + axes_r[4] * prev_axes_r[4])
         sin_theta_d2 = math.sqrt(max(0.5*(1.0-junction_cos_theta), 0.))
         cos_theta_d2 = math.sqrt(max(0.5*(1.0+junction_cos_theta), 0.))
         one_minus_sin_theta_d2 = 1. - sin_theta_d2
@@ -217,7 +222,7 @@ class ToolHead:
         self.mcu = self.all_mcus[0]
         self.lookahead = LookAheadQueue(self)
         self.lookahead.set_flush_time(BUFFER_TIME_HIGH)
-        self.commanded_pos = [0., 0., 0., 0.]
+        self.commanded_pos = [0., 0., 0., 0., 0., 0.]  # XYZABE axes
         # Velocity and acceleration control
         self.max_velocity = config.getfloat('max_velocity', above=0.)
         self.max_accel = config.getfloat('max_accel', above=0.)
