@@ -98,9 +98,10 @@ class DumpTrapQ:
         out = ["Dumping trapq '%s' %d moves:" % (self.name, len(data))]
         for i, m in enumerate(data):
             out.append("move %d: pt=%.6f mt=%.6f sv=%.6f a=%.6f"
-                       " sp=(%.6f,%.6f,%.6f) ar=(%.6f,%.6f,%.6f)"
+                       " sp=(%.6f,%.6f,%.6f,%.6f,%.6f) ar=(%.6f,%.6f,%.6f,%.6f,%.6f)"
                        % (i, m.print_time, m.move_t, m.start_v, m.accel,
-                          m.start_x, m.start_y, m.start_z, m.x_r, m.y_r, m.z_r))
+                          m.start_x, m.start_y, m.start_z, m.start_a, m.start_b,
+                          m.x_r, m.y_r, m.z_r, m.a_r, m.b_r))
         logging.info('\n'.join(out))
     def get_trapq_position(self, print_time):
         ffi_main, ffi_lib = chelper.get_ffi()
@@ -112,14 +113,16 @@ class DumpTrapQ:
         move_time = max(0., min(move.move_t, print_time - move.print_time))
         dist = (move.start_v + .5 * move.accel * move_time) * move_time;
         pos = (move.start_x + move.x_r * dist, move.start_y + move.y_r * dist,
-               move.start_z + move.z_r * dist)
+               move.start_z + move.z_r * dist, move.start_a + move.a_r * dist,
+               move.start_b + move.b_r * dist)
         velocity = move.start_v + move.accel * move_time
         return pos, velocity
     def _process_batch(self, eventtime):
         qtime = self.last_batch_msg[0] + min(self.last_batch_msg[1], 0.100)
         data, cdata = self.extract_trapq(qtime, NEVER_TIME)
         d = [(m.print_time, m.move_t, m.start_v, m.accel,
-              (m.start_x, m.start_y, m.start_z), (m.x_r, m.y_r, m.z_r))
+              (m.start_x, m.start_y, m.start_z, m.start_a, m.start_b),
+              (m.x_r, m.y_r, m.z_r, m.a_r, m.b_r))
              for m in data]
         if d and d[0] == self.last_batch_msg:
             d.pop(0)
@@ -139,7 +142,7 @@ class PrinterMotionReport:
         self.next_status_time = 0.
         gcode = self.printer.lookup_object('gcode')
         self.last_status = {
-            'live_position': gcode.Coord(0., 0., 0., 0.),
+            'live_position': gcode.Coord(0., 0., 0., 0., 0., 0.),  # XYZAB
             'live_velocity': 0., 'live_extruder_velocity': 0.,
             'steppers': [], 'trapq': [],
         }
@@ -204,16 +207,16 @@ class PrinterMotionReport:
         if eventtime < self.next_status_time or not self.trapqs:
             return self.last_status
         self.next_status_time = eventtime + STATUS_REFRESH_TIME
-        xyzpos = (0., 0., 0.)
+        xyzabpos = (0., 0., 0., 0., 0.)  # XYZAB
         epos = (0.,)
-        xyzvelocity = evelocity = 0.
+        xyzabvelocity = evelocity = 0.
         # Calculate current requested toolhead position
         mcu = self.printer.lookup_object('mcu')
         print_time = mcu.estimated_print_time(eventtime)
         pos, velocity = self.trapqs['toolhead'].get_trapq_position(print_time)
         if pos is not None:
-            xyzpos = pos[:3]
-            xyzvelocity = velocity
+            xyzabpos = pos[:5]  # XYZAB
+            xyzabvelocity = velocity
         # Calculate requested position of currently active extruder
         toolhead = self.printer.lookup_object('toolhead')
         ehandler = self.trapqs.get(toolhead.get_extruder().get_name())
@@ -224,8 +227,8 @@ class PrinterMotionReport:
                 evelocity = velocity
         # Report status
         self.last_status = dict(self.last_status)
-        self.last_status['live_position'] = toolhead.Coord(*(xyzpos + epos))
-        self.last_status['live_velocity'] = xyzvelocity
+        self.last_status['live_position'] = toolhead.Coord(*(xyzabpos + epos))
+        self.last_status['live_velocity'] = xyzabvelocity
         self.last_status['live_extruder_velocity'] = evelocity
         return self.last_status
 

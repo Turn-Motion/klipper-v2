@@ -21,7 +21,9 @@ ARC_PLANE_Y_Z = 2
 X_AXIS = 0
 Y_AXIS = 1
 Z_AXIS = 2
-E_AXIS = 3
+A_AXIS = 3
+B_AXIS = 4
+E_AXIS = 5
 
 
 class ArcSupport:
@@ -67,7 +69,9 @@ class ArcSupport:
         # Parse parameters
         asTarget = [gcmd.get_float("X", currentPos[0]),
                     gcmd.get_float("Y", currentPos[1]),
-                    gcmd.get_float("Z", currentPos[2])]
+                    gcmd.get_float("Z", currentPos[2]),
+                    gcmd.get_float("A", currentPos[3]),
+                    gcmd.get_float("B", currentPos[4])]
 
         if gcmd.get_float("R", None) is not None:
             raise gcmd.error("G2/G3 does not support R moves")
@@ -76,15 +80,15 @@ class ArcSupport:
         I = gcmd.get_float('I', 0.)
         J = gcmd.get_float('J', 0.)
         asPlanar = (I, J)
-        axes = (X_AXIS, Y_AXIS, Z_AXIS)
+        axes = (X_AXIS, Y_AXIS, Z_AXIS, A_AXIS, B_AXIS)
         if self.plane == ARC_PLANE_X_Z:
             K = gcmd.get_float('K', 0.)
             asPlanar = (I, K)
-            axes = (X_AXIS, Z_AXIS, Y_AXIS)
+            axes = (X_AXIS, Z_AXIS, Y_AXIS, A_AXIS, B_AXIS)
         elif self.plane == ARC_PLANE_Y_Z:
             K = gcmd.get_float('K', 0.)
             asPlanar = (J, K)
-            axes = (Y_AXIS, Z_AXIS, X_AXIS)
+            axes = (Y_AXIS, Z_AXIS, X_AXIS, A_AXIS, B_AXIS)
 
         if not (asPlanar[0] or asPlanar[1]):
             raise gcmd.error("G2/G3 requires IJ, IK or JK parameters")
@@ -103,7 +107,7 @@ class ArcSupport:
     # alpha and beta axes are the current plane, helical axis is linear travel
     def planArc(self, currentPos, targetPos, offset, clockwise,
                 gcmd, absolut_extrude,
-                alpha_axis, beta_axis, helical_axis):
+                alpha_axis, beta_axis, helical_axis, a_axis, b_axis):
         # todo: sometimes produces full circles
 
         # Radius vector from center to current location
@@ -149,7 +153,7 @@ class ArcSupport:
         e_per_move = e_base = 0.
         if asE is not None:
             if absolut_extrude:
-                e_base = currentPos[3]
+                e_base = currentPos[5]  # E is now at index 5
             e_per_move = (asE - e_base) / segments
 
         for i in range(1, int(segments) + 1):
@@ -160,16 +164,17 @@ class ArcSupport:
             r_P = -offset[0] * cos_Ti + offset[1] * sin_Ti
             r_Q = -offset[0] * sin_Ti - offset[1] * cos_Ti
 
-            c = [None, None, None]
+            c = [None, None, None, None, None]
             c[alpha_axis] = center_P + r_P
             c[beta_axis] = center_Q + r_Q
             c[helical_axis] = currentPos[helical_axis] + dist_Helical
-
+            c[a_axis] = currentPos[a_axis] + (targetPos[a_axis] - currentPos[a_axis]) * i / segments
+            c[b_axis] = currentPos[b_axis] + (targetPos[b_axis] - currentPos[b_axis]) * i / segments
 
             if i == segments:
                 c = targetPos
             # Convert coords into G1 commands
-            g1_params = {'X': c[0], 'Y': c[1], 'Z': c[2]}
+            g1_params = {'X': c[0], 'Y': c[1], 'Z': c[2], 'A': c[3], 'B': c[4]}
             if e_per_move:
                 g1_params['E'] = e_base + e_per_move
                 if absolut_extrude:
