@@ -1,8 +1,14 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Code for handling the kinematics of cartesian robots with additional a and b axes
 #
 # Copyright (C) 2016-2021  Kevin O'Connor <kevin@koconnor.net>
 # Copyright (C) 2024  Modified for additional axes
+=======
+# Code for handling the kinematics of cartesian robots with 3 separated z-axis support
+#
+# Copyright (C) 2016-2021  Kevin O'Connor <kevin@koconnor.net>
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 =======
 # Code for handling the kinematics of cartesian robots with 3 separated z-axis support
 #
@@ -15,7 +21,11 @@ import stepper
 from . import idex_modes
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 class CartXY3ZKinematics:
+=======
+class Cart3ZKinematics:
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 =======
 class Cart3ZKinematics:
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
@@ -25,6 +35,7 @@ class Cart3ZKinematics:
         self.dual_carriage_axis = None
         self.dual_carriage_rails = []
 <<<<<<< HEAD
+<<<<<<< HEAD
         self.rails = [stepper.LookupMultiRail(config.getsection('stepper_' + n))
                       for n in 'xyzab']
         for rail, axis in zip(self.rails, 'xyzab'):
@@ -33,6 +44,8 @@ class Cart3ZKinematics:
         self.axes_min = toolhead.Coord(*[r[0] for r in ranges], e=0.)
         self.axes_max = toolhead.Coord(*[r[1] for r in ranges], e=0.)
 =======
+=======
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
         # CHANGED: Create rails for X, Y, and 3 Z-axis steppers
         self.rails = [
             stepper.LookupMultiRail(config.getsection('stepper_x')),
@@ -51,6 +64,9 @@ class Cart3ZKinematics:
         self.axes_min = toolhead.Coord(*[r[0] for r in ranges], e=0.)
         self.axes_max = toolhead.Coord(*[r[1] for r in ranges], e=0.)
         # Dual carriage handling
+<<<<<<< HEAD
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
+=======
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
         self.dc_module = None
         if config.has_section('dual_carriage'):
@@ -60,13 +76,19 @@ class Cart3ZKinematics:
             # setup second dual carriage rail
             self.rails.append(stepper.LookupMultiRail(dc_config))
 <<<<<<< HEAD
+<<<<<<< HEAD
             self.rails[3].setup_itersolve('cartesian_stepper_alloc',
                                           dc_axis.encode())
 =======
+=======
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
             # CHANGED: Add dual-carriage rail dynamically
             dual_carriage_rail_index = len(self.rails) - 1
             self.rails[dual_carriage_rail_index].setup_itersolve(
                 'cartesian_stepper_alloc', dc_axis.encode())
+<<<<<<< HEAD
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
+=======
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
             dc_rail_0 = idex_modes.DualCarriagesRail(
                     self.rails[self.dual_carriage_axis],
@@ -77,16 +99,22 @@ class Cart3ZKinematics:
                     dc_config, dc_rail_0, dc_rail_1,
                     axis=self.dual_carriage_axis)
 <<<<<<< HEAD
+<<<<<<< HEAD
         for s in self.get_steppers():
             s.set_trapq(toolhead.get_trapq())
             toolhead.register_step_generator(s.generate_steps)
         # Setup boundary checks
 =======
+=======
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
         # Register steppers with toolhead            
         for s in self.get_steppers():
             s.set_trapq(toolhead.get_trapq())
             toolhead.register_step_generator(s.generate_steps)
         # CHANGED: Configure Z-axis motion limits, all 3 z-axes share the same limits
+<<<<<<< HEAD
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
+=======
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
         max_velocity, max_accel = toolhead.get_max_velocity()
         self.max_z_velocity = config.getfloat('max_z_velocity', max_velocity,
@@ -94,7 +122,11 @@ class Cart3ZKinematics:
         self.max_z_accel = config.getfloat('max_z_accel', max_accel,
                                            above=0., maxval=max_accel)
 <<<<<<< HEAD
+<<<<<<< HEAD
         self.limits = [(1.0, -1.0)] * 5
+=======
+        self.limits = [(1.0, -1.0)] * 5 # CHANGED: 5 axes (X, Y, Z, A, B)
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 =======
         self.limits = [(1.0, -1.0)] * 5 # CHANGED: 5 axes (X, Y, Z, A, B)
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
@@ -114,6 +146,7 @@ class Cart3ZKinematics:
         if l <= h:
             self.limits[i] = range
 <<<<<<< HEAD
+<<<<<<< HEAD
     def set_position(self, newpos, homing_axes):
         for i, rail in enumerate(self.rails):
             rail.set_position(newpos)
@@ -128,6 +161,8 @@ class Cart3ZKinematics:
         for axis, axis_name in enumerate("xyzab"):
             if axis_name in clear_axes:
 =======
+=======
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
     #CHANGED: Add according to toucan3D
     def override_rail(self, i, rail):
         self.rails[i] = rail
@@ -153,6 +188,9 @@ class Cart3ZKinematics:
         for axis_name in clear_axes:
             axis = axis_map.get(axis_name)
             if axis is not None:
+<<<<<<< HEAD
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
+=======
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
                 self.limits[axis] = (1.0, -1.0)
     def home_axis(self, homing_state, axis, rail):
@@ -160,7 +198,11 @@ class Cart3ZKinematics:
         position_min, position_max = rail.get_range()
         hi = rail.get_homing_info()
 <<<<<<< HEAD
+<<<<<<< HEAD
         homepos = [None, None, None, None, None]
+=======
+        homepos = [None, None, None, None]
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 =======
         homepos = [None, None, None, None]
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
@@ -182,7 +224,11 @@ class Cart3ZKinematics:
     def _check_endstops(self, move):
         end_pos = move.end_pos
 <<<<<<< HEAD
+<<<<<<< HEAD
         for i in (0, 1, 2):
+=======
+        for i in (0, 1, 2, 3, 4): #CHANGED: Add axes
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 =======
         for i in (0, 1, 2, 3, 4): #CHANGED: Add axes
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
@@ -195,6 +241,7 @@ class Cart3ZKinematics:
     def check_move(self, move):
         limits = self.limits
         xpos, ypos = move.end_pos[:2]
+<<<<<<< HEAD
 <<<<<<< HEAD
         if (xpos < limits[0][0] or xpos > limits[0][1]
             or ypos < limits[1][0] or ypos > limits[1][1]):
@@ -217,6 +264,8 @@ class Cart3ZKinematics:
     def get_status(self, eventtime):
         axes = [a for a, (l, h) in zip("xyzab", self.limits) if l <= h]
 =======
+=======
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
         #Check XY boundaries
         z_movement = any(move.axes_d[i] for i in [2,3,4])
         if (xpos < limits[0][0] or xpos > limits[0][1]
@@ -233,6 +282,9 @@ class Cart3ZKinematics:
     def get_status(self, eventtime):
         axis_names = ['x', 'y', 'z', 'a', 'b']  # Explicit 5-axis list
         axes = [a for a, (l, h) in zip(axis_names, self.limits) if l <= h]
+<<<<<<< HEAD
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
+=======
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
         return {
             'homed_axes': "".join(axes),
@@ -242,7 +294,11 @@ class Cart3ZKinematics:
 
 def load_kinematics(toolhead, config):
 <<<<<<< HEAD
+<<<<<<< HEAD
     return CartXY3ZKinematics(toolhead, config)
+=======
+    return Cart3ZKinematics(toolhead, config)
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 =======
     return Cart3ZKinematics(toolhead, config)
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)

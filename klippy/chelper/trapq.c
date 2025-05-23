@@ -39,7 +39,11 @@ move_get_coord(struct move *m, double move_time)
         .z = m->start_pos.z + m->axes_r.z * move_dist,
         .a = m->start_pos.a + m->axes_r.a * move_dist,
 <<<<<<< HEAD
+<<<<<<< HEAD
         .b = m->start_pos.b + m->axes_r.b * move_dist };
+=======
+        .b = m->start_pos.b + m->axes_r.b * move_dist};
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 =======
         .b = m->start_pos.b + m->axes_r.b * move_dist};
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
@@ -127,6 +131,7 @@ void __visible
 trapq_append(struct trapq *tq, double print_time
              , double accel_t, double cruise_t, double decel_t
 <<<<<<< HEAD
+<<<<<<< HEAD
              , double start_pos_x, double start_pos_y, double start_pos_z
              , double start_pos_a, double start_pos_b
              , double axes_r_x, double axes_r_y, double axes_r_z
@@ -141,6 +146,14 @@ trapq_append(struct trapq *tq, double print_time
         .x=axes_r_x, .y=axes_r_y, .z=axes_r_z,
         .a=axes_r_a, .b=axes_r_b
     };
+=======
+             , double start_pos_x, double start_pos_y, double start_pos_z, double start_pos_a, double start_pos_b
+             , double axes_r_x, double axes_r_y, double axes_r_z, double axes_r_a, double axes_r_b
+             , double start_v, double cruise_v, double accel)
+{
+    struct coord start_pos = { .x=start_pos_x, .y=start_pos_y, .z=start_pos_z, .a=start_pos_a, .b=start_pos_b };
+    struct coord axes_r = { .x=axes_r_x, .y=axes_r_y, .z=axes_r_z, .a=axes_r_a, .b=axes_r_b };
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 =======
              , double start_pos_x, double start_pos_y, double start_pos_z, double start_pos_a, double start_pos_b
              , double axes_r_x, double axes_r_y, double axes_r_z, double axes_r_a, double axes_r_b
@@ -226,8 +239,12 @@ trapq_finalize_moves(struct trapq *tq, double print_time
 void __visible
 trapq_set_position(struct trapq *tq, double print_time
 <<<<<<< HEAD
+<<<<<<< HEAD
                    , double pos_x, double pos_y, double pos_z
                    , double pos_a, double pos_b)
+=======
+                   , double pos_x, double pos_y, double pos_z, double pos_a, double pos_b)
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 =======
                    , double pos_x, double pos_y, double pos_z, double pos_a, double pos_b)
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)

@@ -110,7 +110,11 @@ defs_kin_cartesian = """
 
 defs_kin_cartesian_xy3z = """
 <<<<<<< HEAD
+<<<<<<< HEAD
     struct stepper_kinematics *cartesian_stepper_alloc(char axis);
+=======
+    struct stepper_kinematics *cartesian_xy3z_stepper_alloc(char axis);
+>>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
 =======
     struct stepper_kinematics *cartesian_xy3z_stepper_alloc(char axis);
 >>>>>>> parent of 42d3b60e5 (Revert to 0.12.0)
