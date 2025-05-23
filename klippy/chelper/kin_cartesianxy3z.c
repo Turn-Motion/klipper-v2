@@ -35,14 +35,14 @@ static double
 cart_stepper_a_calc_position(struct stepper_kinematics *sk, struct move *m
                              , double move_time)
 {
-    return move_get_coord(m, move_time).z;  // A axis uses Z coordinate
+    return move_get_coord(m, move_time).a;  // A axis uses its own coordinate
 }
 
 static double
 cart_stepper_b_calc_position(struct stepper_kinematics *sk, struct move *m
                              , double move_time)
 {
-    return move_get_coord(m, move_time).z;  // B axis uses Z coordinate
+    return move_get_coord(m, move_time).b;  // B axis uses its own coordinate
 }
 
 struct stepper_kinematics * __visible
