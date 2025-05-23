@@ -6,11 +6,11 @@
 
 class NoneKinematics:
     def __init__(self, toolhead, config):
-        self.axes_minmax = toolhead.Coord(0., 0., 0., 0.)
+        self.axes_minmax = toolhead.Coord(0., 0., 0., 0., 0., 0.)  # XYZABE
     def get_steppers(self):
         return []
     def calc_position(self, stepper_positions):
-        return [0, 0, 0]
+        return [0, 0, 0, 0, 0]  # XYZAB
     def set_position(self, newpos, homing_axes):
         pass
     def clear_homing_state(self, clear_axes):
