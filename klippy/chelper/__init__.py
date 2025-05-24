@@ -19,10 +19,9 @@ SSE_FLAGS = "-mfpmath=sse -msse2"
 SOURCE_FILES = [
     'pyhelper.c', 'serialqueue.c', 'stepcompress.c', 'itersolve.c', 'trapq.c',
     'pollreactor.c', 'msgblock.c', 'trdispatch.c',
-    'kin_cartesian.c', 'kin_corexy.c', 'kin_corexz.c', 'kin_delta.c',
+    'kin_cartesian.c', 'kin_cartesianxy3z.c', 'kin_corexy.c', 'kin_corexz.c', 'kin_delta.c',
     'kin_deltesian.c', 'kin_polar.c', 'kin_rotary_delta.c', 'kin_winch.c',
     'kin_extruder.c', 'kin_shaper.c', 'kin_idex.c',
-    'kin_cartesianxy3z.c',  # Add our new kinematics file
 ]
 DEST_LIB = "c_helper.so"
 OTHER_FILES = [
@@ -85,8 +84,8 @@ defs_trapq = """
     struct pull_move {
         double print_time, move_t;
         double start_v, accel;
-        double start_x, start_y, start_z;
-        double x_r, y_r, z_r;
+        double start_x, start_y, start_z, start_a, start_b;
+        double x_r, y_r, z_r, a_r, b_r;
     };
 
     struct trapq *trapq_alloc(void);
@@ -94,12 +93,15 @@ defs_trapq = """
     void trapq_append(struct trapq *tq, double print_time
         , double accel_t, double cruise_t, double decel_t
         , double start_pos_x, double start_pos_y, double start_pos_z
+        , double start_pos_a, double start_pos_b
         , double axes_r_x, double axes_r_y, double axes_r_z
+        , double axes_r_a, double axes_r_b
         , double start_v, double cruise_v, double accel);
     void trapq_finalize_moves(struct trapq *tq, double print_time
         , double clear_history_time);
     void trapq_set_position(struct trapq *tq, double print_time
-        , double pos_x, double pos_y, double pos_z);
+        , double pos_x, double pos_y, double pos_z
+        , double pos_a, double pos_b);
     int trapq_extract_old(struct trapq *tq, struct pull_move *p, int max
         , double start_time, double end_time);
 """
@@ -226,7 +228,7 @@ defs_std = """
 defs_all = [
     defs_pyhelper, defs_serialqueue, defs_std, defs_stepcompress,
     defs_itersolve, defs_trapq, defs_trdispatch,
-    defs_kin_cartesian, defs_kin_corexy, defs_kin_corexz, defs_kin_delta,
+    defs_kin_cartesian, defs_kin_cartesianxy3z, defs_kin_corexy, defs_kin_corexz, defs_kin_delta,
     defs_kin_deltesian, defs_kin_polar, defs_kin_rotary_delta, defs_kin_winch,
     defs_kin_extruder, defs_kin_shaper, defs_kin_idex,
 ]
