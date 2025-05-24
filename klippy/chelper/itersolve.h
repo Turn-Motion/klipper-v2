@@ -34,9 +34,9 @@ void itersolve_set_trapq(struct stepper_kinematics *sk, struct trapq *tq);
 void itersolve_set_stepcompress(struct stepper_kinematics *sk
                                 , struct stepcompress *sc, double step_dist);
 double itersolve_calc_position_from_coord(struct stepper_kinematics *sk
-                                          , double x, double y, double z);
+                                          , double x, double y, double z, double a, double b);
 void itersolve_set_position(struct stepper_kinematics *sk
-                            , double x, double y, double z);
+                            , double x, double y, double z, double a, double b);
 double itersolve_get_commanded_pos(struct stepper_kinematics *sk);
 
 #endif // itersolve.h
