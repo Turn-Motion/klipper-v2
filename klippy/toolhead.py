@@ -22,15 +22,8 @@ class Move:
         velocity = min(speed, toolhead.max_velocity)
         self.is_kinematic_move = True
         # Calculate movement for all axes (XYZABE)
-<<<<<<< HEAD
-<<<<<<< HEAD
         # Note: In this system, indices 0-4 are XYZAB and index 5 is E (extruder)
-=======
->>>>>>> parent of d8060d2db (Update: toolhead and extruder)
         self.axes_d = axes_d = [end_pos[i] - start_pos[i] for i in range(6)]
-=======
-        self.axes_d = axes_d = [end_pos[i] - start_pos[i] for i in (0, 1, 2, 3, 4)]
->>>>>>> parent of 4c10c18bc (Update: Toolhead.py)
         # Calculate total movement distance (excluding E axis)
         self.move_d = move_d = math.sqrt(sum([d*d for d in axes_d]))
         if move_d < .000000001:
