@@ -22,9 +22,10 @@ class Move:
         velocity = min(speed, toolhead.max_velocity)
         self.is_kinematic_move = True
         # Calculate movement for all axes (XYZABE)
-        self.axes_d = axes_d = [end_pos[i] - start_pos[i] for i in (0, 1, 2, 3, 4)]
+        # Note: In this system, indices 0-4 are XYZAB and index 5 is E (extruder)
+        self.axes_d = axes_d = [end_pos[i] - start_pos[i] for i in range(6)]
         # Calculate total movement distance (excluding E axis)
-        self.move_d = move_d = math.sqrt(sum([d*d for d in axes_d[:5]]))
+        self.move_d = move_d = math.sqrt(sum([d*d for d in axes_d]))
         if move_d < .000000001:
             # Extrude only move
             self.end_pos = (start_pos[0], start_pos[1], start_pos[2],
@@ -358,6 +359,9 @@ class ToolHead:
                     move.start_pos[3], move.start_pos[4],
                     move.axes_r[0], move.axes_r[1], move.axes_r[2],
                     move.axes_r[3], move.axes_r[4],
+          move.axes_r[0], move.axes_r[1], move.axes_r[2],
+               if move.axes_d[5]:  # E is at index 5 in our 6-axis system (XYZABE)
+ move.axes_r[4],
                     move.start_v, move.cruise_v, move.accel)
             if move.axes_d[3]:
                 self.extruder.move(next_move_time, move)
