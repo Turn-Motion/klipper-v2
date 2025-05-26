@@ -359,11 +359,8 @@ class ToolHead:
                     move.start_pos[3], move.start_pos[4],
                     move.axes_r[0], move.axes_r[1], move.axes_r[2],
                     move.axes_r[3], move.axes_r[4],
-          move.axes_r[0], move.axes_r[1], move.axes_r[2],
-               if move.axes_d[5]:  # E is at index 5 in our 6-axis system (XYZABE)
- move.axes_r[4],
                     move.start_v, move.cruise_v, move.accel)
-            if move.axes_d[3]:
+            if move.axes_d[5]:
                 self.extruder.move(next_move_time, move)
             next_move_time = (next_move_time + move.accel_t
                               + move.cruise_t + move.decel_t)
