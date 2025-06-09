@@ -50,6 +50,7 @@ class Move:
         self.delta_v2 = 2.0 * move_d * self.accel
         self.max_smoothed_v2 = 0.
         self.smooth_delta_v2 = 2.0 * move_d * toolhead.max_accel_to_decel
+        self.end_v2 = 0. # Initialize end_v2 to a default value
         self.next_junction_v2 = 999999999.9
     def limit_speed(self, speed, accel):
         speed2 = speed**2
@@ -484,7 +485,7 @@ class ToolHead:
             return
         if move.is_kinematic_move:
             self.kin.check_move(move)
-        if move.axes_d[3]:
+        if move.axes_d[5]:
             self.extruder.check_move(move)
         self.commanded_pos[:] = move.end_pos
         self.lookahead.add_move(move)

@@ -113,6 +113,22 @@ class GCodeMove:
     def cmd_G1(self, gcmd):
         # Move
         params = gcmd.get_command_parameters()
+        # --- Start of logging snippet ---
+        log_params_dict = {}
+        param_str_list_log = []
+        for axis_char_log in ['X', 'Y', 'Z', 'A', 'B', 'E', 'F']:
+            if gcmd.has_param(axis_char_log):
+                raw_val = gcmd.get_raw_params().get(axis_char_log.lower(), gcmd.get_raw_params().get(axis_char_log.upper()))
+                log_params_dict[axis_char_log] = raw_val
+                param_str_list_log.append(f"{axis_char_log}:{raw_val}")
+        
+        gcode_obj_log_1 = self.printer.lookup_object('gcode')
+        gcode_obj_log_1.respond_info(
+            f"GCodeMove Debug: CMD='{gcmd.get_command()}' RAW_PARAMS='{gcmd.get_raw_params()}' "
+            f"PARSED_FOR_LOG='{', '.join(param_str_list_log)}' "
+            f"LAST_POS_BEFORE_UPDATE={['%.4f' % p for p in self.last_position]}"
+        )
+        # --- End of first logging part ---
         try:
             for pos, axis in enumerate('XYZAB'):  # Handle XYZAB axes
                 if axis in params:
@@ -140,6 +156,12 @@ class GCodeMove:
         except ValueError as e:
             raise gcmd.error("Unable to parse move '%s'"
                              % (gcmd.get_commandline(),))
+        # --- Start of second logging part ---
+        gcode_obj_log_2 = self.printer.lookup_object('gcode')
+        gcode_obj_log_2.respond_info(
+            f"GCodeMove Debug: LAST_POS_AFTER_UPDATE_TO_SEND={['%.4f' % p for p in self.last_position]}"
+        )
+        # --- End of logging snippet ---
         self.move_with_transform(self.last_position, self.speed)
     # G-Code coordinate manipulation
     def cmd_G20(self, gcmd):

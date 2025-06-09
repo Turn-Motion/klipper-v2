@@ -203,6 +203,9 @@ class PrinterExtruder:
         return self.heater.stats(eventtime)
     def check_move(self, move):
         axis_r = move.axes_r[5]
+        # Chien20250609 - to force exit nonintentional extruder move: If extrusion ratio is effectively zero, no extruder checks needed
+        if abs(axis_r) < 1e-9: # Epsilon for floating point comparison
+            return
         if not self.heater.can_extrude:
             raise self.printer.command_error(
                 "Extrude below minimum temp\n"
