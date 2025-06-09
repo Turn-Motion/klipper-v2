@@ -242,11 +242,16 @@ class PrinterExtruder:
         if axis_r > 0. and (move.axes_d[0] or move.axes_d[1]):
             can_pressure_advance = True
         # Queue movement (x is extruder movement, y is pressure advance flag)
+        # Calculate extruder's component of the end velocity
+        # move.end_v2 is the squared end velocity of the overall kinematic move
+        # axis_r (move.axes_r[5]) is the ratio of extruder movement to overall move distance
+        end_v_scaled = math.sqrt(move.end_v2) * axis_r
         self.trapq_append(self.trapq, print_time,
                           move.accel_t, move.cruise_t, move.decel_t,
-                          move.start_pos[5], 0., 0.,
-                          1., can_pressure_advance, 0.,
-                          start_v, cruise_v, accel)
+                          move.start_pos[5], 0., 0.,        # og:start_x (extruder_pos), start_y (0), start_z (0)
+                          1., can_pressure_advance, 0.,     # OG:axes_r_x (1 for extruder), axes_r_y (pa_flag), axes_r_z (0)
+                          start_v, cruise_v, accel,         # OG:scaled start_v, cruise_v, accel for extruder
+                          move.end_pos[5], 0., 0., end_v_scaled) # Added:end_x (target_extruder_pos), end_y (0), end_z (0), scaled_end_v
         self.last_position = move.end_pos[5]
     def find_past_position(self, print_time):
         if self.extruder_stepper is None:
