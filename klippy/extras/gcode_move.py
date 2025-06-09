@@ -113,22 +113,23 @@ class GCodeMove:
     def cmd_G1(self, gcmd):
         # Move
         params = gcmd.get_command_parameters()
-        # --- Start of logging snippet ---
-        log_params_dict = {}
-        param_str_list_log = []
-        for axis_char_log in ['X', 'Y', 'Z', 'A', 'B', 'E', 'F']:
-            if gcmd.has_param(axis_char_log):
-                raw_val = gcmd.get_raw_params().get(axis_char_log.lower(), gcmd.get_raw_params().get(axis_char_log.upper()))
-                log_params_dict[axis_char_log] = raw_val
-                param_str_list_log.append(f"{axis_char_log}:{raw_val}")
+        # --- Start of corrected logging snippet ---
+        log_params_dict_corrected = {}
+        param_str_list_log_corrected = []
+        # The 'params' dictionary contains the string values of the parameters passed with the G-code command.
+        for axis_char_log_corrected in ['X', 'Y', 'Z', 'A', 'B', 'E', 'F']:
+            if axis_char_log_corrected in params: # Corrected check using 'in params'
+                raw_val_corrected = params[axis_char_log_corrected] # Get value from params dict
+                log_params_dict_corrected[axis_char_log_corrected] = raw_val_corrected
+                param_str_list_log_corrected.append(f"{axis_char_log_corrected}:{raw_val_corrected}")
         
-        gcode_obj_log_1 = self.printer.lookup_object('gcode')
-        gcode_obj_log_1.respond_info(
-            f"GCodeMove Debug: CMD='{gcmd.get_command()}' RAW_PARAMS='{gcmd.get_raw_params()}' "
-            f"PARSED_FOR_LOG='{', '.join(param_str_list_log)}' "
+        gcode_obj_log_1_corrected = self.printer.lookup_object('gcode')
+        gcode_obj_log_1_corrected.respond_info(
+            f"GCodeMove Debug: CMD='{gcmd.get_command()}' RAW_PARAMS_DICT='{params}' "
+            f"PARSED_FOR_LOG='{', '.join(param_str_list_log_corrected)}' "
             f"LAST_POS_BEFORE_UPDATE={['%.4f' % p for p in self.last_position]}"
         )
-        # --- End of first logging part ---
+        # --- End of first corrected logging part ---
         try:
             for pos, axis in enumerate('XYZAB'):  # Handle XYZAB axes
                 if axis in params:
