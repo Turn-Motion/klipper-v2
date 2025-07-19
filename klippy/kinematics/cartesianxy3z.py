@@ -139,6 +139,18 @@ class CartesianXY3Z:
         # Move with Z, A, or B - update velocity and accel for slower axes
         self._check_endstops(move)
         
+        # Call external safety module if it exists
+        try:
+            safety_module = self.printer.lookup_object('cartesianxy3z_safety')
+            # The safety module will raise an exception if the move is unsafe
+            safety_module.check_move(move)
+        except self.printer.config_error:
+            # Safety module not loaded, continue without safety checks
+            gcode = self.printer.lookup_object('gcode')
+            gcode.respond_info("CartesianXY3Z Safety: Module not found - continuing without safety checks")
+            logging.info("CartesianXY3Z: Safety module not found, continuing without safety checks") #store info into the klipper log
+            pass
+        
         # Calculate the slowest axis ratio for Z, A, B
         z_ratio = 1.0
         if move.axes_d[2]:  # Z axis
