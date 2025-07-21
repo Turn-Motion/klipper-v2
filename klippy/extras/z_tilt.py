@@ -17,6 +17,7 @@ class ZAdjustHelper:
                                             self.handle_connect)
     def handle_connect(self):
         kin = self.printer.lookup_object('toolhead').get_kinematics()
+        # Find all Z-axis steppers (including those named stepper_a and stepper_b)
         z_steppers = [s for s in kin.get_steppers() if s.is_active_axis('z')]
         if len(z_steppers) != self.z_count:
             raise self.printer.config_error(
@@ -25,6 +26,11 @@ class ZAdjustHelper:
         if len(z_steppers) < 2:
             raise self.printer.config_error(
                 "%s requires multiple z steppers" % (self.name,))
+        
+        # Log the names of the Z steppers found
+        stepper_names = [s.get_name() for s in z_steppers]
+        logging.info("Z-Tilt using Z steppers: %s", stepper_names)
+        
         self.z_steppers = z_steppers
     def adjust_steppers(self, adjustments, speed):
         toolhead = self.printer.lookup_object('toolhead')

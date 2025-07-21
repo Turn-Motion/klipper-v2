@@ -106,13 +106,84 @@ class CartesianXY3Z:
         # Perform homing
         homing_state.home_rails([rail], forcepos, homepos)
 
+    def home_z_axes_together(self, homing_state):
+        # Get the Z, A, B rails if they need to be homed
+        z_rails = []
+        z_axes = []
+        for axis_name in ['z', 'a', 'b']:
+            axis = "xyzab".index(axis_name)
+            if axis in homing_state.get_axes():
+                z_rails.append(self.rails[axis])
+                z_axes.append(axis)
+        
+        if not z_rails:
+            return  # No Z axes to home
+        
+        # Determine movement for all Z axes together
+        forcepos = [None, None, None, None, None]  # x, y, z, a, b
+        homepos = [None, None, None, None, None]  # x, y, z, a, b
+        
+        # Set the target positions for all Z axes
+        for i, axis in enumerate(z_axes):
+            rail = z_rails[i]
+            position_min, position_max = rail.get_range()
+            hi = rail.get_homing_info()
+            
+            # All Z axes move in the same direction during initial movement
+            if hi.positive_dir:
+                forcepos[axis] = position_min + 1.0  # Move to near minimum
+            else:
+                forcepos[axis] = position_max - 1.0  # Move to near maximum
+        
+        # Move all Z axes together to their approximate positions
+        # This is just to get them roughly aligned before individual homing
+        toolhead = homing_state.toolhead
+        toolhead.set_position([0., 0., 0., 0., 0.] + toolhead.get_position()[5:], 
+                              homing_axes=[])
+        current_pos = toolhead.get_position()
+        
+        # Update positions that we're moving
+        for axis in z_axes:
+            if forcepos[axis] is not None:
+                current_pos[axis] = forcepos[axis]
+        
+        # Move all Z axes together
+        toolhead.move(current_pos, 5.0)  # Slow speed for initial alignment
+    
     def home(self, homing_state):
-        # Each axis is homed independently and in order
-        for axis in homing_state.get_axes():
-            if self.dc_module is not None and axis == self.dual_carriage_axis:
+        # Custom homing sequence: Z/A/B together first, then individually, then X, then Y
+        axes = homing_state.get_axes()
+        
+        # First move Z, A, B axes together if any of them need to be homed
+        z_axes_to_home = []
+        for axis_name in ['z', 'a', 'b']:
+            axis = "xyzab".index(axis_name)
+            if axis in axes:
+                z_axes_to_home.append(axis)
+        
+        if z_axes_to_home:
+            # First move Z, A, B axes together to get them roughly aligned
+            self.home_z_axes_together(homing_state)
+            
+            # Then home each Z axis individually in the specified order
+            for axis_name in ['z', 'a', 'b']:
+                axis = "xyzab".index(axis_name)
+                if axis in axes:
+                    self.home_axis(homing_state, axis, self.rails[axis])
+        
+        # Then home X if needed
+        if 0 in axes:  # X axis
+            if self.dc_module is not None and 0 == self.dual_carriage_axis:
                 self.dc_module.home(homing_state)
             else:
-                self.home_axis(homing_state, axis, self.rails[axis])
+                self.home_axis(homing_state, 0, self.rails[0])
+        
+        # Finally home Y if needed
+        if 1 in axes:  # Y axis
+            if self.dc_module is not None and 1 == self.dual_carriage_axis:
+                self.dc_module.home(homing_state)
+            else:
+                self.home_axis(homing_state, 1, self.rails[1])
 
     def _check_endstops(self, move):
         end_pos = move.end_pos
