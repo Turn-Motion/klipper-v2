@@ -25,6 +25,10 @@ class CartesianXY3ZSafety:
         self.L_off = config.getfloat('y_overhang_plate_to_joints_ab', 5.0)
         self.h_plate = config.getfloat('plate_thickness', 9.9)
         
+        # Printing area parameters
+        self.p_x = config.getfloat('printing_area_x_length', 500.0)
+        self.p_y = config.getfloat('printing_area_y_length', 500.0)
+        
         # Printer.cfg parameters
         self.s_in = config.getfloat('joint_ball_inset', 4.0)
         self.z_alu = config.getfloat('alu_mount_plate_thickness', 6.0)
@@ -80,7 +84,68 @@ class CartesianXY3ZSafety:
         else:
             x_ab = (csx - self.d_x)/2 - i_ab * z_mz * z_ab/csx
         
-        return z_mz, z_ab, csz, csx, i_ab, x_ab
+        # Calculate point positions based on the new formulas
+        # P_Z position
+        P_Z_x = self.p_x/2
+        if abs(z_ab) >= self.d_x:
+            P_Z_y = 0  # Avoid division by zero
+        else:
+            P_Z_y = math.sqrt(self.d_y**2 - z_mz**2/(1 - z_ab**2/self.d_x**2)) + (self.p_y - self.d_y)/2
+        P_Z_z = z
+        
+        # P_A position
+        if csx == 0:
+            P_A_x = self.p_x/2  # Fallback if csx is zero
+        else:
+            P_A_x = z_mz * z_ab/csx - csx/2 + self.p_x/2
+        P_A_y = (self.p_y - self.d_y)/2
+        P_A_z = a
+        
+        # P_B position
+        if csx == 0:
+            P_B_x = self.p_x/2  # Fallback if csx is zero
+        else:
+            P_B_x = z_mz * z_ab/csx + csx/2 + self.p_x/2
+        P_B_y = (self.p_y - self.d_y)/2
+        P_B_z = b
+        
+        # P_E position (extruder tip)
+        P_E_x = x
+        P_E_y = y
+        P_E_z = self.z_out
+        
+        # Calculate vectors for collision detection
+        # x_now = P_B - P_A
+        x_now = (P_B_x - P_A_x, P_B_y - P_A_y, P_B_z - P_A_z)
+        
+        # y_now = P_Z - (P_A + P_B)/2
+        mid_point = ((P_A_x + P_B_x)/2, (P_A_y + P_B_y)/2, (P_A_z + P_B_z)/2)
+        y_now = (P_Z_x - mid_point[0], P_Z_y - mid_point[1], P_Z_z - mid_point[2])
+        
+        # z_now = x_now × y_now (cross product)
+        z_now = (
+            x_now[1] * y_now[2] - x_now[2] * y_now[1],
+            x_now[2] * y_now[0] - x_now[0] * y_now[2],
+            x_now[0] * y_now[1] - x_now[1] * y_now[0]
+        )
+        
+        # z_norm = z_now / norm(z_now)
+        z_now_norm = math.sqrt(z_now[0]**2 + z_now[1]**2 + z_now[2]**2)
+        if z_now_norm > 0:
+            z_norm = (z_now[0]/z_now_norm, z_now[1]/z_now_norm, z_now[2]/z_now_norm)
+        else:
+            z_norm = (0, 0, 1)  # Default if norm is zero
+        
+        return z_mz, z_ab, csz, csx, i_ab, x_ab, {
+            'P_Z': (P_Z_x, P_Z_y, P_Z_z),
+            'P_A': (P_A_x, P_A_y, P_A_z),
+            'P_B': (P_B_x, P_B_y, P_B_z),
+            'P_E': (P_E_x, P_E_y, P_E_z),
+            'x_now': x_now,
+            'y_now': y_now,
+            'z_now': z_now,
+            'z_norm': z_norm
+        }
     
     def check_safety(self, pos, move):
         """Check all safety conditions for the given position"""
@@ -88,7 +153,7 @@ class CartesianXY3ZSafety:
         z, a, b = pos[2], pos[3], pos[4]
         
         # Calculate intermediate values
-        z_mz, z_ab, csz, csx, i_ab, x_ab = self.calc_intermediate_values(pos)
+        z_mz, z_ab, csz, csx, i_ab, x_ab, points = self.calc_intermediate_values(pos)
         
         # Primary Boundary Conditions - Out Of Bounds
         # Check if Z is too far from A or B
@@ -133,6 +198,31 @@ class CartesianXY3ZSafety:
         
         if condition1 and condition2:
             raise move.move_error("Potential plate collision with x-rail")
+            
+        # Check for extruder tip collision with printing plate
+        # (P_E - (P_A + z_out * z_norm)) • z_now < 0 (dot product)
+        P_A_with_offset = (
+            points['P_A'][0] + self.z_out * points['z_norm'][0],
+            points['P_A'][1] + self.z_out * points['z_norm'][1],
+            points['P_A'][2] + self.z_out * points['z_norm'][2]
+        )
+        
+        # Calculate vector from P_A_with_offset to P_E
+        vec_to_P_E = (
+            points['P_E'][0] - P_A_with_offset[0],
+            points['P_E'][1] - P_A_with_offset[1],
+            points['P_E'][2] - P_A_with_offset[2]
+        )
+        
+        # Calculate dot product with z_now
+        dot_product = (
+            vec_to_P_E[0] * points['z_now'][0] +
+            vec_to_P_E[1] * points['z_now'][1] +
+            vec_to_P_E[2] * points['z_now'][2]
+        )
+        
+        if dot_product < 0:
+            raise move.move_error("Extruder tip below printing plate - collision detected")
     
     def check_move(self, move):
         """Check if a move is safe - called directly from kinematics"""
@@ -192,11 +282,21 @@ class CartesianXY3ZSafety:
             gcmd.respond_info("Safety check failed: " + message)
         
         # Calculate and report intermediate values for debugging
-        z_mz, z_ab, csz, csx, i_ab, x_ab = self.calc_intermediate_values(pos)
+        z_mz, z_ab, csz, csx, i_ab, x_ab, points = self.calc_intermediate_values(pos)
         gcmd.respond_info("Intermediate values:\n"
                           f"z_mz: {z_mz:.3f}, z_ab: {z_ab:.3f}\n"
                           f"csz: {csz:.3f}, csx: {csx:.3f}\n"
-                          f"i_ab: {i_ab}, x_ab: {x_ab:.3f}")
+                          f"i_ab: {i_ab}, x_ab: {x_ab:.3f}\n\n"
+                          f"Point positions:\n"
+                          f"P_Z: ({points['P_Z'][0]:.3f}, {points['P_Z'][1]:.3f}, {points['P_Z'][2]:.3f})\n"
+                          f"P_A: ({points['P_A'][0]:.3f}, {points['P_A'][1]:.3f}, {points['P_A'][2]:.3f})\n"
+                          f"P_B: ({points['P_B'][0]:.3f}, {points['P_B'][1]:.3f}, {points['P_B'][2]:.3f})\n"
+                          f"P_E: ({points['P_E'][0]:.3f}, {points['P_E'][1]:.3f}, {points['P_E'][2]:.3f})\n\n"
+                          f"Vectors:\n"
+                          f"x_now: ({points['x_now'][0]:.3f}, {points['x_now'][1]:.3f}, {points['x_now'][2]:.3f})\n"
+                          f"y_now: ({points['y_now'][0]:.3f}, {points['y_now'][1]:.3f}, {points['y_now'][2]:.3f})\n"
+                          f"z_now: ({points['z_now'][0]:.3f}, {points['z_now'][1]:.3f}, {points['z_now'][2]:.3f})\n"
+                          f"z_norm: ({points['z_norm'][0]:.3f}, {points['z_norm'][1]:.3f}, {points['z_norm'][2]:.3f})")
     
     def get_status(self, eventtime):
         """Return safety status for use in macros"""
