@@ -52,12 +52,19 @@ class ZThermalAdjuster:
         self.z_adjust_mm = 0.
         self.last_z_adjust_mm = 0.
         self.adjust_enable = True
-        self.last_position = [0., 0., 0., 0., 0., 0.]  # XYZABE
+        self.last_position = [0., 0., 0., 0.]
         self.next_transform = None
 
         # Register gcode commands
-        self.gcode.register_command('SET_Z_THERMAL_ADJUST',
-                                    self.cmd_SET_Z_THERMAL_ADJUST,
+        full_name = config.get_name()
+        self.component = None
+        if not full_name == "z_thermal_adjust":
+            self.component = full_name.split(maxsplit=1)[-1]
+        self.register_commands(self.component)
+
+    def register_commands(self, component):
+        self.gcode.register_mux_command("SET_Z_THERMAL_ADJUST", "COMPONENT",
+                                    component, self.cmd_SET_Z_THERMAL_ADJUST,
                                     desc=self.cmd_SET_Z_THERMAL_ADJUST_help)
 
     def handle_connect(self):
@@ -92,7 +99,7 @@ class ZThermalAdjuster:
             self.z_adjust_mm = 0.
 
     def calc_adjust(self, pos):
-        'Z adjustment calculation - also adjusts A and B since they move with Z'
+        'Z adjustment calculation'
         if pos[2] < self.off_above_z:
             delta_t = self.smoothed_temp - self.ref_temperature
 
@@ -107,19 +114,15 @@ class ZThermalAdjuster:
                 self.z_adjust_mm = min([self.max_z_adjust_mm*sign,
                     adjust], key=abs)
 
-        # Apply Z adjustment to Z, A, and B since they move together
+        # Apply Z adjustment
         new_z = pos[2] + self.z_adjust_mm
-        new_a = pos[3] + self.z_adjust_mm
-        new_b = pos[4] + self.z_adjust_mm
         self.last_z_adjust_mm = self.z_adjust_mm
-        return [pos[0], pos[1], new_z, new_a, new_b, pos[5]]
+        return [pos[0], pos[1], new_z] + pos[3:]
 
     def calc_unadjust(self, pos):
-        'Remove Z adjustment from Z, A, and B'
+        'Remove Z adjustment'
         unadjusted_z = pos[2] - self.z_adjust_mm
-        unadjusted_a = pos[3] - self.z_adjust_mm
-        unadjusted_b = pos[4] - self.z_adjust_mm
-        return [pos[0], pos[1], unadjusted_z, unadjusted_a, unadjusted_b, pos[5]]
+        return [pos[0], pos[1], unadjusted_z] + pos[3:]
 
     def get_position(self):
         position = self.calc_unadjust(self.next_transform.get_position())
@@ -130,9 +133,7 @@ class ZThermalAdjuster:
         # don't apply to extrude only moves or when disabled
         if (newpos[0:2] == self.last_position[0:2]) or not self.adjust_enable:
             z = newpos[2] + self.last_z_adjust_mm
-            a = newpos[3] + self.last_z_adjust_mm
-            b = newpos[4] + self.last_z_adjust_mm
-            adjusted_pos = [newpos[0], newpos[1], z, a, b, newpos[5]]
+            adjusted_pos = [newpos[0], newpos[1], z, newpos[3]]
             self.next_transform.move(adjusted_pos, speed)
         else:
             adjusted_pos = self.calc_adjust(newpos)
@@ -175,13 +176,18 @@ class ZThermalAdjuster:
 
         state = '1 (enabled)' if self.adjust_enable else '0 (disabled)'
         override = ' (manual)' if self.ref_temp_override else ''
-        msg = ("enable: %s\n"
+        component = ''
+        if not self.component is None:
+            component = "component: %s\n" % (self.component,)
+        msg = ("%s"
+               "enable: %s\n"
                "temp_coeff: %f mm/degC\n"
                "ref_temp: %.2f degC%s\n"
                "-------------------\n"
                "Current Z temp: %.2f degC\n"
                "Applied Z adjustment: %.4f mm"
-               % (state,
+               % (component,
+                  state,
                   self.temp_coeff,
                   self.ref_temperature, override,
                   self.smoothed_temp,
@@ -190,6 +196,9 @@ class ZThermalAdjuster:
         gcmd.respond_info(msg)
 
     cmd_SET_Z_THERMAL_ADJUST_help = 'Set/query Z Thermal Adjust parameters.'
+
+def load_config_prefix(config):
+    return ZThermalAdjuster(config)
 
 def load_config(config):
     return ZThermalAdjuster(config)
