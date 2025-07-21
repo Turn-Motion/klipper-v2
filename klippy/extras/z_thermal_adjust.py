@@ -52,7 +52,7 @@ class ZThermalAdjuster:
         self.z_adjust_mm = 0.
         self.last_z_adjust_mm = 0.
         self.adjust_enable = True
-        self.last_position = [0., 0., 0., 0.]
+        self.last_position = [0., 0., 0., 0., 0., 0.]  # XYZABE
         self.next_transform = None
 
         # Register gcode commands
@@ -116,13 +116,15 @@ class ZThermalAdjuster:
 
         # Apply Z adjustment
         new_z = pos[2] + self.z_adjust_mm
+        new_a = pos[3] + self.z_adjust_mm
+        new_b = pos[4] + self.z_adjust_mm
         self.last_z_adjust_mm = self.z_adjust_mm
-        return [pos[0], pos[1], new_z] + pos[3:]
+        return [pos[0], pos[1], new_z, new_a, new_b] + pos[5:]
 
     def calc_unadjust(self, pos):
-        'Remove Z adjustment'
+        'Remove Z adjustment from Z, A, and B'
         unadjusted_z = pos[2] - self.z_adjust_mm
-        return [pos[0], pos[1], unadjusted_z] + pos[3:]
+        return [pos[0], pos[1], new_z, new_a, new_b, pos[5]]
 
     def get_position(self):
         position = self.calc_unadjust(self.next_transform.get_position())
@@ -133,7 +135,9 @@ class ZThermalAdjuster:
         # don't apply to extrude only moves or when disabled
         if (newpos[0:2] == self.last_position[0:2]) or not self.adjust_enable:
             z = newpos[2] + self.last_z_adjust_mm
-            adjusted_pos = [newpos[0], newpos[1], z, newpos[3]]
+            a = newpos[3] + self.last_z_adjust_mm
+            b = newpos[4] + self.last_z_adjust_mm
+            adjusted_pos = [newpos[0], newpos[1], z, a, b, newpos[5]]
             self.next_transform.move(adjusted_pos, speed)
         else:
             adjusted_pos = self.calc_adjust(newpos)
