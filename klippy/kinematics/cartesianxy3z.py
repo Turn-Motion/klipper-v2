@@ -99,12 +99,29 @@ class CartesianXY3Z:
         homepos = [None, None, None, None, None]  # x, y, z, a, b
         homepos[axis] = hi.position_endstop
         forcepos = list(homepos)
+        
+        # Debug logging
+        axis_name = "xyzab"[axis]
+        gcode = self.printer.lookup_object('gcode')
+        gcode.respond_info(f"DEBUG: home_axis for {axis_name}-axis")
+        gcode.respond_info(f"DEBUG: {axis_name} position_min={position_min}, position_max={position_max}")
+        gcode.respond_info(f"DEBUG: {axis_name} endstop_pin={hi.endstop_pin}, position_endstop={hi.position_endstop}")
+        gcode.respond_info(f"DEBUG: {axis_name} positive_dir={hi.positive_dir}")
+        
         if hi.positive_dir:
             forcepos[axis] -= 1.5 * (hi.position_endstop - position_min)
+            gcode.respond_info(f"DEBUG: {axis_name} forcepos={forcepos[axis]} (moving negative)")
         else:
             forcepos[axis] += 1.5 * (position_max - hi.position_endstop)
+            gcode.respond_info(f"DEBUG: {axis_name} forcepos={forcepos[axis]} (moving positive)")
+        
         # Perform homing
-        homing_state.home_rails([rail], forcepos, homepos)
+        gcode.respond_info(f"DEBUG: {axis_name} Starting home_rails with forcepos={forcepos}, homepos={homepos}")
+        try:
+            homing_state.home_rails([rail], forcepos, homepos)
+            gcode.respond_info(f"DEBUG: {axis_name} home_rails completed successfully")
+        except Exception as e:
+            gcode.respond_info(f"DEBUG: {axis_name} home_rails FAILED with error: {str(e)}")
 
     def home_z_axes_together(self, homing_state):
         # Get the Z, A, B rails if they need to be homed
@@ -154,6 +171,10 @@ class CartesianXY3Z:
         # Custom homing sequence: Z/A/B together first, then individually, then X, then Y
         axes = homing_state.get_axes()
         
+        # Debug logging
+        gcode = self.printer.lookup_object('gcode')
+        gcode.respond_info(f"DEBUG: home method called with axes={axes}")
+        
         # First move Z, A, B axes together if any of them need to be homed
         z_axes_to_home = []
         for axis_name in ['z', 'a', 'b']:
@@ -161,29 +182,42 @@ class CartesianXY3Z:
             if axis in axes:
                 z_axes_to_home.append(axis)
         
+        gcode.respond_info(f"DEBUG: z_axes_to_home={z_axes_to_home}")
+        
         if z_axes_to_home:
             # First move Z, A, B axes together to get them roughly aligned
+            gcode.respond_info("DEBUG: Starting home_z_axes_together")
             self.home_z_axes_together(homing_state)
+            gcode.respond_info("DEBUG: Completed home_z_axes_together")
             
             # Then home each Z axis individually in the specified order
             for axis_name in ['z', 'a', 'b']:
                 axis = "xyzab".index(axis_name)
                 if axis in axes:
+                    gcode.respond_info(f"DEBUG: Starting individual homing for {axis_name}-axis")
                     self.home_axis(homing_state, axis, self.rails[axis])
         
         # Then home X if needed
         if 0 in axes:  # X axis
+            gcode.respond_info("DEBUG: Starting X-axis homing")
             if self.dc_module is not None and 0 == self.dual_carriage_axis:
+                gcode.respond_info("DEBUG: Using dual_carriage module for X-axis homing")
                 self.dc_module.home(homing_state)
             else:
+                gcode.respond_info("DEBUG: Using standard homing for X-axis")
                 self.home_axis(homing_state, 0, self.rails[0])
         
         # Finally home Y if needed
         if 1 in axes:  # Y axis
+            gcode.respond_info("DEBUG: Starting Y-axis homing")
             if self.dc_module is not None and 1 == self.dual_carriage_axis:
+                gcode.respond_info("DEBUG: Using dual_carriage module for Y-axis homing")
                 self.dc_module.home(homing_state)
             else:
+                gcode.respond_info("DEBUG: Using standard homing for Y-axis")
                 self.home_axis(homing_state, 1, self.rails[1])
+                
+        gcode.respond_info("DEBUG: Home method completed")
 
     def _check_endstops(self, move):
         end_pos = move.end_pos
