@@ -98,56 +98,45 @@ class CartesianXY3Z:
         hi = rail.get_homing_info()
         homepos = [None, None, None, None, None]  # x, y, z, a, b
         
+        # Get reference to gcode for logging
+        gcode = self.printer.lookup_object('gcode')
+        axis_name = "xyzab"[axis]
+        
+        # Debug endstop configuration
+        endstops = rail.get_endstops()
+        gcode.respond_info(f"DEBUG: {axis_name} Endstops: {endstops}")
+        for es, name in endstops:
+            gcode.respond_info(f"DEBUG: {axis_name} Endstop '{name}' steppers: {es.get_steppers()}")
+        
         # Safely get position_endstop
         try:
             homepos[axis] = hi.position_endstop
+            gcode.respond_info(f"DEBUG: {axis_name} using position_endstop={hi.position_endstop}")
         except AttributeError:
             # If position_endstop is not available, use position_max for Z axes and position_min for X/Y
             if axis >= 2:  # Z, A, B axes
                 homepos[axis] = position_max
             else:  # X, Y axes
                 homepos[axis] = position_min
-            gcode = self.printer.lookup_object('gcode')
-            axis_name = "xyzab"[axis]
-            gcode.respond_info(f"DEBUG: No position_endstop available for {axis_name}-axis, using {'max' if axis >= 2 else 'min'} position")
         
         forcepos = list(homepos)
         
-        # Debug logging
-        axis_name = "xyzab"[axis]
-        gcode = self.printer.lookup_object('gcode')
-        gcode.respond_info(f"DEBUG: home_axis for {axis_name}-axis")
-        gcode.respond_info(f"DEBUG: {axis_name} position_min={position_min}, position_max={position_max}")
-        
-        # Use try/except to handle any missing attributes
-        try:
-            gcode.respond_info(f"DEBUG: {axis_name} position_endstop={hi.position_endstop}")
-        except AttributeError:
-            gcode.respond_info(f"DEBUG: {axis_name} position_endstop not available")
-        
-        try:
-            gcode.respond_info(f"DEBUG: {axis_name} positive_dir={hi.positive_dir}")
-        except AttributeError:
-            gcode.respond_info(f"DEBUG: {axis_name} positive_dir not available")
-        
-        try:
-            gcode.respond_info(f"DEBUG: {axis_name} speed={hi.speed}")
-        except AttributeError:
-            gcode.respond_info(f"DEBUG: {axis_name} speed not available")
-        
-        try:
+        # Calculate forcepos based on homing direction
+        if hasattr(hi, 'positive_dir') and hi.positive_dir is not None:
+            gcode.respond_info(f"DEBUG: {axis_name} using positive_dir={hi.positive_dir}")
             if hi.positive_dir:
                 forcepos[axis] -= 1.5 * (hi.position_endstop - position_min)
-                gcode.respond_info(f"DEBUG: {axis_name} forcepos={forcepos[axis]} (moving negative)")
+                gcode.respond_info(f"DEBUG: {axis_name} homing in positive direction")
             else:
                 forcepos[axis] += 1.5 * (position_max - hi.position_endstop)
-                gcode.respond_info(f"DEBUG: {axis_name} forcepos={forcepos[axis]} (moving positive)")
-        except AttributeError as e:
-            gcode.respond_info(f"DEBUG: Error calculating force position: {str(e)}")
-            # Use a default movement distance if we can't calculate properly
-            if axis == 0 or axis == 1:  # X or Y axis
-                forcepos[axis] = position_min if axis == 0 else position_min  # Default to moving to min position
-                gcode.respond_info(f"DEBUG: {axis_name} using fallback forcepos={forcepos[axis]}")
+                gcode.respond_info(f"DEBUG: {axis_name} homing in negative direction")
+        else:
+            # Fallback logic for determining homing direction
+            gcode.respond_info(f"DEBUG: {axis_name} no positive_dir attribute")
+            if axis < 2:  # X/Y axes
+                # Typically, X/Y home toward their min positions
+                forcepos[axis] = position_min - 5.0  # Move slightly beyond expected trigger point
+                gcode.respond_info(f"DEBUG: {axis_name} using fallback negative direction")
             else:  # Z, A, B axes
                 forcepos[axis] = position_max  # Default to moving to max position for Z axes
                 gcode.respond_info(f"DEBUG: {axis_name} using fallback forcepos={forcepos[axis]}")
@@ -155,9 +144,25 @@ class CartesianXY3Z:
         
         # Perform homing
         gcode.respond_info(f"DEBUG: {axis_name} Starting home_rails with forcepos={forcepos}, homepos={homepos}")
+        
+        # Check what speed will be used
+        homing_speed = getattr(hi, 'speed', 5.0)  # Default to 5mm/s if not specified
+        second_homing_speed = getattr(hi, 'second_homing_speed', homing_speed/2.0)
+        retract_dist = getattr(hi, 'retract_dist', 5.0)
+        retract_speed = getattr(hi, 'retract_speed', homing_speed/2.0)
+        
+        gcode.respond_info(f"DEBUG: {axis_name} Homing speeds: initial={homing_speed}, second={second_homing_speed}")
+        gcode.respond_info(f"DEBUG: {axis_name} Retract: dist={retract_dist}, speed={retract_speed}")
+        
         try:
             homing_state.home_rails([rail], forcepos, homepos)
             gcode.respond_info(f"DEBUG: {axis_name} home_rails completed successfully")
+            
+            # Check if endstop was triggered during homing
+            for stepper_name, trigger_pos in homing_state.trigger_mcu_pos.items():
+                if any(stepper_name == s.get_name() for es, _ in endstops for s in es.get_steppers()):
+                    gcode.respond_info(f"DEBUG: {axis_name} Endstop triggered for {stepper_name} at pos={trigger_pos}")
+        
         except Exception as e:
             gcode.respond_info(f"DEBUG: {axis_name} home_rails FAILED with error: {str(e)}")
 
