@@ -168,7 +168,7 @@ class CartesianXY3ZSafety:
             raise move.move_error("A-B distance exceeded")
         
         # Secondary Boundary Conditions - Going Off Rails
-        # Check Z-axis wagon rail limits
+        # Check A/B-axis wagon rail limits
         if abs(z_ab) > 0:  # Avoid division by zero
             max_z_mz = min(
                 self.x_out + (self.d_x - csx)/2,
@@ -176,11 +176,11 @@ class CartesianXY3ZSafety:
             ) * csx / abs(z_ab)
             
             if z_mz > max_z_mz:
-                raise move.move_error("Z wagon approaching rail limit")
+                raise move.move_error("A/B wagon approaching rail limit")
         
-        # Check Y-axis rail limits
+        # Check Z-axis wagon rail limits
         if abs(z_mz) > math.sqrt(self.d_y**2 - (self.d_y - self.y_in)**2):
-            raise move.move_error("Y rail limit exceeded")
+            raise move.move_error("Z wagon approaching rail limit")
         
         # Tertiary Boundary Conditions - Collisions
         # Check for collision between printing plate and x-rail of A/B joints
