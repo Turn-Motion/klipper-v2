@@ -283,12 +283,8 @@ class CartesianXY3Z:
         # Custom homing sequence: Z/A/B together first, then individually, then X, then Y
         axes = homing_state.get_axes()
         
-        # Get gcode object for logging and parameter checking
+        # Get gcode object for logging
         gcode = self.printer.lookup_object('gcode')
-        
-        # Check for BYPASS parameter
-        bypass_param = gcode.get_command_parameters().get('BYPASS', None)
-        bypass_homing_together = (bypass_param is not None)
         
         # Debug logging
         gcode.respond_info(f"DEBUG: home method called with axes={axes}")
@@ -303,8 +299,9 @@ class CartesianXY3Z:
         gcode.respond_info(f"DEBUG: z_axes_to_home={z_axes_to_home}")
         
         if z_axes_to_home:
-            # Check if we should bypass coordinated Z homing
-            single_z_axis_homing = (len(z_axes_to_home) == 1 and bypass_homing_together)
+            # Check if we should bypass coordinated Z homing when only one Z-axis is requested
+            # and no X/Y axes are involved (allows debugging individual Z/A/B axis endstops)
+            single_z_axis_homing = (len(z_axes_to_home) == 1 and len(axes) == 1)
             
             if not single_z_axis_homing:
                 # First move Z, A, B axes together to get them roughly aligned
