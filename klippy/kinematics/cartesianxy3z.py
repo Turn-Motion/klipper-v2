@@ -253,9 +253,9 @@ class CartesianXY3Z:
             current_pos = toolhead.get_position()
             move_pos = list(current_pos)
             
-            # Calculate a reasonable movement distance that will ensure endstop triggering
-            # Using a moderate value to ensure safe movement while still reaching endstops
-            move_distance = 20.0  # More conservative movement distance
+            # Calculate a large enough movement distance to ensure endstop triggering
+            # Using a substantial value to ensure axes move far enough to reach endstops
+            move_distance = 600.0  # Much larger movement distance to ensure reaching endstops
             
             # Update target positions for all Z axes to move together
             for axis in z_axes:
