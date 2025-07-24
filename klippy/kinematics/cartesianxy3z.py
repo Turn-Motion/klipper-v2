@@ -253,27 +253,49 @@ class CartesianXY3Z:
             current_pos = toolhead.get_position()
             move_pos = list(current_pos)
             
+            # Calculate a reasonable movement distance that will ensure endstop triggering
+            # Using a moderate value to ensure safe movement while still reaching endstops
+            move_distance = 20.0  # More conservative movement distance
+            
             # Update target positions for all Z axes to move together
             for axis in z_axes:
-                # Use the homepos_z values we calculated above based on homing direction
-                move_pos[axis] = homepos_z[axis]
+                rail = self.rails[axis]
+                position_min, position_max = rail.get_range()
+                hi = rail.get_homing_info()
+                
+                # Determine movement direction based on endstop position
+                if getattr(hi, 'positive_dir', False):
+                    # Moving in positive direction (toward MAX)
+                    move_pos[axis] = current_pos[axis] + move_distance
+                    gcode.respond_info(f"DEBUG: Axis {axis} will move in positive direction by {move_distance}mm")
+                else:
+                    # Moving in negative direction (toward MIN)
+                    move_pos[axis] = current_pos[axis] - move_distance
+                    gcode.respond_info(f"DEBUG: Axis {axis} will move in negative direction by {move_distance}mm")
             
             gcode.respond_info(f"DEBUG: Starting coordinated homing move for Z/A/B axes to: {move_pos}")
             
-            # Use a proper homing move that will monitor endstops but won't fail if none trigger
-            hmove.homing_move(move_pos, 5.0, check_triggered=False)  # Slow speed for safety
+            # Use a proper homing move that WILL wait for endstops to trigger
+            # Setting check_triggered=True to ensure movement stops only when endstops trigger
+            hmove.homing_move(move_pos, 5.0, check_triggered=True)  # Slow speed for safety
             
             gcode.respond_info(f"DEBUG: Z/A/B axes coordinated homing move completed")
             
-            # Check which endstops were triggered (if any)
+            # Check which endstops were triggered
+            triggered_endstops = 0
             for i, rail in enumerate(z_rails):
                 endstops = rail.get_endstops()
                 for es, name in endstops:
-                    triggered = False
                     for s in es.get_steppers():
                         if s.get_name() in hmove.stepper_positions:
-                            triggered = True
+                            triggered_endstops += 1
                             gcode.respond_info(f"DEBUG: Endstop '{name}' on axis {z_axes[i]} was triggered during coordinated move")
+            
+            if triggered_endstops > 0:
+                gcode.respond_info(f"DEBUG: {triggered_endstops} endstop(s) triggered during coordinated Z/A/B move")
+            else:
+                gcode.respond_info("WARNING: No endstops were triggered during coordinated Z/A/B move! Check your endstop configuration.")
+                # This is an error condition, but we'll let individual homing try to recover
             
             gcode.respond_info(f"DEBUG: Coordinated Z/A/B move completed - ready for individual homing")
         
