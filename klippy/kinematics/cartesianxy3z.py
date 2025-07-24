@@ -23,6 +23,8 @@ class CartesianXY3Z:
         ranges = [r.get_range() for r in self.rails]
         self.axes_min = toolhead.Coord(*[r[0] for r in ranges], e=0.)
         self.axes_max = toolhead.Coord(*[r[1] for r in ranges], e=0.)
+        # Option to bypass Z home together for debugging
+        self.bypass_z_home_together = config.getboolean('bypass_z_home_together', False)
         self.dc_module = None
         if config.has_section('dual_carriage'):
             dc_config = config.getsection('dual_carriage')
@@ -281,8 +283,14 @@ class CartesianXY3Z:
         # Custom homing sequence: Z/A/B together first, then individually, then X, then Y
         axes = homing_state.get_axes()
         
-        # Debug logging
+        # Get gcode object for logging and parameter checking
         gcode = self.printer.lookup_object('gcode')
+        
+        # Check for BYPASS parameter
+        bypass_param = gcode.get_command_parameters().get('BYPASS', None)
+        bypass_homing_together = (bypass_param is not None)
+        
+        # Debug logging
         gcode.respond_info(f"DEBUG: home method called with axes={axes}")
         
         # First move Z, A, B axes together if any of them need to be homed
@@ -295,10 +303,20 @@ class CartesianXY3Z:
         gcode.respond_info(f"DEBUG: z_axes_to_home={z_axes_to_home}")
         
         if z_axes_to_home:
-            # First move Z, A, B axes together to get them roughly aligned
-            gcode.respond_info("DEBUG: Starting home_z_axes_together")
-            self.home_z_axes_together(homing_state)
-            gcode.respond_info("DEBUG: Completed home_z_axes_together")
+            # Check if we should bypass coordinated Z homing
+            single_z_axis_homing = (len(z_axes_to_home) == 1 and bypass_homing_together)
+            
+            if not single_z_axis_homing:
+                # First move Z, A, B axes together to get them roughly aligned
+                gcode.respond_info("DEBUG: Starting home_z_axes_together")
+                self.home_z_axes_together(homing_state)
+                gcode.respond_info("DEBUG: Completed home_z_axes_together")
+            else:
+                # Show warning when bypassing coordinated homing
+                axis_name = "zab"[z_axes_to_home[0] - 2]  # Convert axis index to name (z=2, a=3, b=4)
+                gcode.respond_info(
+                    f"WARNING: Bypassing coordinated Z/A/B homing for {axis_name.upper()}-axis. "
+                    f"This is for debugging purposes only. Make sure your endstops are correctly configured.")
             
             # Then home each Z axis individually in the specified order
             for axis_name in ['z', 'a', 'b']:
