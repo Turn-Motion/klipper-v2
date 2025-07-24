@@ -227,7 +227,6 @@ class CartesianXY3Z:
                 homepos_z[axis] = max_pos - 5.0  # Target position slightly below max
                 gcode.respond_info(f"DEBUG: Axis {axis} moving in negative direction")
         
-        # Use a proper homing move that will stop when any endstop triggers
         try:
             # Create a combined list of endstops from all z_rails
             all_endstops = []
@@ -243,7 +242,12 @@ class CartesianXY3Z:
             
             # Reset position before move
             toolhead = homing_state.toolhead
-            toolhead.set_position([0., 0., 0., 0., 0.] + toolhead.get_position()[5:], homing_axes=[])
+            # Convert z_axes list to a string of axis names for homing_axes
+            homing_axes_str = ''.join(['xyzab'[axis] for axis in z_axes])
+            gcode.respond_info(f"DEBUG: Setting position with homing_axes={homing_axes_str}")
+            
+            # Reset position for the Z axes we're homing
+            toolhead.set_position([0., 0., 0., 0., 0.] + toolhead.get_position()[5:], homing_axes=homing_axes_str)
             
             # Calculate target position for synchronous movement
             current_pos = toolhead.get_position()
@@ -256,9 +260,8 @@ class CartesianXY3Z:
             
             gcode.respond_info(f"DEBUG: Starting coordinated homing move for Z/A/B axes to: {move_pos}")
             
-            # Use a proper homing move that will monitor endstops
-            # The homing_move method will stop when any endstop triggers
-            hmove.homing_move(move_pos, 5.0)  # Slow speed for safety
+            # Use a proper homing move that will monitor endstops but won't fail if none trigger
+            hmove.homing_move(move_pos, 5.0, check_triggered=False)  # Slow speed for safety
             
             gcode.respond_info(f"DEBUG: Z/A/B axes coordinated homing move completed")
             
@@ -274,9 +277,9 @@ class CartesianXY3Z:
             
             gcode.respond_info(f"DEBUG: Coordinated Z/A/B move completed - ready for individual homing")
         
-            
         except Exception as e:
             gcode.respond_info(f"DEBUG: Z/A/B axes initial positioning failed: {str(e)}")
+            gcode.respond_info("DEBUG: Continuing with individual axis homing anyway")
             # Don't throw an error here, we'll try to home axes individually
     
     def home(self, homing_state):
