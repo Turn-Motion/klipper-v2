@@ -5,6 +5,8 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import logging
 import stepper
+# Import HomingMove directly
+from extras.homing import HomingMove
 from . import idex_modes
 
 class CartesianXY3Z:
@@ -225,9 +227,6 @@ class CartesianXY3Z:
         
         # Use a proper homing move that will stop when any endstop triggers
         try:
-            # Get homing object for proper endstop-aware moves
-            homing_obj = self.printer.lookup_object('homing')
-            
             # Create a combined list of endstops from all z_rails
             all_endstops = []
             for rail in z_rails:
@@ -237,7 +236,8 @@ class CartesianXY3Z:
             gcode.respond_info(f"DEBUG: Monitoring endstops for Z move: {all_endstops}")
             
             # Create a HomingMove object with all Z endstops
-            hmove = homing_obj.HomingMove(self.printer, all_endstops, toolhead=homing_state.toolhead)
+            # Using the HomingMove class we imported at the top of the file
+            hmove = HomingMove(self.printer, all_endstops, toolhead=homing_state.toolhead)
             
             # Reset position before move
             toolhead = homing_state.toolhead
