@@ -60,6 +60,8 @@ class CartesianXY3Z:
                                               above=0., maxval=max_velocity)
         self.max_b_accel = config.getfloat('max_b_accel', self.max_z_accel,
                                            above=0., maxval=max_accel)
+        # Get the post-homing Z movement distance (default 62.8mm)
+        self.post_homing_z_lift = config.getfloat('post_homing_z_lift', 62.8, above=0.)
         self.limits = [(1.0, -1.0)] * 5  # For x, y, z, a, b axes
 
     def get_steppers(self):
@@ -305,60 +307,54 @@ class CartesianXY3Z:
             # Don't throw an error here, we'll try to home axes individually
     
     def home(self, homing_state):
-        # Custom homing sequence: Z/A/B together first, then individually, then X, then Y
-        axes = homing_state.get_axes()
-        
-        # Get gcode object for logging
         gcode = self.printer.lookup_object('gcode')
+        axes = homing_state.get_axes()
+        z_axes_homed = False
         
-        # Debug logging
-        gcode.respond_info(f"DEBUG: home method called with axes={axes}")
-        
-        # First move Z, A, B axes together if any of them need to be homed
-        z_axes_to_home = []
+        # Home Z, A, B axes first
         for axis_name in ['z', 'a', 'b']:
             axis = "xyzab".index(axis_name)
             if axis in axes:
-                z_axes_to_home.append(axis)
+                self.home_axis(homing_state, axis, self.rails[axis])
+                z_axes_homed = True
         
-        gcode.respond_info(f"DEBUG: z_axes_to_home={z_axes_to_home}")
-        
-        if z_axes_to_home:
-            # Check if we should bypass coordinated Z homing when only one Z-axis is requested
-            # and no X/Y axes are involved (allows debugging individual Z/A/B axis endstops)
-            single_z_axis_homing = (len(z_axes_to_home) == 1 and len(axes) == 1)
+        # Perform post-homing Z lift if Z was homed
+        if z_axes_homed and self.post_homing_z_lift > 0.:
+            # Get current position
+            toolhead = homing_state.toolhead
+            current_pos = toolhead.get_position()
+            # Calculate new position with Z lifted
+            new_pos = list(current_pos)
             
-            if not single_z_axis_homing:
-                # First move Z, A, B axes together to get them roughly aligned
-                gcode.respond_info("DEBUG: Starting home_z_axes_together")
-                self.home_z_axes_together(homing_state)
-                gcode.respond_info("DEBUG: Completed home_z_axes_together")
-            else:
-                # Show warning when bypassing coordinated homing
-                axis_name = "zab"[z_axes_to_home[0] - 2]  # Convert axis index to name (z=2, a=3, b=4)
-                gcode.respond_info(
-                    f"WARNING: Bypassing coordinated Z/A/B homing for {axis_name.upper()}-axis. "
-                    f"This is for debugging purposes only. Make sure your endstops are correctly configured.")
+            # Apply the lift only to Z axis (index 2)
+            if len(new_pos) > 2:  # Make sure Z axis exists in position
+                new_pos[2] += self.post_homing_z_lift  # Only lift Z axis
             
-            # Then home each Z axis individually in the specified order
-            for axis_name in ['z', 'a', 'b']:
-                axis = "xyzab".index(axis_name)
-                if axis in axes:
-                    gcode.respond_info(f"DEBUG: Starting individual homing for {axis_name}-axis")
-                    self.home_axis(homing_state, axis, self.rails[axis])
+            # Move to the new position
+            gcode.respond_info(f"Moving Z away from endstop by {self.post_homing_z_lift}mm")
+            try:
+                # Perform the actual movement
+                toolhead.move(new_pos, self.max_z_velocity)
+                gcode.respond_info("Post-homing Z movement complete")
+                
+                # Reset the coordinate system to consider this the true home position
+                reset_axes = 'z'  # Only reset Z axis
+                gcode.respond_info(f"Resetting coordinate system for axes: {reset_axes}")
+                # Set the current position as the new home position for Z axis
+                toolhead.set_position(toolhead.get_position(), homing_axes=reset_axes)
+                gcode.respond_info("Coordinate system reset complete")
+            except Exception as e:
+                gcode.respond_info(f"Error during post-homing Z movement: {str(e)}")
         
-        # Then home X if needed
-        if 0 in axes:  # X axis
-            gcode.respond_info("DEBUG: Starting X-axis homing")
+        # Home X axis
+        if 0 in axes:
             if self.dc_module is not None and 0 == self.dual_carriage_axis:
-                gcode.respond_info("DEBUG: Using dual_carriage module for X-axis homing")
                 self.dc_module.home(homing_state)
             else:
-                gcode.respond_info("DEBUG: Using standard homing for X-axis")
                 self.home_axis(homing_state, 0, self.rails[0])
         
-        # Finally home Y if needed
-        if 1 in axes:  # Y axis
+        # Home Y axis
+        if 1 in axes:
             gcode.respond_info("DEBUG: Starting Y-axis homing")
             if self.dc_module is not None and 1 == self.dual_carriage_axis:
                 gcode.respond_info("DEBUG: Using dual_carriage module for Y-axis homing")
