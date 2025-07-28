@@ -311,12 +311,27 @@ class CartesianXY3Z:
         axes = homing_state.get_axes()
         z_axes_homed = False
         
-        # Home Z, A, B axes first
+        # Check if any Z axes need to be homed
+        z_axes_to_home = []
         for axis_name in ['z', 'a', 'b']:
             axis = "xyzab".index(axis_name)
             if axis in axes:
-                self.home_axis(homing_state, axis, self.rails[axis])
+                z_axes_to_home.append(axis)
                 z_axes_homed = True
+        
+        # First move Z, A, B axes together if any of them need to be homed
+        if z_axes_to_home:
+            # First move Z, A, B axes together to get them roughly aligned
+            gcode.respond_info("Starting coordinated Z/A/B homing")
+            self.home_z_axes_together(homing_state)
+            gcode.respond_info("Completed coordinated Z/A/B homing")
+            
+            # Then home each Z axis individually for precision
+            for axis_name in ['z', 'a', 'b']:
+                axis = "xyzab".index(axis_name)
+                if axis in axes:
+                    gcode.respond_info(f"Starting individual homing for {axis_name}-axis")
+                    self.home_axis(homing_state, axis, self.rails[axis])
         
         # Perform post-homing Z lift if Z was homed
         if z_axes_homed and self.post_homing_z_lift > 0.:
