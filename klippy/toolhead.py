@@ -3,6 +3,7 @@
 # Copyright (C) 2016-2024  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+#Reverted
 import math, logging, importlib
 import mcu, chelper, kinematics.extruder
 
@@ -24,10 +25,20 @@ class Move:
         # Calculate movement for all axes (XYZABE)
         # Note: In this system, indices 0-4 are XYZAB and index 5 is E (extruder)
         self.axes_d = axes_d = [end_pos[i] - start_pos[i] for i in range(6)]
-        # Calculate total movement distance (excluding E axis)
-        self.move_d = move_d = math.sqrt(sum([d*d for d in axes_d]))
-        if move_d < .000000001:
-            # Extrude only move
+        # ##################### BEGIN EXTRUDER-ONLY MOVE DETECTION #####################
+        # Check if this is an extruder-only move
+        # An extruder-only move has no movement in any of the XYZAB axes
+        xyz_move = any(abs(axes_d[i]) >= .000000001 for i in range(5))
+        if not xyz_move:
+            # Extrude only move - ensure no movement in physical axes
+            try:
+                # Log extruder-only move details for debugging
+                logging.debug("Extruder-only move detected: E=%.6f" % axes_d[5])
+                logging.debug("  Original positions: X=%.3f Y=%.3f Z=%.3f A=%.3f B=%.3f E=%.3f" % 
+                             (start_pos[0], start_pos[1], start_pos[2], start_pos[3], start_pos[4], start_pos[5]))
+            except Exception as e:
+                logging.exception("Error in extruder-only move debug logging: %s" % str(e))
+                
             self.end_pos = (start_pos[0], start_pos[1], start_pos[2],
                            start_pos[3], start_pos[4], end_pos[5])
             axes_d[0] = axes_d[1] = axes_d[2] = axes_d[3] = axes_d[4] = 0.
@@ -38,8 +49,18 @@ class Move:
             self.accel = 99999999.9
             velocity = speed
             self.is_kinematic_move = False
+            
+            try:
+                # Log the final move configuration
+                logging.debug("  Extruder-only move configured: is_kinematic_move=%s move_d=%.6f" % 
+                             (self.is_kinematic_move, self.move_d))
+            except Exception as e:
+                logging.exception("Error in extruder-only move final debug logging: %s" % str(e))
+        # ##################### END EXTRUDER-ONLY MOVE DETECTION #####################
         else:
-            inv_move_d = 1. / move_d
+            # Normal move with physical axes movement
+            self.move_d = move_d = math.sqrt(sum([d*d for d in axes_d[:5]]))
+            inv_move_d = 1. / move_d if move_d else 0.
         self.axes_r = [d * inv_move_d for d in axes_d]
         self.min_move_t = move_d / velocity
         # Junction speeds are tracked in velocity squared.  The
@@ -352,7 +373,9 @@ class ToolHead:
         # Queue moves into trapezoid motion queue (trapq)
         next_move_time = self.print_time
         for move in moves:
+            # ##################### BEGIN MOVE PROCESSING #####################
             if move.is_kinematic_move:
+                # This is a move that involves physical axes (not just extruder)
                 self.trapq_append(
                     self.trapq, next_move_time,
                     move.accel_t, move.cruise_t, move.decel_t,
@@ -361,8 +384,17 @@ class ToolHead:
                     move.axes_r[0], move.axes_r[1], move.axes_r[2],
                     move.axes_r[3], move.axes_r[4],
                     move.start_v, move.cruise_v, move.accel)
+            else:
+                try:
+                    # Log when we're processing an extruder-only move
+                    logging.debug("Processing extruder-only move: E=%.6f" % move.axes_d[5])
+                except Exception as e:
+                    logging.exception("Error logging extruder-only move processing: %s" % str(e))
+                    
             if move.axes_d[5]:
+                # Process extruder movement
                 self.extruder.move(next_move_time, move)
+            # ##################### END MOVE PROCESSING #####################
             next_move_time = (next_move_time + move.accel_t
                               + move.cruise_t + move.decel_t)
             for cb in move.timing_callbacks:

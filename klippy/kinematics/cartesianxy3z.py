@@ -255,7 +255,7 @@ class CartesianXY3Z:
             
             # Calculate a large enough movement distance to ensure endstop triggering
             # Using a substantial value to ensure axes move far enough to reach endstops
-            move_distance = 600.0  # Much larger movement distance to ensure reaching endstops
+            move_distance = 800.0  # Much larger movement distance to ensure reaching endstops
             
             # Update target positions for all Z axes to move together
             for axis in z_axes:
