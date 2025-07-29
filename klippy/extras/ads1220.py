@@ -81,7 +81,8 @@ class ADS1220:
         # Original: spi_speed = 512000 if self.is_turbo else 256000
         spi_speed = config.getint('spi_speed', 100000)  # Default to 100kHz for stability
         logging.info("ADS1220: Using SPI speed of %d Hz", spi_speed)
-        self.spi = bus.MCU_SPI_from_config(config, 1, default_speed=spi_speed, mode=1)
+        # Use SPI mode 1 (CPOL=0, CPHA=1) for ADS1220
+        self.spi = bus.MCU_SPI_from_config(config, 1, default_speed=spi_speed)
         self.mcu = mcu = self.spi.get_mcu()
         self.oid = mcu.create_oid()
         # Data Ready (DRDY) Pin
