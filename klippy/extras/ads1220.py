@@ -48,7 +48,7 @@ class ADS1220:
         self.sps_options = self.sps_normal.copy()
         self.sps_options.update(self.sps_turbo)
         self.sps = config.getchoice('sample_rate', self.sps_options,
-                                    default='660')
+                                    default='600')
         self.is_turbo = str(self.sps) in self.sps_turbo
         # Input multiplexer: AINP and AINN
         mux_options = {'AIN0_AIN1': 0b0000, 'AIN0_AIN2': 0b0001,
@@ -79,7 +79,7 @@ class ADS1220:
         # SPI Setup
         # Use a more conservative SPI speed for better reliability
         # Original: spi_speed = 512000 if self.is_turbo else 256000
-        spi_speed = config.getint('spi_speed', 100000)  # Default to 100kHz for stability
+        spi_speed = config.getint('spi_speed', 256000)  # Default to 100kHz for stability
         logging.info("ADS1220: Using SPI speed of %d Hz", spi_speed)
         
         # Try SPI mode 0 (CPOL=0, CPHA=0) for ADS1220
