@@ -41,13 +41,13 @@ class ADS1220:
             logging.info("ADS1220 %s: Hardware test mode enabled", self.name)
             self.register_test_command()
         # Pin test on startup if requested
-        self.pin_test_on_startup = config.getboolean('pin_test_on_startup', False)
+        self.pin_test_on_startup = config.getboolean('pin_test_on_startup', True)
         # Register this instance in the global registry
         ADS1220_INSTANCES[self.name] = self
         # Register global test command if this is the first instance
         if len(ADS1220_INSTANCES) == 1:
             gcode = self.printer.lookup_object('gcode')
-            gcode.register_command('ADS1220_TEST_ANY', self.cmd_ADS1220_TEST_ANY,
+            gcode.register_command('ADS1220TESTANY', self.cmd_ADS1220_TEST_ANY,
                                   desc="Test any ADS1220 sensor by name")
         # Chip options
         # Gain
@@ -425,10 +425,14 @@ class ADS1220:
         """Register the ADS1220_TEST G-code command.
         This can be called directly or from a parent module like load_cell_probe."""
         gcode = self.printer.lookup_object('gcode')
-        cmd_name = 'ADS1220_TEST'
+        # Klipper G-code commands can only have one underscore, at the beginning
+        # So we use ADS1220TEST as the base command name
+        cmd_name = 'ADS1220TEST'
         if self.name != 'ads1220':
             # If this is not a direct ADS1220 instance, use a more specific name
-            cmd_name = 'ADS1220_TEST_' + self.name
+            # Convert any underscores to avoid invalid command names
+            safe_name = self.name.replace('_', '')
+            cmd_name = 'ADS1220TEST' + safe_name.upper()
         gcode.register_command(cmd_name, self.cmd_ADS1220_TEST,
                               desc="Test ADS1220 SPI communication for " + self.name)
         logging.info("ADS1220 %s: Registered test command '%s'", 
