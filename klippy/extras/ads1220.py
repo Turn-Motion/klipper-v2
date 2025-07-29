@@ -26,6 +26,8 @@ def hexify(byte_array):
 
 
 class ADS1220:
+    # Class-level registry of ADS1220 instances
+    INSTANCES = {}
     def __init__(self, config):
         self.printer = printer = config.get_printer()
         self.name = config.get_name().split()[-1]
@@ -43,9 +45,9 @@ class ADS1220:
         # Pin test on startup if requested
         self.pin_test_on_startup = config.getboolean('pin_test_on_startup', True)
         # Register this instance in the global registry
-        ADS1220_INSTANCES[self.name] = self
+        ADS1220.INSTANCES[self.name] = self
         # Register global test command if this is the first instance
-        if len(ADS1220_INSTANCES) == 1:
+        if len(ADS1220.INSTANCES) == 1:
             gcode = self.printer.lookup_object('gcode')
             gcode.register_command('ADS1220TESTANY', self.cmd_ADS1220_TEST_ANY,
                                   desc="Test any ADS1220 sensor by name")
@@ -421,6 +423,27 @@ class ADS1220:
         
         gcmd.respond_info("ADS1220 hardware test complete")
 
+    def cmd_ADS1220_TEST_ANY(self, gcmd):
+        """G-code command to test any ADS1220 sensor by name."""
+        name = gcmd.get('NAME', None)
+        if name is None:
+            # List available sensors
+            sensor_list = ", ".join(sorted(ADS1220.INSTANCES.keys()))
+            gcmd.respond_info("Available ADS1220 sensors: %s" % sensor_list)
+            gcmd.respond_info("Usage: ADS1220TESTANY NAME=<sensor_name>")
+            return
+            
+        if name not in ADS1220.INSTANCES:
+            gcmd.respond_error("Unknown ADS1220 sensor: %s" % name)
+            return
+            
+        # Run the test on the specified sensor
+        sensor = ADS1220.INSTANCES[name]
+        gcmd.respond_info("Testing ADS1220 sensor: %s" % name)
+        
+        # Redirect to the regular test command
+        sensor.cmd_ADS1220_TEST(gcmd)
+        
     def register_test_command(self):
         """Register the ADS1220_TEST G-code command.
         This can be called directly or from a parent module like load_cell_probe."""
