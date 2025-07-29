@@ -47,6 +47,9 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### CartesianXY3Z Coordinated Z Homing Enhancement (29.07.2025)
+Implemented two-phase coordinated Z homing for Z/A/B axes with fast initial move, retraction, and individual precision homing, plus configurable post-homing Z lift.
+
 ### ADS1220 Driver Improvements (29.07.2025)
 
 - Added robust SPI communication with retry logic and improved error handling
