@@ -4,6 +4,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import logging
+import time
 from . import bulk_sensor, bus
 
 #
@@ -30,6 +31,10 @@ class ADS1220:
         self.name = config.get_name().split()[-1]
         self.last_error_count = 0
         self.consecutive_fails = 0
+        # Debug option - enabled by default
+        self.debug = config.getboolean('debug', True)
+        if self.debug:
+            logging.info("ADS1220 %s: Debug mode enabled", self.name)
         # Chip options
         # Gain
         self.gain_options = {'1': 0x0, '2': 0x1, '4': 0x2, '8': 0x3, '16': 0x4,
@@ -72,8 +77,11 @@ class ADS1220:
                                " cant be used as a voltage reference and"
                                " an input at the same time")
         # SPI Setup
-        spi_speed = 512000 if self.is_turbo else 256000
-        self.spi = bus.MCU_SPI_from_config(config, 1, default_speed=spi_speed)
+        # Use a more conservative SPI speed for better reliability
+        # Original: spi_speed = 512000 if self.is_turbo else 256000
+        spi_speed = config.getint('spi_speed', 100000)  # Default to 100kHz for stability
+        logging.info("ADS1220: Using SPI speed of %d Hz", spi_speed)
+        self.spi = bus.MCU_SPI_from_config(config, 1, default_speed=spi_speed, mode=1)
         self.mcu = mcu = self.spi.get_mcu()
         self.oid = mcu.create_oid()
         # Data Ready (DRDY) Pin
@@ -171,15 +179,50 @@ class ADS1220:
 
     def reset_chip(self):
         # the reset command takes 50us to complete
-        self.send_command(RESET_CMD)
-        # read startup register state and validate
-        val = self.read_reg(0x0, 4)
-        if val != RESET_STATE:
-            raise self.printer.command_error(
-                "Invalid ads1220 reset state (got %s vs %s).\n"
-                "This is generally indicative of connection problems\n"
-                "(e.g. faulty wiring) or a faulty ADS1220 chip."
-                % (hexify(val), hexify(RESET_STATE)))
+        # Try reset up to 3 times
+        if self.debug:
+            logging.info("ADS1220 %s: Starting chip reset", self.name)
+        
+        for retry in range(3):
+            if self.debug:
+                logging.info("ADS1220 %s: Reset attempt %d", self.name, retry + 1)
+            
+            try:
+                self.send_command(RESET_CMD)
+                # Add a delay to ensure reset completes (50us minimum, use 5ms to be safe)
+                time.sleep(0.005)
+                
+                # read startup register state and validate
+                if self.debug:
+                    logging.info("ADS1220 %s: Reading registers after reset", self.name)
+                val = self.read_reg(0x0, 4)
+                
+                if self.debug:
+                    logging.info("ADS1220 %s: Reset state: got %s, expected %s", 
+                                 self.name, hexify(val), hexify(RESET_STATE))
+                
+                if val == RESET_STATE:
+                    if self.debug:
+                        logging.info("ADS1220 %s: Reset successful", self.name)
+                    return
+                
+                # If not successful, wait a bit longer and try again
+                logging.warning("ADS1220 %s: Reset attempt %d failed: got %s, expected %s", 
+                               self.name, retry + 1, hexify(val), hexify(RESET_STATE))
+                time.sleep(0.010 * (retry + 1))
+            except Exception as e:
+                logging.error("ADS1220 %s: Exception during reset attempt %d: %s", 
+                              self.name, retry + 1, str(e))
+                time.sleep(0.010 * (retry + 1))
+        
+        # If we get here, all retries failed
+        logging.error("ADS1220 %s: All reset attempts failed. Last state: %s", 
+                      self.name, hexify(val))
+        raise self.printer.command_error(
+            "Invalid ads1220 reset state (got %s vs %s).\n"
+            "This is generally indicative of connection problems\n"
+            "(e.g. faulty wiring) or a faulty ADS1220 chip."
+            % (hexify(val), hexify(RESET_STATE)))
 
     def setup_chip(self):
         continuous = 0x1  # enable continuous conversions
@@ -195,24 +238,104 @@ class ADS1220:
         self.send_command(START_SYNC_CMD)
 
     def read_reg(self, reg, byte_count):
+        # Add a small delay before SPI communication for stability
+        time.sleep(0.001)
         read_command = [RREG_CMD | (reg << 2) | (byte_count - 1)]
         read_command += [NOOP_CMD] * byte_count
-        params = self.spi.spi_transfer(read_command)
-        return bytearray(params['response'][1:])
+        
+        if self.debug:
+            logging.info("ADS1220 %s: Reading register 0x%x, bytes=%d, cmd=%s", 
+                         self.name, reg, byte_count, hexify(read_command))
+        
+        try:
+            params = self.spi.spi_transfer(read_command)
+            response = bytearray(params['response'][1:])
+            
+            if self.debug:
+                logging.info("ADS1220 %s: Read response: %s", self.name, hexify(response))
+                # Check for all 0xFF which often indicates SPI communication failure
+                if all(b == 0xff for b in response):
+                    logging.warning("ADS1220 %s: All 0xFF response may indicate SPI failure", self.name)
+                # Check for all 0x00 which could indicate incorrect CS handling
+                elif all(b == 0x00 for b in response):
+                    logging.warning("ADS1220 %s: All 0x00 response may indicate CS issue", self.name)
+            
+            return response
+        except Exception as e:
+            logging.error("ADS1220 %s: SPI read error: %s", self.name, str(e))
+            # Return a safe fallback that will trigger a retry
+            return bytearray([0xff] * byte_count)
 
     def send_command(self, cmd):
-        self.spi.spi_send([cmd])
+        # Add a small delay before SPI communication for stability
+        time.sleep(0.001)
+        
+        if self.debug:
+            cmd_name = "UNKNOWN"
+            if cmd == RESET_CMD:
+                cmd_name = "RESET"
+            elif cmd == START_SYNC_CMD:
+                cmd_name = "START_SYNC"
+            elif cmd == NOOP_CMD:
+                cmd_name = "NOOP"
+            logging.info("ADS1220 %s: Sending command 0x%02x (%s)", self.name, cmd, cmd_name)
+        
+        try:
+            self.spi.spi_send([cmd])
+            if self.debug:
+                logging.info("ADS1220 %s: Command sent successfully", self.name)
+        except Exception as e:
+            logging.error("ADS1220 %s: SPI command error: %s", self.name, str(e))
+            # Re-raise to allow caller to handle the error
+            raise
 
     def write_reg(self, reg, register_bytes):
-        write_command = [WREG_CMD | (reg << 2) | (len(register_bytes) - 1)]
-        write_command.extend(register_bytes)
-        self.spi.spi_send(write_command)
-        stored_val = self.read_reg(reg, len(register_bytes))
-        if bytearray(register_bytes) != stored_val:
-            raise self.printer.command_error(
-                "Failed to set ADS1220 register [0x%x] to %s: got %s. "
-                "This may be a connection problem (e.g. faulty wiring)" % (
-                    reg, hexify(register_bytes), hexify(stored_val)))
+        # Try write up to 3 times
+        if self.debug:
+            logging.info("ADS1220 %s: Writing to register 0x%x, value=%s", 
+                         self.name, reg, hexify(register_bytes))
+        
+        for retry in range(3):
+            if self.debug and retry > 0:
+                logging.info("ADS1220 %s: Write attempt %d for register 0x%x", 
+                             self.name, retry + 1, reg)
+            try:
+                write_command = [WREG_CMD | (reg << 2) | (len(register_bytes) - 1)]
+                write_command.extend(register_bytes)
+                
+                if self.debug:
+                    logging.info("ADS1220 %s: Write command: %s", self.name, hexify(write_command))
+                
+                self.spi.spi_send(write_command)
+                
+                # Add a small delay before verification
+                time.sleep(0.002)
+                
+                if self.debug:
+                    logging.info("ADS1220 %s: Verifying register 0x%x write", self.name, reg)
+                
+                stored_val = self.read_reg(reg, len(register_bytes))
+                if bytearray(register_bytes) == stored_val:
+                    if self.debug:
+                        logging.info("ADS1220 %s: Register 0x%x write successful", self.name, reg)
+                    return
+                
+                # If verification failed, log the attempt
+                logging.warning("ADS1220 %s: Register 0x%x write verification failed (attempt %d): expected %s, got %s", 
+                               self.name, reg, retry+1, hexify(register_bytes), hexify(stored_val))
+                # Wait longer between retries
+                time.sleep(0.010 * (retry + 1))
+            except Exception as e:
+                logging.error("ADS1220 %s: Register 0x%x write error on try %d: %s", 
+                              self.name, reg, retry+1, str(e))
+                time.sleep(0.010 * (retry + 1))
+        
+        # If we get here, all retries failed
+        logging.error("ADS1220 %s: All write attempts failed for register 0x%x", self.name, reg)
+        raise self.printer.command_error(
+            "Failed to set ADS1220 register [0x%x] to %s: got %s. "
+            "This may be a connection problem (e.g. faulty wiring)" % (
+                reg, hexify(register_bytes), hexify(stored_val)))
 
 
 ADS1220_SENSOR_TYPE = {"ads1220": ADS1220}

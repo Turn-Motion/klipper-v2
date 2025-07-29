@@ -44,3 +44,15 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 2. `average_delta` metric for `PROBE_ACCURACY` command
 
 ---
+
+## Feature Updates
+
+### ADS1220 Driver Improvements (29.07.2025)
+
+- Added robust SPI communication with retry logic and improved error handling
+- Added detailed debug logging (enabled by default) to help diagnose communication issues
+- Reduced default SPI speed for better reliability with problematic hardware
+- Improved reset sequence with proper delays and verification
+- Added configurable SPI speed option (`spi_speed` parameter)
+
+---
