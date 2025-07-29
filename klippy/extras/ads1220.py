@@ -35,6 +35,20 @@ class ADS1220:
         self.debug = config.getboolean('debug', True)
         if self.debug:
             logging.info("ADS1220 %s: Debug mode enabled", self.name)
+        # Hardware test mode - disabled by default
+        self.hw_test_mode = config.getboolean('hw_test_mode', True)
+        if self.hw_test_mode:
+            logging.info("ADS1220 %s: Hardware test mode enabled", self.name)
+            self.register_test_command()
+        # Pin test on startup if requested
+        self.pin_test_on_startup = config.getboolean('pin_test_on_startup', False)
+        # Register this instance in the global registry
+        ADS1220_INSTANCES[self.name] = self
+        # Register global test command if this is the first instance
+        if len(ADS1220_INSTANCES) == 1:
+            gcode = self.printer.lookup_object('gcode')
+            gcode.register_command('ADS1220_TEST_ANY', self.cmd_ADS1220_TEST_ANY,
+                                  desc="Test any ADS1220 sensor by name")
         # Chip options
         # Gain
         self.gain_options = {'1': 0x0, '2': 0x1, '4': 0x2, '8': 0x3, '16': 0x4,
@@ -119,6 +133,9 @@ class ADS1220:
         self.query_ads1220_cmd = None
 
     def _build_config(self):
+        # Run pin test if requested
+        if self.pin_test_on_startup:
+            self.test_pins()
         cmdqueue = self.spi.get_command_queue()
         self.query_ads1220_cmd = self.mcu.lookup_command(
             "query_ads1220 oid=%c rest_ticks=%u", cq=cmdqueue)
@@ -341,6 +358,145 @@ class ADS1220:
             "Failed to set ADS1220 register [0x%x] to %s: got %s. "
             "This may be a connection problem (e.g. faulty wiring)" % (
                 reg, hexify(register_bytes), hexify(stored_val)))
+
+    def cmd_ADS1220_TEST(self, gcmd):
+        """G-code command to test ADS1220 SPI communication and hardware connections."""
+        gcmd.respond_info("Starting ADS1220 hardware test on %s..." % self.name)
+        
+        # Test 1: Try to reset the chip
+        gcmd.respond_info("Test 1: Sending RESET command...")
+        try:
+            self.send_command(RESET_CMD)
+            gcmd.respond_info("Reset command sent successfully")
+        except Exception as e:
+            gcmd.respond_info("Error sending reset command: %s" % str(e))
+        
+        # Test 2: Try reading registers with different SPI modes
+        gcmd.respond_info("Test 2: Reading registers with different SPI modes...")
+        for mode in range(4):
+            try:
+                old_mode = self.spi.get_mode()
+                gcmd.respond_info("Switching to SPI mode %d" % mode)
+                self.spi.set_mode(mode)
+                val = self.read_reg(0x0, 4)
+                gcmd.respond_info("SPI mode %d result: %s" % (mode, hexify(val)))
+                self.spi.set_mode(old_mode)
+            except Exception as e:
+                gcmd.respond_info("Error in SPI mode %d: %s" % (mode, str(e)))
+                try:
+                    self.spi.set_mode(old_mode)
+                except:
+                    pass
+        
+        # Test 3: Toggle CS pin manually
+        gcmd.respond_info("Test 3: Testing CS pin control...")
+        try:
+            # Toggle CS pin high (inactive)
+            gcmd.respond_info("Setting CS pin HIGH (inactive)")
+            self.spi.get_command_send().send([self.spi.oid, self.spi.cmd_queue.CHIP_SELECT, 1])
+            time.sleep(0.1)
+            
+            # Toggle CS pin low (active)
+            gcmd.respond_info("Setting CS pin LOW (active)")
+            self.spi.get_command_send().send([self.spi.oid, self.spi.cmd_queue.CHIP_SELECT, 0])
+            time.sleep(0.1)
+            
+            # Return to inactive state
+            gcmd.respond_info("Returning CS pin to HIGH (inactive)")
+            self.spi.get_command_send().send([self.spi.oid, self.spi.cmd_queue.CHIP_SELECT, 1])
+        except Exception as e:
+            gcmd.respond_info("Error controlling CS pin: %s" % str(e))
+        
+        # Test 4: Try a simple SPI transfer
+        gcmd.respond_info("Test 4: Performing simple SPI transfer...")
+        try:
+            # Send a NOOP command and read response
+            self.spi.get_command_send().send([self.spi.oid, self.spi.cmd_queue.CHIP_SELECT, 0])
+            resp = bytearray(4)
+            self.spi.spi_transfer([NOOP_CMD], resp)
+            gcmd.respond_info("SPI transfer response: %s" % hexify(resp))
+            self.spi.get_command_send().send([self.spi.oid, self.spi.cmd_queue.CHIP_SELECT, 1])
+        except Exception as e:
+            gcmd.respond_info("Error in SPI transfer: %s" % str(e))
+        
+        gcmd.respond_info("ADS1220 hardware test complete")
+
+    def register_test_command(self):
+        """Register the ADS1220_TEST G-code command.
+        This can be called directly or from a parent module like load_cell_probe."""
+        gcode = self.printer.lookup_object('gcode')
+        cmd_name = 'ADS1220_TEST'
+        if self.name != 'ads1220':
+            # If this is not a direct ADS1220 instance, use a more specific name
+            cmd_name = 'ADS1220_TEST_' + self.name
+        gcode.register_command(cmd_name, self.cmd_ADS1220_TEST,
+                              desc="Test ADS1220 SPI communication for " + self.name)
+        logging.info("ADS1220 %s: Registered test command '%s'", 
+                     self.name, cmd_name)
+
+    def test_pins(self):
+        """Test SPI pins and log the results"""
+        logging.info("ADS1220 %s: Starting pin test...", self.name)
+        
+        # Log the pin configuration
+        mcu_name = self.mcu.get_name()
+        logging.info("ADS1220 %s: MCU: %s", self.name, mcu_name)
+        
+        # Get SPI pin information if available
+        try:
+            # Try to extract pin information from the SPI object
+            spi_pins = self.spi.get_pin_info() if hasattr(self.spi, 'get_pin_info') else None
+            if spi_pins:
+                logging.info("ADS1220 %s: SPI pins - CS: %s, SCLK: %s, MOSI: %s, MISO: %s", 
+                             self.name, spi_pins.get('cs', 'unknown'), 
+                             spi_pins.get('sclk', 'unknown'),
+                             spi_pins.get('mosi', 'unknown'),
+                             spi_pins.get('miso', 'unknown'))
+            else:
+                # For software SPI, try to extract from config
+                logging.info("ADS1220 %s: Using software SPI - pin info not directly available", self.name)
+        except Exception as e:
+            logging.info("ADS1220 %s: Error getting SPI pin info: %s", self.name, str(e))
+        
+        # Log data ready pin
+        logging.info("ADS1220 %s: Data ready pin: %s", self.name, self.data_ready_pin)
+        
+        # Test CS pin toggling
+        logging.info("ADS1220 %s: Testing CS pin control...", self.name)
+        try:
+            # Toggle CS pin high (inactive)
+            self.spi.get_command_send().send([self.spi.oid, self.spi.cmd_queue.CHIP_SELECT, 1])
+            time.sleep(0.1)
+            
+            # Toggle CS pin low (active)
+            self.spi.get_command_send().send([self.spi.oid, self.spi.cmd_queue.CHIP_SELECT, 0])
+            time.sleep(0.1)
+            
+            # Return to inactive state
+            self.spi.get_command_send().send([self.spi.oid, self.spi.cmd_queue.CHIP_SELECT, 1])
+            logging.info("ADS1220 %s: CS pin toggling successful", self.name)
+        except Exception as e:
+            logging.error("ADS1220 %s: Error controlling CS pin: %s", self.name, str(e))
+        
+        # Test basic SPI communication
+        logging.info("ADS1220 %s: Testing basic SPI communication...", self.name)
+        try:
+            # Send a NOOP command and read response
+            self.spi.get_command_send().send([self.spi.oid, self.spi.cmd_queue.CHIP_SELECT, 0])
+            resp = bytearray(4)
+            self.spi.spi_transfer([NOOP_CMD], resp)
+            self.spi.get_command_send().send([self.spi.oid, self.spi.cmd_queue.CHIP_SELECT, 1])
+            logging.info("ADS1220 %s: SPI transfer response: %s", self.name, hexify(resp))
+            
+            # Check for common error patterns
+            if all(b == 0xff for b in resp):
+                logging.warning("ADS1220 %s: All 0xFF response may indicate MISO pin disconnected or SPI failure", self.name)
+            elif all(b == 0x00 for b in resp):
+                logging.warning("ADS1220 %s: All 0x00 response may indicate MISO pin grounded or CS issue", self.name)
+        except Exception as e:
+            logging.error("ADS1220 %s: Error in SPI transfer: %s", self.name, str(e))
+        
+        logging.info("ADS1220 %s: Pin test complete", self.name)
 
 
 ADS1220_SENSOR_TYPE = {"ads1220": ADS1220}
