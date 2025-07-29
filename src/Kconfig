@@ -132,6 +132,14 @@ config WANT_SENSOR_ANGLE
     bool
     depends on HAVE_GPIO_SPI
     default y
+config WANT_LOAD_CELL_PROBE
+    bool
+    depends on WANT_HX71X || WANT_ADS1220
+    default y
+config NEED_SOS_FILTER
+    bool
+    depends on WANT_LOAD_CELL_PROBE
+    default y
 config WANT_SOFTWARE_I2C
     bool
     depends on HAVE_GPIO && HAVE_GPIO_I2C
