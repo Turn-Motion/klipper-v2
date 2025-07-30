@@ -313,24 +313,24 @@ class CartesianXY3Z:
                         gcode.respond_info(f"Completed individual precision homing for {axis_name}-axis")
         
         # Perform post-homing Z lift if Z was homed (only lift Z axis by 62.8mm)
-        if 2 in z_axes_to_home and self.post_homing_z_lift > 0.:  # Only if Z axis was homed
-            toolhead = homing_state.toolhead
-            current_pos = toolhead.get_position()
-            new_pos = list(current_pos)
+        #if 2 in z_axes_to_home:  # Only if Z axis was homed
+         #   toolhead = homing_state.toolhead
+          #  current_pos = toolhead.get_position()
+           # new_pos = list(current_pos)
             
             # Apply the lift only to Z axis (index 2) - 62.8mm away from endstop
-            new_pos[2] += self.post_homing_z_lift
+            #new_pos[2] += self.post_homing_z_lift
             
-            gcode.respond_info(f"DEBUG: Moving Z axis away from endstop by {self.post_homing_z_lift}mm")
-            try:
-                toolhead.move(new_pos, self.max_z_velocity)
-                toolhead.wait_moves()
-                gcode.respond_info("DEBUG: Post-homing Z lift completed")
-                new_pos[2] = 445.0  # Set Z to 445mm
-                toolhead.set_position(new_pos)
-                gcode.respond_info("DEBUG: Setting kinematic position Z=445")
-            except Exception as e:
-                gcode.respond_info(f"ERROR: Post-homing Z movement failed: {str(e)}")
+            #gcode.respond_info(f"DEBUG: Moving Z axis away from endstop by {self.post_homing_z_lift}mm")
+            #try:
+            #    toolhead.move(new_pos, self.max_z_velocity)
+                #toolhead.wait_moves()
+                #gcode.respond_info("DEBUG: Post-homing Z lift completed")
+                #new_pos[2] = 445.0  # Set Z to 445mm
+                #toolhead.set_position(new_pos)
+                #gcode.respond_info("DEBUG: Setting kinematic position Z=445")
+            #except Exception as e:
+            #    gcode.respond_info(f"ERROR: Post-homing Z movement failed: {str(e)}")
         
         # Home X axis
         if 0 in axes:
