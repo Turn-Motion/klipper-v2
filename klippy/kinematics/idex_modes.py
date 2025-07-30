@@ -51,15 +51,6 @@ class DualCarriages:
         toolhead = self.printer.lookup_object('toolhead')
         toolhead.flush_step_generation()
         pos = toolhead.get_position()
-       
-        gcode.respond_info(f"DEBUG: Before toggle to T{index}, pos = {[float('%.3f' % p) for p in pos]}")
-        
-        # ##################### BEGIN A AXIS PRESERVATION FIX #####################
-        # Store the current A axis position before any changes
-        a_axis_position = pos[3]
-        gcode.respond_info(f"DEBUG: Preserving A axis position: {a_axis_position}")
-        # ##################### END A AXIS PRESERVATION FIX #####################
-        
         kin = toolhead.get_kinematics()
         for i, dc in enumerate(self.dc):
             dc_rail = dc.get_rail()
@@ -70,26 +61,6 @@ class DualCarriages:
         if target_dc.mode != PRIMARY:
             newpos = pos[:self.axis] + [target_dc.get_axis_position(pos)] \
                         + pos[self.axis+1:]
-            new_x_position = target_dc.get_axis_position(pos)
-            
-            newpos = list(pos)  # Convert tuple to list for modification
-            
-            # Original code
-            # newpos[self.axis] = new_x_position
-            
-            # ##################### BEGIN A AXIS PRESERVATION FIX #####################
-            # Update the dual carriage axis position (X)
-            newpos[self.axis] = new_x_position
-            
-            # Ensure A axis position is preserved
-            newpos[3] = a_axis_position
-            # ##################### END A AXIS PRESERVATION FIX #####################
-            
-            gcode.respond_info(f"DEBUG: Original pos = {[float('%.3f' % p) for p in pos]}")
-            gcode.respond_info(f"DEBUG: Only updating axis {self.axis} to {new_x_position}")
-            gcode.respond_info(f"DEBUG: New position = {[float('%.3f' % p) for p in newpos]}")
-            
-            gcode.respond_info(f"DEBUG: Activating T{index} with newpos")
             target_dc.activate(PRIMARY, newpos, old_position=pos)
             toolhead.set_position(newpos)
         kin.update_limits(self.axis, target_dc.get_rail().get_range())
@@ -303,48 +274,9 @@ class DualCarriagesRail:
         return position[self.axis] * self.scale + self.offset
     def apply_transform(self):
         ffi_main, ffi_lib = chelper.get_ffi()
-        gcode = self.rail.steppers[0].mcu.get_printer().lookup_object('gcode')
-        
-        # ##################### BEGIN AXIS MOVEMENT FIX #####################
-        # Original code
-        # for sk in self.dc_stepper_kinematics:
-        #     ffi_lib.dual_carriage_set_transform(
-        #             sk, self.ENC_AXES[self.axis], self.scale, self.offset)
-        
-        # Apply transforms for all axes
         for sk in self.dc_stepper_kinematics:
-            # Set transform for the dual carriage axis (X)
-            axis_name = self.ENC_AXES[self.axis]
-            gcode.respond_info(f"DEBUG: Setting transform for {axis_name.decode()}-axis: scale={self.scale}, offset={self.offset}")
-            ffi_lib.dual_carriage_set_transform(sk, axis_name, self.scale, self.offset)
-            
-            # Set explicit identity transform for A axis (index 3)
-            gcode.respond_info(f"DEBUG: Setting transform for a-axis: scale=1.0, offset=0.0")
-            ffi_lib.dual_carriage_set_transform(sk, b'a', 1.0, 0.0)
-            
-            # Set explicit identity transform for E axis (index 5)
-            gcode.respond_info(f"DEBUG: Setting transform for e-axis: scale=1.0, offset=0.0")
-            ffi_lib.dual_carriage_set_transform(sk, b'e', 1.0, 0.0)
-            
-            # Debug the current active state
-            gcode.respond_info(f"DEBUG: Current mode={self.mode}, active={self.is_active()}, rail={id(self.rail)}")
-            
-            # Debug the stepper kinematics
-            try:
-                for i, stepper in enumerate(self.rail.get_steppers()):
-                    gcode.respond_info(f"DEBUG: Stepper {i} name={stepper.get_name()}, sk={id(stepper.get_stepper_kinematics())}")
-            except Exception as e:
-                gcode.respond_info(f"DEBUG: Error getting stepper info: {str(e)}")
-            
-            
-            # Set identity transforms for A axis (index 3) and E axis (index 5)
-            # This ensures both axes move correctly regardless of which extruder is active
-            gcode.respond_info(f"DEBUG: Setting transform for a-axis: scale=1.0, offset=0.0")
-            ffi_lib.dual_carriage_set_transform(sk, b'a', 1.0, 0.0)  # A axis
-            
-            gcode.respond_info(f"DEBUG: Setting transform for e-axis: scale=1.0, offset=0.0")
-            ffi_lib.dual_carriage_set_transform(sk, b'e', 1.0, 0.0)  # E axis
-        # ##################### END AXIS MOVEMENT FIX #####################
+            ffi_lib.dual_carriage_set_transform(
+                    sk, self.ENC_AXES[self.axis], self.scale, self.offset)
     def activate(self, mode, position, old_position=None):
         old_axis_position = self.get_axis_position(old_position or position)
         self.scale = -1. if mode == MIRROR else 1.
