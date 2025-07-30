@@ -261,13 +261,8 @@ class DualCarriagesRail:
     def apply_transform(self):
         ffi_main, ffi_lib = chelper.get_ffi()
         for sk in self.dc_stepper_kinematics:
-                  sk, self.ENC_AXES[self.axis], self.scale, self.offset)
-)
-            ffi_lib.dual_carriage_set_transform(sk, b'a', 1.0, 0.0)  # A axis
-            
-            gcode.respond_info(f"DEBUG: Setting transform for e-axis: scale=1.0, offset=0.0")
-            ffi_lib.dual_carriage_set_transform(sk, b'e', 1.0, 0.0)  # E axis
-        # ##################### END AXIS MOVEMENT FIX #####################
+            ffi_lib.dual_carriage_set_transform(
+                    sk, self.ENC_AXES[self.axis], self.scale, self.offset)
     def activate(self, mode, position, old_position=None):
         old_axis_position = self.get_axis_position(old_position or position)
         self.scale = -1. if mode == MIRROR else 1.
