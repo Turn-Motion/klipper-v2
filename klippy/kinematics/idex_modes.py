@@ -66,17 +66,31 @@ class DualCarriages:
         kin.update_limits(self.axis, target_dc.get_rail().get_range())
     def home(self, homing_state):
         kin = self.printer.lookup_object('toolhead').get_kinematics()
+        gcode = self.printer.lookup_object('gcode')
+        
+        # Remember which carriage was active before homing
+        active_carriage_before = 0 if self.dc[0].is_active() else 1
+        gcode.respond_info(f"DEBUG: Dual carriage homing - active carriage before homing: T{active_carriage_before}")
+        
         enumerated_dcs = list(enumerate(self.dc))
         if (self.get_dc_order(0, 1) > 0) != \
                 self.dc[0].get_rail().get_homing_info().positive_dir:
             # The second carriage must home first, because the carriages home in
             # the same direction and the first carriage homes on the second one
             enumerated_dcs.reverse()
+            gcode.respond_info("DEBUG: Dual carriage homing - carriages reversed for homing")
+        
+        gcode.respond_info(f"DEBUG: Dual carriage homing - will home carriages in order: {[i for i, _ in enumerated_dcs]}")
+        
         for i, dc_rail in enumerated_dcs:
+            gcode.respond_info(f"DEBUG: Dual carriage homing - activating and homing carriage T{i}")
             self.toggle_active_dc_rail(i)
             kin.home_axis(homing_state, self.axis, dc_rail.get_rail())
-        # Restore the original rails ordering
-        self.toggle_active_dc_rail(0)
+            gcode.respond_info(f"DEBUG: Dual carriage homing - completed homing carriage T{i}")
+        
+        # Restore the originally active carriage instead of always defaulting to 0
+        gcode.respond_info(f"DEBUG: Dual carriage homing - restoring active carriage to T{active_carriage_before}")
+        self.toggle_active_dc_rail(active_carriage_before)
     def get_status(self, eventtime=None):
         return {('carriage_%d' % (i,)) : dc.mode
                 for (i, dc) in enumerate(self.dc)}

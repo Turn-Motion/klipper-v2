@@ -61,7 +61,7 @@ class CartesianXY3Z:
         self.max_b_accel = config.getfloat('max_b_accel', self.max_z_accel,
                                            above=0., maxval=max_accel)
         # Get the post-homing Z movement distance (default 62.8mm)
-        self.post_homing_z_lift = config.getfloat('post_homing_z_lift', 62.8, above=0.)
+        self.post_homing_z_lift = config.getfloat('post_homing_z_lift', 60, above=0.)
         self.limits = [(1.0, -1.0)] * 5  # For x, y, z, a, b axes
 
     def get_steppers(self):

@@ -47,6 +47,10 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### IDEX Dual Carriage Homing Improvements (30.07.2025)
+Added detailed debug logging for dual carriage homing to diagnose and fix issues with T0/T1 extruder homing in CartesianXY3Z kinematics.
+Post Homing Z lift is now 60.
+
 ### CartesianXY3Z Coordinated Z Homing Enhancement (29.07.2025)
 Implemented two-phase coordinated Z homing for Z/A/B axes with fast initial move, retraction, and individual precision homing, plus configurable post-homing Z lift.
 
