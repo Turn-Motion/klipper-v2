@@ -47,7 +47,13 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
-### IDEX Dual Carriage Position Preservation Fix (30.07.2025)
+### Post Homing Z Cancel (30.07.2025)
+We '#' the post homing z lift so this will be done in the script.
+
+### Extruder Movement Fix (30.07.2025)
+Fixed an issue where extruder-only moves (e.g., G1 E50) would update position tracking but not physically move the extruder motor. The problem was caused by an early-return condition in the extruder's `check_move` function that incorrectly filtered out valid extruder movements when their axis ratio was very small. Force moves were unaffected as they bypass this check.
+
+### IDEX Dual Carriage Position Preservation Fix (30.07.2025) -- Not resolved
 Fixed a critical issue where toggling between T0 and T1 extruders in dual carriage setups would inadvertently reset the A axis position to zero. The position array handling in `toggle_active_dc_rail` was improved to properly preserve all axis positions (XYZABE) when switching carriages, ensuring that extruder-only moves maintain correct positions for all axes.
 
 ### IDEX Dual Carriage Homing Improvements (30.07.2025)
