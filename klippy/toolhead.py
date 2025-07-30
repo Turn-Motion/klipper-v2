@@ -26,34 +26,22 @@ class Move:
         # Note: In this system, indices 0-4 are XYZAB and index 5 is E (extruder)
         self.axes_d = axes_d = [end_pos[i] - start_pos[i] for i in range(6)]
         # ##################### BEGIN EXTRUDER-ONLY MOVE DETECTION #####################
-        # Check if this is an extruder-only move (no movement in XYZAB axes)
+        # Check if this is an extruder-only move
+        # An extruder-only move has no movement in any of the XYZAB axes
         xyz_move = any(abs(axes_d[i]) >= .000000001 for i in range(5))
         if not xyz_move:
-            # Extruder-only move detected
-            gcode = toolhead.printer.lookup_object('gcode')
-            
-            # Check if dual carriage module exists and which carriage is active
+            # Extrude only move - ensure no movement in physical axes
             try:
-                dc_module = toolhead.printer.lookup_object('dual_carriage', None)
-                if dc_module is not None:
-                    active_rail = 0 if dc_module.dc[0].is_active() else 1
-                    gcode.respond_info(f"DEBUG: Extruder-only move with T{active_rail} active")
-                    gcode.respond_info(f"Extruder-only move detected: E={axes_d[5]:.6f} with T{active_rail} active")
+                # Log extruder-only move details for debugging
+                logging.debug("Extruder-only move detected: E=%.6f" % axes_d[5])
+                logging.debug("  Original positions: X=%.3f Y=%.3f Z=%.3f A=%.3f B=%.3f E=%.3f" % 
+                             (start_pos[0], start_pos[1], start_pos[2], start_pos[3], start_pos[4], start_pos[5]))
             except Exception as e:
-                gcode.respond_info(f"No dual carriage module found or error: {str(e)}")
-            
-            # Always ensure extruder moves only affect index 5 (extruder axis)
-            # regardless of which carriage is active
-            gcode.respond_info(f"Original positions: X={start_pos[0]:.3f} Y={start_pos[1]:.3f} Z={start_pos[2]:.3f} "
-                         f"A={start_pos[3]:.3f} B={start_pos[4]:.3f} E={start_pos[5]:.3f}")
-            
-            # CRITICAL FIX: Ensure extruder moves are always mapped to index 5 (extruder axis)
-            # This ensures that even when T1 is active, extruder commands still move the E axis (index 5)
-            # and not the A axis (index 3) as was happening before
+                logging.exception("Error in extruder-only move debug logging: %s" % str(e))
+                
             self.end_pos = (start_pos[0], start_pos[1], start_pos[2],
                            start_pos[3], start_pos[4], end_pos[5])
             axes_d[0] = axes_d[1] = axes_d[2] = axes_d[3] = axes_d[4] = 0.
-            self.axes_d = axes_d
             self.move_d = move_d = abs(axes_d[5])
             inv_move_d = 0.
             if move_d:
@@ -62,8 +50,12 @@ class Move:
             velocity = speed
             self.is_kinematic_move = False
             
-            gcode.respond_info(f"Extruder-only move configured: is_kinematic_move={self.is_kinematic_move} "
-                         f"move_d={self.move_d:.6f}")
+            try:
+                # Log the final move configuration
+                logging.debug("  Extruder-only move configured: is_kinematic_move=%s move_d=%.6f" % 
+                             (self.is_kinematic_move, self.move_d))
+            except Exception as e:
+                logging.exception("Error in extruder-only move final debug logging: %s" % str(e))
         # ##################### END EXTRUDER-ONLY MOVE DETECTION #####################
         else:
             # Normal move with physical axes movement
@@ -520,24 +512,15 @@ class ToolHead:
         if last_move is not None:
             last_move.limit_next_junction_speed(speed)
     def move(self, newpos, speed):
-        # Create a new move object
         move = Move(self, self.commanded_pos, newpos, speed)
         if not move.move_d:
             return
-            
-        # Check the move with kinematics if it's a kinematic move
         if move.is_kinematic_move:
             self.kin.check_move(move)
-            
-        # If there's extruder movement, check with the extruder
         if move.axes_d[5]:
             self.extruder.check_move(move)
-            
-        # Update commanded position and add move to lookahead queue
         self.commanded_pos[:] = move.end_pos
         self.lookahead.add_move(move)
-        
-        # Check if we need to pause
         if self.print_time > self.need_check_pause:
             self._check_pause()
     def manual_move(self, coord, speed):

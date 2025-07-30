@@ -61,7 +61,7 @@ class CartesianXY3Z:
         self.max_b_accel = config.getfloat('max_b_accel', self.max_z_accel,
                                            above=0., maxval=max_accel)
         # Get the post-homing Z movement distance (default 62.8mm)
-        self.post_homing_z_lift = config.getfloat('post_homing_z_lift', -60)
+        self.post_homing_z_lift = config.getfloat('post_homing_z_lift', 60, above=0.)
         self.limits = [(1.0, -1.0)] * 5  # For x, y, z, a, b axes
 
     def get_steppers(self):
@@ -193,7 +193,7 @@ class CartesianXY3Z:
             
             # Calculate force move positions for all Z axes
             current_pos = toolhead.get_position()
-            force_move_distance = 445.0  # Large distance to ensure endstop contact
+            force_move_distance = 600.0  # Large distance to ensure endstop contact
             
             # Create individual homing moves for each axis to allow independent stopping
             axis_states = {}  # Track which axes are still moving
@@ -326,9 +326,6 @@ class CartesianXY3Z:
                 toolhead.move(new_pos, self.max_z_velocity)
                 toolhead.wait_moves()
                 gcode.respond_info("DEBUG: Post-homing Z lift completed")
-                new_pos[2] = 445.0  # Set Z to 445mm
-                toolhead.set_position(new_pos)
-                gcode.respond_info("DEBUG: Setting kinematic position Z=445")
             except Exception as e:
                 gcode.respond_info(f"ERROR: Post-homing Z movement failed: {str(e)}")
         
@@ -381,8 +378,6 @@ class CartesianXY3Z:
             safety_module = self.printer.lookup_object('cartesianxy3z_safety')
             # The safety module will raise an exception if the move is unsafe
             safety_module.check_move(move)
-            gcode.respond_info("CartesianXY3Z Safety: Move is safe")
-
         except self.printer.config_error:
             # Safety module not loaded, continue without safety checks
             gcode = self.printer.lookup_object('gcode')

@@ -49,49 +49,26 @@ class DualCarriages:
         return None
     def toggle_active_dc_rail(self, index):
         toolhead = self.printer.lookup_object('toolhead')
-        gcode = self.printer.lookup_object('gcode')
-        
-        gcode.respond_info(f"DEBUG: Starting toggle to T{index}")
-        
         toolhead.flush_step_generation()
         pos = toolhead.get_position()
-        
-        gcode.respond_info(f"DEBUG: Before toggle to T{index}, pos = {[float('%.3f' % p) for p in pos]}")
-        
         kin = toolhead.get_kinematics()
         for i, dc in enumerate(self.dc):
             dc_rail = dc.get_rail()
             if i != index:
                 if dc.is_active():
-                    gcode.respond_info(f"DEBUG: Inactivating T{i}")
                     dc.inactivate(pos)
-        
         target_dc = self.dc[index]
         if target_dc.mode != PRIMARY:
-            new_x_position = target_dc.get_axis_position(pos)
-            
-            newpos = list(pos)  # Convert tuple to list for modification
-            
-            newpos[self.axis] = new_x_position
-            
-            gcode.respond_info(f"DEBUG: Original pos = {[float('%.3f' % p) for p in pos]}")
-            gcode.respond_info(f"DEBUG: Only updating axis {self.axis} to {new_x_position}")
-            gcode.respond_info(f"DEBUG: New position = {[float('%.3f' % p) for p in newpos]}")
-            
-            gcode.respond_info(f"DEBUG: Activating T{index} with newpos")
+            newpos = pos[:self.axis] + [target_dc.get_axis_position(pos)] \
+                        + pos[self.axis+1:]
             target_dc.activate(PRIMARY, newpos, old_position=pos)
-            
-            gcode.respond_info(f"DEBUG: Setting toolhead position to newpos")
             toolhead.set_position(newpos)
-        
-        final_pos = toolhead.get_position()
-        gcode.respond_info(f"DEBUG: After toggle, final position = {[float('%.3f' % p) for p in final_pos]}")
-        
         kin.update_limits(self.axis, target_dc.get_rail().get_range())
     def home(self, homing_state):
         kin = self.printer.lookup_object('toolhead').get_kinematics()
         gcode = self.printer.lookup_object('gcode')
         
+        # Remember which carriage was active before homing
         active_carriage_before = 0 if self.dc[0].is_active() else 1
         gcode.respond_info(f"DEBUG: Dual carriage homing - active carriage before homing: T{active_carriage_before}")
         
@@ -108,17 +85,7 @@ class DualCarriages:
         for i, dc_rail in enumerated_dcs:
             gcode.respond_info(f"DEBUG: Dual carriage homing - activating and homing carriage T{i}")
             self.toggle_active_dc_rail(i)
-            
-            # Get the rail for this carriage
-            rail = dc_rail.get_rail()
-            
-            # Get endstop information for debugging
-            endstop_name = rail.get_name()
-            endstop_pin = rail.get_endstops()[0][0] if rail.get_endstops() else "unknown"
-            gcode.respond_info(f"DEBUG: T{i} carriage using endstop '{endstop_name}' with pin {endstop_pin}")
-            
-            # Home this specific carriage using its rail (which should have its own endstop)
-            kin.home_axis(homing_state, self.axis, rail)
+            kin.home_axis(homing_state, self.axis, dc_rail.get_rail())
             gcode.respond_info(f"DEBUG: Dual carriage homing - completed homing carriage T{i}")
         
         # Restore the originally active carriage instead of always defaulting to 0
