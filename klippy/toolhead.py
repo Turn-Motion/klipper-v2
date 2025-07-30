@@ -47,9 +47,7 @@ class Move:
             gcode.respond_info(f"Original positions: X={start_pos[0]:.3f} Y={start_pos[1]:.3f} Z={start_pos[2]:.3f} "
                          f"A={start_pos[3]:.3f} B={start_pos[4]:.3f} E={start_pos[5]:.3f}")
             
-            # CRITICAL FIX: Ensure extruder moves are always mapped to index 5 (extruder axis)
-            # This ensures that even when T1 is active, extruder commands still move the E axis (index 5)
-            # and not the A axis (index 3) as was happening before
+            # Keep all axes at their original positions except for the extruder (index 5)
             self.end_pos = (start_pos[0], start_pos[1], start_pos[2],
                            start_pos[3], start_pos[4], end_pos[5])
             axes_d[0] = axes_d[1] = axes_d[2] = axes_d[3] = axes_d[4] = 0.
