@@ -228,19 +228,19 @@ class PrinterExtruder:
             move.limit_speed(self.max_e_velocity * inv_extrude_r,
                              self.max_e_accel * inv_extrude_r)
             gcode.respond_info("EXTRUDER DEBUG: Move speed limits applied successfully")
-        elif axis_r > self.max_extrude_ratio:
-            gcode.respond_info(f"EXTRUDER DEBUG: Checking extrusion ratio: {axis_r} vs max={self.max_extrude_ratio}")
-            if move.axes_d[5] <= self.nozzle_diameter * self.max_extrude_ratio:
-                # Permit extrusion if amount extruded is tiny
-                gcode.respond_info("EXTRUDER DEBUG: Tiny extrusion permitted despite high ratio")
-                return
-            area = axis_r * self.filament_area
-            logging.debug("Overextrude: %s vs %s (area=%.3f dist=%.3f)",
-                          axis_r, self.max_extrude_ratio, area, move.move_d)
-            raise self.printer.command_error(
-                "Move exceeds maximum extrusion (%.3fmm^2 vs %.3fmm^2)\n"
-                "See the 'max_extrude_cross_section' config option for details"
-                % (area, self.max_extrude_ratio * self.filament_area))
+        # elif axis_r > self.max_extrude_ratio:
+        #     gcode.respond_info(f"EXTRUDER DEBUG: Checking extrusion ratio: {axis_r} vs max={self.max_extrude_ratio}")
+        #     if move.axes_d[5] <= self.nozzle_diameter * self.max_extrude_ratio:
+        #         # Permit extrusion if amount extruded is tiny
+        #         gcode.respond_info("EXTRUDER DEBUG: Tiny extrusion permitted despite high ratio")
+        #         return
+        #     area = axis_r * self.filament_area
+        #     logging.debug("Overextrude: %s vs %s (area=%.3f dist=%.3f)",
+        #                   axis_r, self.max_extrude_ratio, area, move.move_d)
+        #     raise self.printer.command_error(
+        #         "Move exceeds maximum extrusion (%.3fmm^2 vs %.3fmm^2)\n"
+        #         "See the 'max_extrude_cross_section' config option for details"
+        #         % (area, self.max_extrude_ratio * self.filament_area))
     def calc_junction(self, prev_move, move):
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
         gcode = self.printer.lookup_object('gcode')
