@@ -126,16 +126,10 @@ class GCodeMove:
         
         gcode_obj_log_1_corrected = self.printer.lookup_object('gcode')
         gcode_obj_log_1_corrected.respond_info(
-            f"GCODEMOVE DEBUG: START G1 processing CMD='{gcmd.get_command()}' PARAMS='{', '.join(param_str_list_log_corrected)}' "
+            f"GCodeMove Debug: CMD='{gcmd.get_command()}' RAW_PARAMS_DICT='{params}' "
+            f"PARSED_FOR_LOG='{', '.join(param_str_list_log_corrected)}' "
             f"LAST_POS_BEFORE_UPDATE={['%.4f' % p for p in self.last_position]}"
         )
-        
-        # Extra debug for E commands
-        if 'E' in params:
-            gcode_obj_log_1_corrected.respond_info(
-                f"GCODEMOVE DEBUG: E MOVE DETECTED: E={params['E']} extrude_factor={self.extrude_factor} "
-                f"absolute_coord={self.absolute_coord} absolute_extrude={self.absolute_extrude}"
-            )
         # --- End of first corrected logging part ---
         try:
             for pos, axis in enumerate('XYZAB'):  # Handle XYZAB axes

@@ -101,6 +101,20 @@ class Move:
         self.max_start_v2 = max_start_v2
         self.max_smoothed_v2 = min(
             max_start_v2, prev_move.max_smoothed_v2 + prev_move.smooth_delta_v2)
+        
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        # Only print debug for moves that have extruder movement
+        if abs(self.axes_d[5]) > 0.00001:
+            gcode = self.toolhead.printer.lookup_object('gcode')
+            gcode.respond_info(f"TOOLHEAD JUNCTION DEBUG: Move has E={self.axes_d[5]}, extruder_v2={extruder_v2}, final max_start_v2={self.max_start_v2}")
+            
+            # Check if extruder is limiting the junction velocity
+            if max_start_v2 == extruder_v2:
+                gcode.respond_info("TOOLHEAD JUNCTION DEBUG: Extruder is limiting the junction velocity!")
+            
+            # Show key values that went into the calculation
+            gcode.respond_info(f"TOOLHEAD JUNCTION DEBUG: self.max_cruise_v2={self.max_cruise_v2}, prev max_cruise_v2={prev_move.max_cruise_v2}")
+        # #### END DEBUG CODE ####
     def set_junction(self, start_v2, cruise_v2, end_v2):
         # Determine accel, cruise, and decel portions of the move distance
         half_inv_accel = .5 / self.accel
@@ -188,13 +202,29 @@ class LookAheadQueue:
         # Remove processed moves from the queue
         del queue[:flush_count]
     def add_move(self, move):
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        # Debug extruder movement
+        gcode = self.toolhead.printer.lookup_object('gcode')
+        gcode.respond_info(f"TOOLHEAD MOVE DEBUG: Adding move with axes_d={move.axes_d}, axes_r={move.axes_r}")
+        if abs(move.axes_d[5]) > 0.00001:  # Check if this is an extruder move
+            gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Extruder move detected! E distance={move.axes_d[5]}, E ratio={move.axes_r[5]}")
+            gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move details - start_pos={move.start_pos}, end_pos={move.end_pos}")
+            gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move params - accel={move.accel}, cruise_v2={move.max_cruise_v2}")
+        # #### END DEBUG CODE ####
+
         self.queue.append(move)
         if len(self.queue) == 1:
+            # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+            gcode.respond_info(f"TOOLHEAD DEBUG: First move in queue, no junction to calculate. E move present: {abs(move.axes_d[5]) > 0.00001}")
+            # #### END DEBUG CODE ####
             return
         move.calc_junction(self.queue[-2])
         self.junction_flush -= move.min_move_t
         if self.junction_flush <= 0.:
             # Enough moves have been queued to reach the target flush time.
+            # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+            gcode.respond_info(f"TOOLHEAD DEBUG: Flushing move queue with {len(self.queue)} moves, E move present: {abs(move.axes_d[5]) > 0.00001}")
+            # #### END DEBUG CODE ####
             self.flush(lazy=True)
 
 BUFFER_TIME_LOW = 1.0
