@@ -242,9 +242,17 @@ class PrinterExtruder:
                 "See the 'max_extrude_cross_section' config option for details"
                 % (area, self.max_extrude_ratio * self.filament_area))
     def calc_junction(self, prev_move, move):
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        gcode = self.printer.lookup_object('gcode')
         diff_r = move.axes_r[5] - prev_move.axes_r[5]
+        gcode.respond_info(f"EXTRUDER JUNCTION DEBUG: prev_move.axes_r[5]={prev_move.axes_r[5]}, move.axes_r[5]={move.axes_r[5]}, diff_r={diff_r}")
+        
         if diff_r:
-            return (self.instant_corner_v / abs(diff_r))**2
+            junction_v2 = (self.instant_corner_v / abs(diff_r))**2
+            gcode.respond_info(f"EXTRUDER JUNCTION DEBUG: diff_r is non-zero, junction_v2={junction_v2}, instant_corner_v={self.instant_corner_v}")
+            return junction_v2
+        gcode.respond_info(f"EXTRUDER JUNCTION DEBUG: diff_r is zero, returning max_cruise_v2={move.max_cruise_v2}")
+        # #### END DEBUG CODE ####
         return move.max_cruise_v2
     def move(self, print_time, move):
         axis_r = move.axes_r[5]
