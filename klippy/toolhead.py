@@ -372,6 +372,11 @@ class ToolHead:
             self.printer.send_event("toolhead:sync_print_time",
                                     curtime, est_print_time, self.print_time)
     def _process_moves(self, moves):
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        gcode = self.printer.lookup_object('gcode')
+        gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Processing {len(moves)} moves")
+        # #### END DEBUG CODE ####
+        
         # Resync print_time if necessary
         if self.special_queuing_state:
             if self.special_queuing_state != "Drip":
@@ -381,8 +386,23 @@ class ToolHead:
             self._calc_print_time()
         # Queue moves into trapezoid motion queue (trapq)
         next_move_time = self.print_time
+        
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Starting at print_time={next_move_time:.6f}")
+        # #### END DEBUG CODE ####
+        
         for move in moves:
+            # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+            has_extruder = bool(move.axes_d[5])
+            gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Processing move - kinematic={move.is_kinematic_move}, extruder={has_extruder}, E_distance={move.axes_d[5]:.6f}")
+            # #### END DEBUG CODE ####
+            
             if move.is_kinematic_move:
+                # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Sending kinematic move to trapq_append at time={next_move_time:.6f}")
+                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Move timing - accel_t={move.accel_t:.6f}, cruise_t={move.cruise_t:.6f}, decel_t={move.decel_t:.6f}")
+                # #### END DEBUG CODE ####
+                
                 self.trapq_append(
                     self.trapq, next_move_time,
                     move.accel_t, move.cruise_t, move.decel_t,
@@ -392,7 +412,17 @@ class ToolHead:
                     move.axes_r[3], move.axes_r[4],
                     move.start_v, move.cruise_v, move.accel)
             if move.axes_d[5]:
+                # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE DETECTED! *** Calling extruder.move() at time={next_move_time:.6f}")
+                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Extruder move details - E_distance={move.axes_d[5]:.6f}, start_v={move.start_v:.6f}, cruise_v={move.cruise_v:.6f}")
+                # #### END DEBUG CODE ####
+                
                 self.extruder.move(next_move_time, move)
+                
+                # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE COMPLETED *** extruder.move() returned successfully")
+                # #### END DEBUG CODE ####
+                
             next_move_time = (next_move_time + move.accel_t
                               + move.cruise_t + move.decel_t)
             for cb in move.timing_callbacks:
