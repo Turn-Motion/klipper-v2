@@ -298,10 +298,9 @@ class PrinterExtruder:
         
         self.trapq_append(self.trapq, print_time,
                           move.accel_t, move.cruise_t, move.decel_t,
-                          move.start_pos[5], 0., 0.,        # og:start_x (extruder_pos), start_y (0), start_z (0)
-                          1., can_pressure_advance, 0.,     # OG:axes_r_x (1 for extruder), axes_r_y (pa_flag), axes_r_z (0)
-                          start_v, cruise_v, accel,         # OG:scaled start_v, cruise_v, accel for extruder
-                          move.end_pos[5], 0., 0., end_v_scaled) # Added:end_x (target_extruder_pos), end_y (0), end_z (0), scaled_end_v
+                          move.start_pos[5], 0., 0., 0., 0.,    # start_x (extruder_pos), start_y (0), start_z (0), start_a (0), start_b (0)
+                          1., can_pressure_advance, 0., 0., 0., # axes_r_x (1 for extruder), axes_r_y (pa_flag), axes_r_z (0), axes_r_a (0), axes_r_b (0)
+                          start_v, cruise_v, accel)             # scaled start_v, cruise_v, accel for extruder
         
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
         gcode.respond_info(f"EXTRUDER MOVE DEBUG: *** TRAPQ_APPEND COMPLETED *** Successfully added move to extruder trapq")
