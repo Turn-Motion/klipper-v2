@@ -480,14 +480,33 @@ class ToolHead:
         if last_move is not None:
             last_move.limit_next_junction_speed(speed)
     def move(self, newpos, speed):
+        # Create a move and add it to the move queue
+        gcode_logging_debug = self.printer.lookup_object('gcode')
+        gcode_logging_debug.respond_info(
+            f"TOOLHEAD DEBUG: move() called with newpos={['%.4f' % p for p in newpos]} speed={speed}"
+        )
         move = Move(self, self.commanded_pos, newpos, speed)
-        if not move.move_d:
-            return
-        if move.is_kinematic_move:
+        # Perform kinematic check if any axes move
+        axes_d = move.axes_d
+        if axes_d[0] or axes_d[1] or axes_d[2] or axes_d[3] or axes_d[4]:
+            # Move kinematic axes
             self.kin.check_move(move)
-        if move.axes_d[5]:
+            extruder_move = bool(axes_d[5])
+            if extruder_move:
+                gcode_logging_debug.respond_info(
+                    f"TOOLHEAD DEBUG: Mixed move with extruder component delta_e={axes_d[5]:.4f}, calling extruder.check_move()"
+                )
+                self.extruder.check_move(move)
+        elif axes_d[5]:
+            # Extruder only move
+            gcode_logging_debug.respond_info(
+                f"TOOLHEAD DEBUG: Extruder-only move detected with delta_e={axes_d[5]:.4f}"
+            )
             self.extruder.check_move(move)
-        self.commanded_pos[:] = move.end_pos
+        self.commanded_pos[:] = newpos
+        gcode_logging_debug.respond_info(
+            f"TOOLHEAD DEBUG: Updated commanded_pos to {['%.4f' % p for p in self.commanded_pos]}, adding move to queue"
+        )
         self.lookahead.add_move(move)
         if self.print_time > self.need_check_pause:
             self._check_pause()

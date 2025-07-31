@@ -203,27 +203,36 @@ class PrinterExtruder:
     def stats(self, eventtime):
         return self.heater.stats(eventtime)
     def check_move(self, move):
+        # Debug extruder move check
+        gcode = self.printer.lookup_object('gcode')
+        gcode.respond_info(f"EXTRUDER DEBUG: check_move called for {self.name}, move={move}, axes_d={move.axes_d}, axes_r={move.axes_r}")
         axis_r = move.axes_r[5]
+        gcode.respond_info(f"EXTRUDER DEBUG: axis_r={axis_r}, can_extrude={self.heater.can_extrude}, min_temp={self.heater.min_extrude_temp}")
         # Commenting out this early return which might prevent extruder-only moves
         # if abs(axis_r) < 1e-9: # Epsilon for floating point comparison
         #     return
+        
         if not self.heater.can_extrude:
-            raise self.printer.command_error(
-                "Extrude below minimum temp\n"
-                "See the 'min_extrude_temp' config option for details")
+            error_msg = "Extrude below minimum temp\nSee the 'min_extrude_temp' config option for details"
+            gcode.respond_info(f"EXTRUDER DEBUG: ERROR - {error_msg}")
+            raise self.printer.command_error(error_msg)
         if (not move.axes_d[0] and not move.axes_d[1]) or axis_r < 0.:
             # Extrude only move (or retraction move) - limit accel and velocity
+            gcode.respond_info(f"EXTRUDER DEBUG: Extrude-only move detected: E distance={move.axes_d[5]}, max_e_dist={self.max_e_dist}")
             if abs(move.axes_d[5]) > self.max_e_dist:
-                raise self.printer.command_error(
-                    "Extrude only move too long (%.3fmm vs %.3fmm)\n"
-                    "See the 'max_extrude_only_distance' config"
-                    " option for details" % (move.axes_d[5], self.max_e_dist))
+                error_msg = "Extrude only move too long (%.3fmm vs %.3fmm)\nSee the 'max_extrude_only_distance' config option for details" % (move.axes_d[5], self.max_e_dist)
+                gcode.respond_info(f"EXTRUDER DEBUG: ERROR - {error_msg}")
+                raise self.printer.command_error(error_msg)
             inv_extrude_r = 1. / abs(axis_r)
+            gcode.respond_info(f"EXTRUDER DEBUG: Limiting speed - max_e_velocity={self.max_e_velocity}, max_e_accel={self.max_e_accel}")
             move.limit_speed(self.max_e_velocity * inv_extrude_r,
                              self.max_e_accel * inv_extrude_r)
+            gcode.respond_info("EXTRUDER DEBUG: Move speed limits applied successfully")
         elif axis_r > self.max_extrude_ratio:
+            gcode.respond_info(f"EXTRUDER DEBUG: Checking extrusion ratio: {axis_r} vs max={self.max_extrude_ratio}")
             if move.axes_d[5] <= self.nozzle_diameter * self.max_extrude_ratio:
                 # Permit extrusion if amount extruded is tiny
+                gcode.respond_info("EXTRUDER DEBUG: Tiny extrusion permitted despite high ratio")
                 return
             area = axis_r * self.filament_area
             logging.debug("Overextrude: %s vs %s (area=%.3f dist=%.3f)",
