@@ -288,12 +288,12 @@ class PrinterExtruder:
         end_v_scaled = math.sqrt(move.end_v2) * axis_r
         
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-        gcode.respond_info(f"EXTRUDER MOVE DEBUG: Calculated end_v_scaled={end_v_scaled:.6f} (sqrt({move.end_v2:.6f}) * {axis_r:.6f})")
-        gcode.respond_info(f"EXTRUDER MOVE DEBUG: *** CALLING TRAPQ_APPEND *** with trapq={self.trapq}")
-        gcode.respond_info(f"EXTRUDER MOVE DEBUG: trapq_append args - print_time={print_time:.6f}, timing=({move.accel_t:.6f}, {move.cruise_t:.6f}, {move.decel_t:.6f})")
-        gcode.respond_info(f"EXTRUDER MOVE DEBUG: trapq_append positions - start=({move.start_pos[5]:.6f}, 0, 0), end=({move.end_pos[5]:.6f}, 0, 0)")
-        gcode.respond_info(f"EXTRUDER MOVE DEBUG: trapq_append ratios - (1.0, {can_pressure_advance}, 0.0)")
-        gcode.respond_info(f"EXTRUDER MOVE DEBUG: trapq_append velocities - start_v={start_v:.6f}, cruise_v={cruise_v:.6f}, accel={accel:.6f}, end_v={end_v_scaled:.6f}")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Calculated end_v_scaled={end_v_scaled:.6f} (sqrt({move.end_v2:.6f}) * {axis_r:.6f})")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: *** CALLING TRAPQ_APPEND *** with trapq={self.trapq}")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: trapq_append args - print_time={print_time:.6f}, timing=({move.accel_t:.6f}, {move.cruise_t:.6f}, {move.decel_t:.6f})")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: trapq_append positions - start=({move.start_pos[5]:.6f}, 0, 0), end=({move.end_pos[5]:.6f}, 0, 0)")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: trapq_append ratios - (1.0, {can_pressure_advance}, 0.0)")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: trapq_append velocities - start_v={start_v:.6f}, cruise_v={cruise_v:.6f}, accel={accel:.6f}, end_v={end_v_scaled:.6f}")
         # #### END DEBUG CODE ####
         
         self.trapq_append(self.trapq, print_time,
@@ -307,7 +307,7 @@ class PrinterExtruder:
         gcode.respond_info(f"EXTRUDER MOVE DEBUG: Updated last_position from {self.last_position:.6f} to {move.end_pos[5]:.6f}")
         # #### END DEBUG CODE ####
         
-        self.last_position = move.end_pos[5]
+        self.last_position = 0 # Reset last_position to 0 after processing move, Chien
     def find_past_position(self, print_time):
         if self.extruder_stepper is None:
             return 0.

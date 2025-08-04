@@ -47,6 +47,12 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Z_tilt CartesianXY3Z Support (04.08.2025)
+Enhanced Z_tilt module to properly support CartesianXY3Z kinematics by including A and B axis steppers in the Z tilt adjustment process. This allows for proper bed leveling on printers with multiple Z-axis motors including those on A and B axes. Added comprehensive debug logging to help diagnose stepper detection issues. -- Need to be tested
+
+### Extruder Position Reset (04.08.2025)
+Modified extruder movement handling to reset the last_position to 0 after processing each move. This prevents position accumulation issues and ensures proper relative extrusion behavior, fixing cases where extruder moves would update position tracking but not physically move the extruder motor. -- Need to be tested
+
 ### Post Homing Z Cancel (30.07.2025)
 We '#' the post homing z lift so this will be done in the script.
 

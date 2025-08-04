@@ -17,8 +17,42 @@ class ZAdjustHelper:
                                             self.handle_connect)
     def handle_connect(self):
         kin = self.printer.lookup_object('toolhead').get_kinematics()
+        logging.info("Z_TILT DEBUG: Kinematics type: %s", type(kin).__name__)
+        
+        # Get all steppers and log their details
+        all_steppers = kin.get_steppers()
+        logging.info("Z_TILT DEBUG: Total steppers found: %d", len(all_steppers))
+        for i, s in enumerate(all_steppers):
+            logging.info("Z_TILT DEBUG: Stepper %d: name=%s, z=%s, a=%s, b=%s", 
+                        i, s.get_name(), s.is_active_axis('z'), 
+                        s.is_active_axis('a'), s.is_active_axis('b'))
+        
         # Find all Z-axis steppers (including those named stepper_a and stepper_b)
         z_steppers = [s for s in kin.get_steppers() if s.is_active_axis('z')]
+        logging.info("Z_TILT DEBUG: Found %d Z-axis steppers", len(z_steppers))
+        
+        # ---- Turn V2 ----
+        # For CartesianXY3Z kinematics, also include A and B axis steppers, this is a particular fix for TurnV2
+        # since they physically move in the Z direction
+        if hasattr(kin, 'rails') and len(kin.rails) >= 5:  # CartesianXY3Z has 5 rails: x,y,z,a,b
+            logging.info("Z_TILT DEBUG: CartesianXY3Z detected with %d rails", len(kin.rails))
+            a_steppers = [s for s in kin.get_steppers() if s.is_active_axis('a')]
+            logging.info("Z_TILT DEBUG: Found %d A-axis steppers", len(a_steppers))
+            for i, s in enumerate(a_steppers):
+                logging.info("Z_TILT DEBUG: A-stepper %d: %s", i, s.get_name())
+                
+            b_steppers = [s for s in kin.get_steppers() if s.is_active_axis('b')]
+            logging.info("Z_TILT DEBUG: Found %d B-axis steppers", len(b_steppers))
+            for i, s in enumerate(b_steppers):
+                logging.info("Z_TILT DEBUG: B-stepper %d: %s", i, s.get_name())
+                
+            z_steppers.extend(a_steppers)
+            z_steppers.extend(b_steppers)
+            logging.info("Z_TILT DEBUG: After adding A+B, total Z steppers: %d", len(z_steppers))
+        else:
+            logging.info("Z_TILT DEBUG: Not CartesianXY3Z or missing rails attribute")
+        # ---- Turn V2 ----
+        
         if len(z_steppers) != self.z_count:
             raise self.printer.config_error(
                 "%s z_positions needs exactly %d items" % (
