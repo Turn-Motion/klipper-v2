@@ -92,7 +92,10 @@ class CartesianXY3Z:
                 found_params = []
                 default_params = []
                 for param in safety_params:
-                    if config.has_option(param):
+                    # Use sentinel to check if parameter exists in config
+                    sentinel_obj = object()
+                    val = config.get(param, sentinel_obj, note_valid=False)
+                    if val is not sentinel_obj:
                         found_params.append(param)
                     else:
                         default_params.append(param)

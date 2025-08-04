@@ -27,8 +27,19 @@ class ZAdjustHelper:
                         i, s.get_name(), s.is_active_axis('z'), 
                         s.is_active_axis('a'), s.is_active_axis('b'))
         
+        # Original implementation (commented out)
         # Find all Z-axis steppers (including those named stepper_a and stepper_b)
-        z_steppers = [s for s in kin.get_steppers() if s.is_active_axis('z')]
+        # z_steppers = [s for s in kin.get_steppers() if s.is_active_axis('z')]
+        
+        # TEMPORARY FIX: Find Z-axis steppers by name and axis flags
+        z_steppers = []
+        for s in kin.get_steppers():
+            # Check if stepper name indicates it's a Z axis stepper
+            name = s.get_name()
+            if name == 'stepper_z' or s.is_active_axis('z'):
+                logging.info("Z_TILT DEBUG: Adding Z stepper: %s", name)
+                z_steppers.append(s)
+        
         logging.info("Z_TILT DEBUG: Found %d Z-axis steppers", len(z_steppers))
         
         # ---- Turn V2 ----
@@ -36,16 +47,37 @@ class ZAdjustHelper:
         # since they physically move in the Z direction
         if hasattr(kin, 'rails') and len(kin.rails) >= 5:  # CartesianXY3Z has 5 rails: x,y,z,a,b
             logging.info("Z_TILT DEBUG: CartesianXY3Z detected with %d rails", len(kin.rails))
-            a_steppers = [s for s in kin.get_steppers() if s.is_active_axis('a')]
+            
+            # Original implementation (commented out)
+            # a_steppers = [s for s in kin.get_steppers() if s.is_active_axis('a')]
+            # for i, s in enumerate(a_steppers):
+            #    logging.info("Z_TILT DEBUG: A-stepper %d: %s", i, s.get_name())
+            
+            # TEMPORARY FIX: Find A-axis steppers by name
+            for s in kin.get_steppers():
+                name = s.get_name()
+                if name == 'stepper_a' or s.is_active_axis('a'):
+                    logging.info("Z_TILT DEBUG: Adding A stepper: %s", name)
+                    z_steppers.append(s)
+            
             logging.info("Z_TILT DEBUG: Found %d A-axis steppers", len(a_steppers))
-            for i, s in enumerate(a_steppers):
-                logging.info("Z_TILT DEBUG: A-stepper %d: %s", i, s.get_name())
-                
-            b_steppers = [s for s in kin.get_steppers() if s.is_active_axis('b')]
+            
+            # Original implementation (commented out)
+            # b_steppers = [s for s in kin.get_steppers() if s.is_active_axis('b')]
+            # for i, s in enumerate(b_steppers):
+            #    logging.info("Z_TILT DEBUG: B-stepper %d: %s", i, s.get_name())
+            
+            # TEMPORARY FIX: Find B-axis steppers by name
+            b_steppers = []
+            for s in kin.get_steppers():
+                name = s.get_name()
+                if name == 'stepper_b' or s.is_active_axis('b'):
+                    logging.info("Z_TILT DEBUG: Adding B stepper: %s", name)
+                    b_steppers.append(s)
+            
             logging.info("Z_TILT DEBUG: Found %d B-axis steppers", len(b_steppers))
-            for i, s in enumerate(b_steppers):
-                logging.info("Z_TILT DEBUG: B-stepper %d: %s", i, s.get_name())
-                
+            
+            # Add A and B steppers to Z steppers list
             z_steppers.extend(a_steppers)
             z_steppers.extend(b_steppers)
             logging.info("Z_TILT DEBUG: After adding A+B, total Z steppers: %d", len(z_steppers))

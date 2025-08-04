@@ -127,9 +127,23 @@ class Move:
         self.end_v = end_v = math.sqrt(end_v2)
         # Determine time spent in each portion of move (time is the
         # distance divided by average velocity)
-        self.accel_t = accel_d / ((start_v + cruise_v) * 0.5)
-        self.cruise_t = cruise_d / cruise_v
-        self.decel_t = decel_d / ((end_v + cruise_v) * 0.5)
+        # Safe accel_t calculation
+        if (start_v + cruise_v) > 0.:
+            self.accel_t = accel_d / ((start_v + cruise_v) * 0.5)
+        else:
+            self.accel_t = 0.
+        
+        # Safe cruise_t calculation
+        if cruise_v > 0.:
+            self.cruise_t = cruise_d / cruise_v
+        else:
+            self.cruise_t = 0.
+            
+        # Safe decel_t calculation
+        if (end_v + cruise_v) > 0.:
+            self.decel_t = decel_d / ((end_v + cruise_v) * 0.5)
+        else:
+            self.decel_t = 0.
 
 LOOKAHEAD_FLUSH_TIME = 0.250
 
