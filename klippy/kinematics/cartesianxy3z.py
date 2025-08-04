@@ -8,6 +8,11 @@ import stepper
 # Import HomingMove directly
 from extras.homing import HomingMove
 from . import idex_modes
+# Direct import of safety module
+try:
+    from extras import cartesianxy3z_safety
+except ImportError:
+    cartesianxy3z_safety = None
 
 class CartesianXY3Z:
     def __init__(self, toolhead, config):
@@ -63,6 +68,50 @@ class CartesianXY3Z:
         # Get the post-homing Z movement distance (default 62.8mm)
         self.post_homing_z_lift = config.getfloat('post_homing_z_lift', -60)
         self.limits = [(1.0, -1.0)] * 5  # For x, y, z, a, b axes
+        
+        # Initialize safety module directly
+        self.safety_module = None
+        if cartesianxy3z_safety is not None:
+            try:
+                # Log safety module configuration status
+                logging.info("CartesianXY3Z: Initializing safety module")
+                
+                # Check which parameters exist in the config
+                safety_params = [
+                    'joint_ball_diameter', 'wagon_length', 'wagon_rail_z_offset',
+                    'x_distance_between_joints_ab', 'y_distance_plate_to_joint_z',
+                    'y_overhang_plate_to_joints_ab', 'plate_thickness',
+                    'printing_area_x_length', 'printing_area_y_length',
+                    'joint_ball_inset', 'alu_mount_plate_thickness',
+                    'joint_mount_thickness', 'y_distance_joints_ab_to_rail',
+                    'x_railspace_ab_inwards', 'x_railspace_ab_outwards',
+                    'y_railspace_z_inwards', 'total_plate_height'
+                ]
+                
+                # Check each parameter and log whether it's using default or config value
+                found_params = []
+                default_params = []
+                for param in safety_params:
+                    if config.has_option(param):
+                        found_params.append(param)
+                    else:
+                        default_params.append(param)
+                
+                if found_params:
+                    logging.info("CartesianXY3Z Safety: Found %d parameters in config: %s", 
+                                len(found_params), ", ".join(found_params))
+                
+                if default_params:
+                    logging.info("CartesianXY3Z Safety: Using defaults for %d parameters: %s", 
+                                len(default_params), ", ".join(default_params))
+                
+                # Create safety module with config
+                self.safety_module = cartesianxy3z_safety.CartesianXY3ZSafety(config)
+                logging.info("CartesianXY3Z: Safety module loaded successfully")
+                
+            except Exception as e:
+                logging.warning("CartesianXY3Z: Failed to initialize safety module: %s", str(e))
+                self.safety_module = None
 
     def get_steppers(self):
         return [s for rail in self.rails for s in rail.get_steppers()]
@@ -376,19 +425,22 @@ class CartesianXY3Z:
         # Move with Z, A, or B - update velocity and accel for slower axes
         self._check_endstops(move)
         
-        # Call external safety module if it exists
-        try:
-            safety_module = self.printer.lookup_object('cartesianxy3z_safety')
-            # The safety module will raise an exception if the move is unsafe
-            safety_module.check_move(move)
-            gcode.respond_info("CartesianXY3Z Safety: Move is safe")
-
-        except self.printer.config_error:
-            # Safety module not loaded, continue without safety checks
+        # Use directly imported safety module if available
+        if self.safety_module is not None:
+            try:
+                # The safety module will raise an exception if the move is unsafe
+                self.safety_module.check_move(move)
+                gcode = self.printer.lookup_object('gcode')
+                gcode.respond_info("CartesianXY3Z Safety: Move is safe")
+            except Exception as e:
+                logging.warning("CartesianXY3Z: Safety check failed: %s", str(e))
+                # Continue with the move even if safety check fails
+                # The safety module will have raised appropriate warnings
+        else:
+            # Safety module not available, continue without safety checks
             gcode = self.printer.lookup_object('gcode')
-            gcode.respond_info("CartesianXY3Z Safety: Module not found - continuing without safety checks")
-            logging.info("CartesianXY3Z: Safety module not found, continuing without safety checks") #store info into the klipper log
-            pass
+            gcode.respond_info("CartesianXY3Z Safety: Module not available - continuing without safety checks")
+            logging.info("CartesianXY3Z: Safety module not available, continuing without safety checks")
         
         # Calculate the slowest axis ratio for Z, A, B
         z_ratio = 1.0

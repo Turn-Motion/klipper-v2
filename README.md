@@ -47,6 +47,9 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### CartesianXY3Z Safety Module Direct Import (04.08.2025)
+The CartesianXY3Z kinematics now directly imports the safety module from extras/cartesianxy3z_safety.py without requiring a [cartesianxy3z_safety] section in printer.cfg. This allows safety checks to run automatically when the kinematics loads. The module logs which parameters are found in the config and which are using default values, making it easier to diagnose configuration issues. -- Need to be tested
+
 ### Z_tilt CartesianXY3Z Support (04.08.2025)
 Enhanced Z_tilt module to properly support CartesianXY3Z kinematics by including A and B axis steppers in the Z tilt adjustment process. This allows for proper bed leveling on printers with multiple Z-axis motors including those on A and B axes. Added comprehensive debug logging to help diagnose stepper detection issues. -- Need to be tested
 
