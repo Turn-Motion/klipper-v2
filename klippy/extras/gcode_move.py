@@ -39,7 +39,8 @@ class GCodeMove:
                                desc=self.cmd_GET_POSITION_help)
         self.Coord = gcode.Coord
         # G-Code coordinate manipulation
-        self.absolute_coord = self.absolute_extrude = True
+        self.absolute_coord = True  # XYZ axes use absolute coordinates
+        self.absolute_extrude = False  # Extruder uses relative coordinates by default
         self.base_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # XYZABE
         self.last_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # XYZABE
         self.homing_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # XYZABE

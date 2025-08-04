@@ -47,6 +47,9 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Default Relative Extruder Mode (04.08.2025)
+Changed the default extruder coordinate system to use relative mode (M83) at startup instead of absolute mode. 
+
 ### CartesianXY3Z Safety Module Direct Import (04.08.2025)
 The CartesianXY3Z kinematics now directly imports the safety module from extras/cartesianxy3z_safety.py without requiring a [cartesianxy3z_safety] section in printer.cfg. This allows safety checks to run automatically when the kinematics loads. The module logs which parameters are found in the config and which are using default values, making it easier to diagnose configuration issues. -- Need to be tested
 
