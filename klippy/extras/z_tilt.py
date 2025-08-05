@@ -54,11 +54,12 @@ class ZAdjustHelper:
             #    logging.info("Z_TILT DEBUG: A-stepper %d: %s", i, s.get_name())
             
             # TEMPORARY FIX: Find A-axis steppers by name
+            a_steppers = []
             for s in kin.get_steppers():
                 name = s.get_name()
                 if name == 'stepper_a' or s.is_active_axis('a'):
                     logging.info("Z_TILT DEBUG: Adding A stepper: %s", name)
-                    z_steppers.append(s)
+                    a_steppers.append(s)
             
             logging.info("Z_TILT DEBUG: Found %d A-axis steppers", len(a_steppers))
             
