@@ -47,6 +47,10 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Reset Z Tilt (05.08.2025)
+- Fixed stepper detection for Z, A, and B axes using name-based identification when `is_active_axis()` fails
+- Reset Z-tilt to use conventional method, just improve the stepper detection.
+
 ### Division by Zero Protection in Motion Planning (04.08.2025)
 - Added safety checks in toolhead.py to prevent division by zero errors in motion timing calculations
 

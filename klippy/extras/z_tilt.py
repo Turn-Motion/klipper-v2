@@ -207,76 +207,15 @@ class ZTilt:
         self.probe_helper.minimum_points(2)
         self.z_status = ZAdjustStatus(self.printer)
         self.z_helper = ZAdjustHelper(config, len(self.z_positions))
-        
-        # Configuration for the homing sequence
-        self.home_xy_before_z = config.getboolean('home_xy_before_z', True)
-        self.xy_position = config.getfloatlist('xy_position', [250., 250.], count=2)
-        self.z_endstop_name = config.get('z_endstop_sensor', 'probe')
-        self.z_hop = config.getfloat('z_hop', 5.0)
-        
         # Register Z_TILT_ADJUST command
         gcode = self.printer.lookup_object('gcode')
         gcode.register_command('Z_TILT_ADJUST', self.cmd_Z_TILT_ADJUST,
                                desc=self.cmd_Z_TILT_ADJUST_help)
-    
-    def up_home_z(self):
-        """Move Z upward until the hot end sensor is triggered"""
-        gcode = self.printer.lookup_object('gcode')
-        toolhead = self.printer.lookup_object('toolhead')
-        
-        # Get current position
-        curpos = toolhead.get_position()
-        
-        # Execute up-homing by running a gcode command
-        gcode.respond_info("Performing up-home Z operation")
-        try:
-            # Try to use the specified endstop for up-homing
-            gcode.run_script_from_command("PROBE_UP")
-        except Exception as e:
-            gcode.respond_info("Warning: PROBE_UP failed, using fallback method: %s" % str(e))
-            # Fallback method: Move Z up by z_hop distance
-            curpos[2] += self.z_hop
-            toolhead.move(curpos, 5.0)
-            gcode.respond_info("Moved Z up by %.1fmm as fallback" % self.z_hop)
-    
-    cmd_Z_TILT_ADJUST_help = "Adjust the Z tilt with complete homing sequence"
+    cmd_Z_TILT_ADJUST_help = "Adjust the Z tilt"
     def cmd_Z_TILT_ADJUST(self, gcmd):
-        gcode = self.printer.lookup_object('gcode')
-        toolhead = self.printer.lookup_object('toolhead')
-        
-        # Reset Z tilt status
         self.z_status.reset()
-        
-        # Step 1: Home X and Y if configured
-        if self.home_xy_before_z:
-            gcode.respond_info("Homing X and Y axes")
-            try:
-                gcode.run_script_from_command("G28 X Y")
-            except Exception as e:
-                raise gcmd.error("Error homing X Y: %s" % str(e))
-        
-        # Step 2: Move to XY position
-        gcode.respond_info("Moving to position X=%.1f Y=%.1f" % 
-                          (self.xy_position[0], self.xy_position[1]))
-        try:
-            curpos = toolhead.get_position()
-            curpos[0] = self.xy_position[0]
-            curpos[1] = self.xy_position[1]
-            toolhead.move(curpos, 50.0)
-        except Exception as e:
-            raise gcmd.error("Error moving to XY position: %s" % str(e))
-        
-        # Step 3: Perform up-home Z
-        self.up_home_z()
-        
-        # Step 4: Start the Z-tilt adjustment process
-        gcode.respond_info("Starting Z-tilt adjustment")
         self.retry_helper.start(gcmd)
         self.probe_helper.start_probe(gcmd)
-        
-        # Note: The probe_finalize method will be called after probing completes
-        # and will handle the actual Z adjustment
-    
     def probe_finalize(self, offsets, positions):
         # Setup for coordinate descent analysis
         z_offset = offsets[2]
@@ -304,12 +243,6 @@ class ZTilt:
         adjustments = [x*x_adjust + y*y_adjust + z_adjust
                        for x, y in self.z_positions]
         self.z_helper.adjust_steppers(adjustments, speed)
-        
-        # After adjustments are complete, perform another up-home Z
-        gcode = self.printer.lookup_object('gcode')
-        gcode.respond_info("Z-tilt adjustment complete, performing final up-home Z")
-        self.up_home_z()
-        
         return self.z_status.check_retry_result(
             self.retry_helper.check_retry([p[2] for p in positions]))
     def get_status(self, eventtime):
