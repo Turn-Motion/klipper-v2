@@ -47,6 +47,10 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Reduced Logging / Ztilt Logging (06.08.2025)
+- Reduced verbose debug logging in toolhead.py and extruder.py modules while preserving essential start/end logs for key code flows.
+- Enhanced Ztilt logging about the Ztilt process, including the initial parameters, final parameters, and per-position adjustments.
+
 ### Reset Z Tilt (05.08.2025)
 - Fixed stepper detection for Z, A, and B axes using name-based identification when `is_active_axis()` fails
 - Reset Z-tilt to use conventional method, just improve the stepper detection.
