@@ -245,7 +245,7 @@ class CartesianXY3Z:
             
             # Calculate force move positions for all Z axes
             current_pos = toolhead.get_position()
-            force_move_distance = 445.0  # Large distance to ensure endstop contact
+            force_move_distance = 356.0  # Large distance to ensure endstop contact
             
             # Create individual homing moves for each axis to allow independent stopping
             axis_states = {}  # Track which axes are still moving
