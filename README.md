@@ -47,8 +47,14 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
-### CartesianXY3Z Speed Limiting deleted for Debug (19.08.2025)
-Disable the Z, A, and B axes speed limiting in the CartesianXY3Z kinematics module. This allows testing unsynchronized movement issues that may occur when using the A and B axes. The speed limiting code calculates a ratio based on the slowest axis among Z, A, and B, and applies it to maintain synchronized movement. Commenting out this code allows the axes to move at their full configured speeds without this coordination, which can help diagnose movement and extrusion-related issues.
+### CartesianXY3Z Kinematic - Coordinated Movement Fix (19.08.2025)
+Fixed sequential axis movement issue in CartesianXY3Z kinematics where Z, A, B axes would move separately from X, Y axes instead of moving simultaneously. The root cause was incorrect move distance calculation in `toolhead.py` that included all axes in the distance formula. 
+
+**The Fix:** Modified `move_d` calculation to use the maximum distance among:
+- XY combined distance: `sqrt(X² + Y²)`  
+- Individual Z, A, B axis distances: `abs(Z)`, `abs(A)`, `abs(B)`
+
+This ensures proper coordinated movement for tilting bed systems where Z, A, B axes often travel the dominant distances. All axes now move simultaneously and complete at the same time, with the dominant axis running at its configured speed and others moving proportionally.
 
 ### Reduced Logging / Ztilt Logging (06.08.2025)
 - Reduced verbose debug logging in toolhead.py and extruder.py modules while preserving essential start/end logs for key code flows.

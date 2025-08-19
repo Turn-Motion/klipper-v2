@@ -25,7 +25,14 @@ class Move:
         # Note: In this system, indices 0-4 are XYZAB and index 5 is E (extruder)
         self.axes_d = axes_d = [end_pos[i] - start_pos[i] for i in range(6)]
         # Calculate total movement distance (excluding E axis)
-        self.move_d = move_d = math.sqrt(sum([d*d for d in axes_d]))
+        # For tilting bed with dominant Z/A/B movements, use maximum distance
+        xy_move_d = math.sqrt(axes_d[0]**2 + axes_d[1]**2)
+        z_move_d = abs(axes_d[2])
+        a_move_d = abs(axes_d[3]) if len(axes_d) > 3 else 0
+        b_move_d = abs(axes_d[4]) if len(axes_d) > 4 else 0
+        
+        # Use the maximum to ensure all axes have sufficient time
+        self.move_d = move_d = max(xy_move_d, z_move_d, a_move_d, b_move_d)
         if move_d < .000000001:
             # Extrude only move
             self.end_pos = (start_pos[0], start_pos[1], start_pos[2],
@@ -217,8 +224,7 @@ class LookAheadQueue:
         del queue[:flush_count]
     def add_move(self, move):
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-        # Debug extruder movement
-        gcode = self.toolhead.printer.lookup_object('gcode')
+        # Debug extruder movement        gcode = self.toolhead.printer.lookup_object('gcode')
         #gcode.respond_info(f"TOOLHEAD MOVE DEBUG: Adding move with axes_d={move.axes_d}, axes_r={move.axes_r}")
         if abs(move.axes_d[5]) > 0.00001:  # Check if this is an extruder move
             gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Extruder move detected! E distance={move.axes_d[5]}")
