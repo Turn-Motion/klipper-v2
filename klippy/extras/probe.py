@@ -196,8 +196,29 @@ class LookupZSteppers:
                                             self._handle_mcu_identify)
     def _handle_mcu_identify(self):
         kin = self.printer.lookup_object('toolhead').get_kinematics()
-        for stepper in kin.get_steppers():
-            if stepper.is_active_axis('z'):
+        # Log kinematics type for debugging
+        logging.info("PROBE DEBUG: Kinematics type: %s", type(kin).__name__)
+        
+        # Get all steppers
+        all_steppers = kin.get_steppers()
+        logging.info("PROBE DEBUG: Total steppers found: %d", len(all_steppers))
+        
+        # Log stepper details for debugging
+        for i, s in enumerate(all_steppers):
+            logging.info("PROBE DEBUG: Stepper %d: name=%s, z=%s", 
+                        i, s.get_name(), s.is_active_axis('z'))
+        
+        # TEMPORARY FIX: Find Z-axis steppers by name and axis flags
+        for stepper in all_steppers:
+            # Check if stepper name indicates it's a Z axis stepper
+            name = stepper.get_name()
+            if name == 'stepper_z' or stepper.is_active_axis('z'):
+                logging.info("PROBE DEBUG: Adding Z stepper: %s", name)
+                self.add_stepper_cb(stepper)
+            
+            # For CartesianXY3Z kinematics, also include A and B axis steppers if needed
+            if name == 'stepper_a' or name == 'stepper_b':
+                logging.info("PROBE DEBUG: Adding %s stepper for Z movement", name)
                 self.add_stepper_cb(stepper)
 
 # Homing via probe:z_virtual_endstop

@@ -44,3 +44,54 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 2. `average_delta` metric for `PROBE_ACCURACY` command
 
 ---
+
+## Feature Updates
+
+### Reduced Logging / Ztilt Logging (06.08.2025)
+- Reduced verbose debug logging in toolhead.py and extruder.py modules while preserving essential start/end logs for key code flows.
+- Enhanced Ztilt logging about the Ztilt process, including the initial parameters, final parameters, and per-position adjustments.
+
+### Reset Z Tilt (05.08.2025)
+- Fixed stepper detection for Z, A, and B axes using name-based identification when `is_active_axis()` fails
+- Reset Z-tilt to use conventional method, just improve the stepper detection.
+
+### Division by Zero Protection in Motion Planning (04.08.2025)
+- Added safety checks in toolhead.py to prevent division by zero errors in motion timing calculations
+
+### Default Relative Extruder Mode (04.08.2025)
+Changed the default extruder coordinate system to use relative mode (M83) at startup instead of absolute mode. 
+
+### CartesianXY3Z Safety Module Direct Import (04.08.2025)
+The CartesianXY3Z kinematics now directly imports the safety module from extras/cartesianxy3z_safety.py without requiring a [cartesianxy3z_safety] section in printer.cfg. This allows safety checks to run automatically when the kinematics loads. The module logs which parameters are found in the config and which are using default values, making it easier to diagnose configuration issues. Fixed compatibility issues with ConfigWrapper to properly detect parameters using Klipper's sentinel pattern instead of has_option(). -- Need to be tested - latest update
+
+### Z_tilt CartesianXY3Z Support (04.08.2025)
+Enhanced Z_tilt module to properly support CartesianXY3Z kinematics by including A and B axis steppers in the Z tilt adjustment process. This allows for proper bed leveling on printers with multiple Z-axis motors including those on A and B axes. Added comprehensive debug logging to help diagnose stepper detection issues. Implemented a temporary fix to detect steppers by name (stepper_z, stepper_a, stepper_b) when is_active_axis() method fails to correctly identify them. -- Need to be tested
+
+### Extruder Position Reset (04.08.2025)
+Modified extruder movement handling to reset the last_position to 0 after processing each move. This prevents position accumulation issues and ensures proper relative extrusion behavior, fixing cases where extruder moves would update position tracking but not physically move the extruder motor. -- Need to be tested
+
+### Post Homing Z Cancel (30.07.2025)
+We '#' the post homing z lift so this will be done in the script.
+
+### Extruder Movement Fix (30.07.2025)
+Fixed an issue where extruder-only moves (e.g., G1 E50) would update position tracking but not physically move the extruder motor. The problem was caused by an early-return condition in the extruder's `check_move` function that incorrectly filtered out valid extruder movements when their axis ratio was very small. Force moves were unaffected as they bypass this check.
+
+### IDEX Dual Carriage Position Preservation Fix (30.07.2025) -- Not resolved
+Fixed a critical issue where toggling between T0 and T1 extruders in dual carriage setups would inadvertently reset the A axis position to zero. The position array handling in `toggle_active_dc_rail` was improved to properly preserve all axis positions (XYZABE) when switching carriages, ensuring that extruder-only moves maintain correct positions for all axes.
+
+### IDEX Dual Carriage Homing Improvements (30.07.2025)
+Added detailed debug logging for dual carriage homing to diagnose and fix issues with T0/T1 extruder homing in CartesianXY3Z kinematics.
+Post Homing Z lift is now 60.
+
+### CartesianXY3Z Coordinated Z Homing Enhancement (29.07.2025)
+Implemented two-phase coordinated Z homing for Z/A/B axes with fast initial move, retraction, and individual precision homing, plus configurable post-homing Z lift.
+
+### ADS1220 Driver Improvements (29.07.2025)
+
+- Added robust SPI communication with retry logic and improved error handling
+- Added detailed debug logging (enabled by default) to help diagnose communication issues
+- Reduced default SPI speed for better reliability with problematic hardware
+- Improved reset sequence with proper delays and verification
+- Added configurable SPI speed option (`spi_speed` parameter)
+
+---

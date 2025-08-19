@@ -3,6 +3,7 @@
 # Copyright (C) 2016-2022  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+#Reverted
 import math, logging
 import stepper, chelper
 
@@ -202,60 +203,111 @@ class PrinterExtruder:
     def stats(self, eventtime):
         return self.heater.stats(eventtime)
     def check_move(self, move):
+        # Debug extruder move check
+        gcode = self.printer.lookup_object('gcode')
+        gcode.respond_info(f"EXTRUDER DEBUG: check_move called for {self.name}")
         axis_r = move.axes_r[5]
-        # Chien20250609 - to force exit nonintentional extruder move: If extrusion ratio is effectively zero, no extruder checks needed
-        if abs(axis_r) < 1e-9: # Epsilon for floating point comparison
-            return
+        #gcode.respond_info(f"EXTRUDER DEBUG: axis_r={axis_r}, can_extrude={self.heater.can_extrude}, min_temp={self.heater.min_extrude_temp}")
+        # Commenting out this early return which might prevent extruder-only moves
+        # if abs(axis_r) < 1e-9: # Epsilon for floating point comparison
+        #     return
+        
         if not self.heater.can_extrude:
-            raise self.printer.command_error(
-                "Extrude below minimum temp\n"
-                "See the 'min_extrude_temp' config option for details")
+            error_msg = "Extrude below minimum temp\nSee the 'min_extrude_temp' config option for details"
+            #gcode.respond_info(f"EXTRUDER DEBUG: ERROR - {error_msg}")
+            raise self.printer.command_error(error_msg)
         if (not move.axes_d[0] and not move.axes_d[1]) or axis_r < 0.:
             # Extrude only move (or retraction move) - limit accel and velocity
+            gcode.respond_info(f"EXTRUDER DEBUG: Extrude-only move detected: E distance={move.axes_d[5]}")
             if abs(move.axes_d[5]) > self.max_e_dist:
-                raise self.printer.command_error(
-                    "Extrude only move too long (%.3fmm vs %.3fmm)\n"
-                    "See the 'max_extrude_only_distance' config"
-                    " option for details" % (move.axes_d[5], self.max_e_dist))
+                error_msg = "Extrude only move too long (%.3fmm vs %.3fmm)\nSee the 'max_extrude_only_distance' config option for details" % (move.axes_d[5], self.max_e_dist)
+                #gcode.respond_info(f"EXTRUDER DEBUG: ERROR - {error_msg}")
+                raise self.printer.command_error(error_msg)
             inv_extrude_r = 1. / abs(axis_r)
+            #gcode.respond_info(f"EXTRUDER DEBUG: Limiting speed - max_e_velocity={self.max_e_velocity}, max_e_accel={self.max_e_accel}")
             move.limit_speed(self.max_e_velocity * inv_extrude_r,
                              self.max_e_accel * inv_extrude_r)
-        elif axis_r > self.max_extrude_ratio:
-            if move.axes_d[5] <= self.nozzle_diameter * self.max_extrude_ratio:
-                # Permit extrusion if amount extruded is tiny
-                return
-            area = axis_r * self.filament_area
-            logging.debug("Overextrude: %s vs %s (area=%.3f dist=%.3f)",
-                          axis_r, self.max_extrude_ratio, area, move.move_d)
-            raise self.printer.command_error(
-                "Move exceeds maximum extrusion (%.3fmm^2 vs %.3fmm^2)\n"
-                "See the 'max_extrude_cross_section' config option for details"
-                % (area, self.max_extrude_ratio * self.filament_area))
+            #gcode.respond_info("EXTRUDER DEBUG: Move speed limits applied successfully")
+        # elif axis_r > self.max_extrude_ratio:
+        #     gcode.respond_info(f"EXTRUDER DEBUG: Checking extrusion ratio: {axis_r} vs max={self.max_extrude_ratio}")
+        #     if move.axes_d[5] <= self.nozzle_diameter * self.max_extrude_ratio:
+        #         # Permit extrusion if amount extruded is tiny
+        #         gcode.respond_info("EXTRUDER DEBUG: Tiny extrusion permitted despite high ratio")
+        #         return
+        #     area = axis_r * self.filament_area
+        #     logging.debug("Overextrude: %s vs %s (area=%.3f dist=%.3f)",
+        #                   axis_r, self.max_extrude_ratio, area, move.move_d)
+        #     raise self.printer.command_error(
+        #         "Move exceeds maximum extrusion (%.3fmm^2 vs %.3fmm^2)\n"
+        #         "See the 'max_extrude_cross_section' config option for details"
+        #         % (area, self.max_extrude_ratio * self.filament_area))
     def calc_junction(self, prev_move, move):
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        gcode = self.printer.lookup_object('gcode')
         diff_r = move.axes_r[5] - prev_move.axes_r[5]
+        #gcode.respond_info(f"EXTRUDER JUNCTION DEBUG: prev_move.axes_r[5]={prev_move.axes_r[5]}, move.axes_r[5]={move.axes_r[5]}, diff_r={diff_r}")
+        
         if diff_r:
-            return (self.instant_corner_v / abs(diff_r))**2
+            junction_v2 = (self.instant_corner_v / abs(diff_r))**2
+            #gcode.respond_info(f"EXTRUDER JUNCTION DEBUG: diff_r is non-zero, junction_v2={junction_v2}, instant_corner_v={self.instant_corner_v}")
+            return junction_v2
+        #gcode.respond_info(f"EXTRUDER JUNCTION DEBUG: diff_r is zero, returning max_cruise_v2={move.max_cruise_v2}")
+        # #### END DEBUG CODE ####
         return move.max_cruise_v2
     def move(self, print_time, move):
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        gcode = self.printer.lookup_object('gcode')
+        gcode.respond_info(f"EXTRUDER MOVE DEBUG: *** EXTRUDER.MOVE() CALLED *** for {self.name} with E={move.axes_d[5]:.6f}")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Input move - axes_d[5]={move.axes_d[5]:.6f}, axes_r[5]={move.axes_r[5]:.6f}")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Move timing - accel_t={move.accel_t:.6f}, cruise_t={move.cruise_t:.6f}, decel_t={move.decel_t:.6f}")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Move velocities - start_v={move.start_v:.6f}, cruise_v={move.cruise_v:.6f}, end_v2={move.end_v2:.6f}")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Move positions - start_pos[5]={move.start_pos[5]:.6f}, end_pos[5]={move.end_pos[5]:.6f}")
+        # #### END DEBUG CODE ####
+        
         axis_r = move.axes_r[5]
         accel = move.accel * axis_r
         start_v = move.start_v * axis_r
         cruise_v = move.cruise_v * axis_r
+        
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Scaled values - axis_r={axis_r:.6f}, accel={accel:.6f}, start_v={start_v:.6f}, cruise_v={cruise_v:.6f}")
+        # #### END DEBUG CODE ####
+        
         can_pressure_advance = False
         if axis_r > 0. and (move.axes_d[0] or move.axes_d[1]):
             can_pressure_advance = True
+            
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Pressure advance - can_pressure_advance={can_pressure_advance}, XY_movement={bool(move.axes_d[0] or move.axes_d[1])}")
+        # #### END DEBUG CODE ####
+        
         # Queue movement (x is extruder movement, y is pressure advance flag)
         # Calculate extruder's component of the end velocity
         # move.end_v2 is the squared end velocity of the overall kinematic move
         # axis_r (move.axes_r[5]) is the ratio of extruder movement to overall move distance
         end_v_scaled = math.sqrt(move.end_v2) * axis_r
+        
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Calculated end_v_scaled={end_v_scaled:.6f} (sqrt({move.end_v2:.6f}) * {axis_r:.6f})")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: *** CALLING TRAPQ_APPEND *** with trapq={self.trapq}")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: trapq_append args - print_time={print_time:.6f}, timing=({move.accel_t:.6f}, {move.cruise_t:.6f}, {move.decel_t:.6f})")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: trapq_append positions - start=({move.start_pos[5]:.6f}, 0, 0), end=({move.end_pos[5]:.6f}, 0, 0)")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: trapq_append ratios - (1.0, {can_pressure_advance}, 0.0)")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: trapq_append velocities - start_v={start_v:.6f}, cruise_v={cruise_v:.6f}, accel={accel:.6f}, end_v={end_v_scaled:.6f}")
+        # #### END DEBUG CODE ####
+        
         self.trapq_append(self.trapq, print_time,
                           move.accel_t, move.cruise_t, move.decel_t,
-                          move.start_pos[5], 0., 0.,        # og:start_x (extruder_pos), start_y (0), start_z (0)
-                          1., can_pressure_advance, 0.,     # OG:axes_r_x (1 for extruder), axes_r_y (pa_flag), axes_r_z (0)
-                          start_v, cruise_v, accel,         # OG:scaled start_v, cruise_v, accel for extruder
-                          move.end_pos[5], 0., 0., end_v_scaled) # Added:end_x (target_extruder_pos), end_y (0), end_z (0), scaled_end_v
-        self.last_position = move.end_pos[5]
+                          move.start_pos[5], 0., 0., 0., 0.,    # start_x (extruder_pos), start_y (0), start_z (0), start_a (0), start_b (0)
+                          1., can_pressure_advance, 0., 0., 0., # axes_r_x (1 for extruder), axes_r_y (pa_flag), axes_r_z (0), axes_r_a (0), axes_r_b (0)
+                          start_v, cruise_v, accel)             # scaled start_v, cruise_v, accel for extruder
+        
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        gcode.respond_info(f"EXTRUDER MOVE DEBUG: *** TRAPQ_APPEND COMPLETED ***")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Updated last_position from {self.last_position:.6f} to {move.end_pos[5]:.6f}")
+        # #### END DEBUG CODE ####
+        
+        self.last_position = 0 # Reset last_position to 0 after processing move, Chien
     def find_past_position(self, print_time):
         if self.extruder_stepper is None:
             return 0.

@@ -101,6 +101,20 @@ class Move:
         self.max_start_v2 = max_start_v2
         self.max_smoothed_v2 = min(
             max_start_v2, prev_move.max_smoothed_v2 + prev_move.smooth_delta_v2)
+        
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        # Only print debug for moves that have extruder movement
+        #if abs(self.axes_d[5]) > 0.00001:
+        #    gcode = self.toolhead.printer.lookup_object('gcode')
+        #    gcode.respond_info(f"TOOLHEAD JUNCTION DEBUG: Move has E={self.axes_d[5]}, extruder_v2={extruder_v2}, final max_start_v2={self.max_start_v2}")
+            
+        #    # Check if extruder is limiting the junction velocity
+        #    if max_start_v2 == extruder_v2:
+        #        gcode.respond_info("TOOLHEAD JUNCTION DEBUG: Extruder is limiting the junction velocity!")
+            
+        #    # Show key values that went into the calculation
+        #    gcode.respond_info(f"TOOLHEAD JUNCTION DEBUG: self.max_cruise_v2={self.max_cruise_v2}, prev max_cruise_v2={prev_move.max_cruise_v2}")
+        # #### END DEBUG CODE ####
     def set_junction(self, start_v2, cruise_v2, end_v2):
         # Determine accel, cruise, and decel portions of the move distance
         half_inv_accel = .5 / self.accel
@@ -113,9 +127,23 @@ class Move:
         self.end_v = end_v = math.sqrt(end_v2)
         # Determine time spent in each portion of move (time is the
         # distance divided by average velocity)
-        self.accel_t = accel_d / ((start_v + cruise_v) * 0.5)
-        self.cruise_t = cruise_d / cruise_v
-        self.decel_t = decel_d / ((end_v + cruise_v) * 0.5)
+        # Safe accel_t calculation
+        if (start_v + cruise_v) > 0.:
+            self.accel_t = accel_d / ((start_v + cruise_v) * 0.5)
+        else:
+            self.accel_t = 0.
+        
+        # Safe cruise_t calculation
+        if cruise_v > 0.:
+            self.cruise_t = cruise_d / cruise_v
+        else:
+            self.cruise_t = 0.
+            
+        # Safe decel_t calculation
+        if (end_v + cruise_v) > 0.:
+            self.decel_t = decel_d / ((end_v + cruise_v) * 0.5)
+        else:
+            self.decel_t = 0.
 
 LOOKAHEAD_FLUSH_TIME = 0.250
 
@@ -188,13 +216,29 @@ class LookAheadQueue:
         # Remove processed moves from the queue
         del queue[:flush_count]
     def add_move(self, move):
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        # Debug extruder movement
+        gcode = self.toolhead.printer.lookup_object('gcode')
+        #gcode.respond_info(f"TOOLHEAD MOVE DEBUG: Adding move with axes_d={move.axes_d}, axes_r={move.axes_r}")
+        if abs(move.axes_d[5]) > 0.00001:  # Check if this is an extruder move
+            gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Extruder move detected! E distance={move.axes_d[5]}")
+            #gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move details - start_pos={move.start_pos}, end_pos={move.end_pos}")
+            #gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move params - accel={move.accel}, cruise_v2={move.max_cruise_v2}")
+        # #### END DEBUG CODE ####
+
         self.queue.append(move)
         if len(self.queue) == 1:
+            # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+            #gcode.respond_info(f"TOOLHEAD DEBUG: First move in queue, no junction to calculate. E move present: {abs(move.axes_d[5]) > 0.00001}")
+            # #### END DEBUG CODE ####
             return
         move.calc_junction(self.queue[-2])
         self.junction_flush -= move.min_move_t
         if self.junction_flush <= 0.:
             # Enough moves have been queued to reach the target flush time.
+            # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+            gcode.respond_info(f"TOOLHEAD DEBUG: Flushing move queue with {len(self.queue)} moves")
+            # #### END DEBUG CODE ####
             self.flush(lazy=True)
 
 BUFFER_TIME_LOW = 1.0
@@ -342,6 +386,11 @@ class ToolHead:
             self.printer.send_event("toolhead:sync_print_time",
                                     curtime, est_print_time, self.print_time)
     def _process_moves(self, moves):
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        gcode = self.printer.lookup_object('gcode')
+        gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Processing {len(moves)} moves")
+        # #### END DEBUG CODE ####
+        
         # Resync print_time if necessary
         if self.special_queuing_state:
             if self.special_queuing_state != "Drip":
@@ -351,8 +400,23 @@ class ToolHead:
             self._calc_print_time()
         # Queue moves into trapezoid motion queue (trapq)
         next_move_time = self.print_time
+        
+        # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+        #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Starting at print_time={next_move_time:.6f}")
+        # #### END DEBUG CODE ####
+        
         for move in moves:
+            # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+            has_extruder = bool(move.axes_d[5])
+            #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Processing move - kinematic={move.is_kinematic_move}, extruder={has_extruder}, E_distance={move.axes_d[5]:.6f}")
+            # #### END DEBUG CODE ####
+            
             if move.is_kinematic_move:
+                # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+                #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Sending kinematic move to trapq_append at time={next_move_time:.6f}")
+                #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Move timing - accel_t={move.accel_t:.6f}, cruise_t={move.cruise_t:.6f}, decel_t={move.decel_t:.6f}")
+                # #### END DEBUG CODE ####
+                
                 self.trapq_append(
                     self.trapq, next_move_time,
                     move.accel_t, move.cruise_t, move.decel_t,
@@ -362,7 +426,17 @@ class ToolHead:
                     move.axes_r[3], move.axes_r[4],
                     move.start_v, move.cruise_v, move.accel)
             if move.axes_d[5]:
+                # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE DETECTED! *** E_distance={move.axes_d[5]:.6f}")
+                #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Extruder move details - E_distance={move.axes_d[5]:.6f}, start_v={move.start_v:.6f}, cruise_v={move.cruise_v:.6f}")
+                # #### END DEBUG CODE ####
+                
                 self.extruder.move(next_move_time, move)
+                
+                # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
+                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE COMPLETED ***")
+                # #### END DEBUG CODE ####
+                
             next_move_time = (next_move_time + move.accel_t
                               + move.cruise_t + move.decel_t)
             for cb in move.timing_callbacks:
@@ -480,14 +554,33 @@ class ToolHead:
         if last_move is not None:
             last_move.limit_next_junction_speed(speed)
     def move(self, newpos, speed):
+        # Create a move and add it to the move queue
+        gcode_logging_debug = self.printer.lookup_object('gcode')
+        gcode_logging_debug.respond_info(
+            f"TOOLHEAD DEBUG: move() called with newpos={['%.4f' % p for p in newpos]} speed={speed}"
+        )
         move = Move(self, self.commanded_pos, newpos, speed)
-        if not move.move_d:
-            return
-        if move.is_kinematic_move:
+        # Perform kinematic check if any axes move
+        axes_d = move.axes_d
+        if axes_d[0] or axes_d[1] or axes_d[2] or axes_d[3] or axes_d[4]:
+            # Move kinematic axes
             self.kin.check_move(move)
-        if move.axes_d[5]:
+            extruder_move = bool(axes_d[5])
+            if extruder_move:
+                #gcode_logging_debug.respond_info(
+                #    f"TOOLHEAD DEBUG: Mixed move with extruder component delta_e={axes_d[5]:.4f}, calling extruder.check_move()"
+                #)
+                self.extruder.check_move(move)
+        elif axes_d[5]:
+            # Extruder only move
+            gcode_logging_debug.respond_info(
+                f"TOOLHEAD DEBUG: Extruder-only move detected with delta_e={axes_d[5]:.4f}"
+            )
             self.extruder.check_move(move)
-        self.commanded_pos[:] = move.end_pos
+        self.commanded_pos[:] = newpos
+        #gcode_logging_debug.respond_info(
+        #    f"TOOLHEAD DEBUG: Updated commanded_pos to {['%.4f' % p for p in self.commanded_pos]}, adding move to queue"
+        #)
         self.lookahead.add_move(move)
         if self.print_time > self.need_check_pause:
             self._check_pause()
@@ -512,7 +605,7 @@ class ToolHead:
             eventtime = self.reactor.pause(eventtime + 0.100)
     def set_extruder(self, extruder, extrude_pos):
         self.extruder = extruder
-        self.commanded_pos[3] = extrude_pos
+        self.commanded_pos[5] = extrude_pos
     def get_extruder(self):
         return self.extruder
     # Homing "drip move" handling

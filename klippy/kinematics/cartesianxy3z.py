@@ -5,7 +5,14 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import logging
 import stepper
+# Import HomingMove directly
+from extras.homing import HomingMove
 from . import idex_modes
+# Direct import of safety module
+try:
+    from extras import cartesianxy3z_safety
+except ImportError:
+    cartesianxy3z_safety = None
 
 class CartesianXY3Z:
     def __init__(self, toolhead, config):
@@ -21,6 +28,8 @@ class CartesianXY3Z:
         ranges = [r.get_range() for r in self.rails]
         self.axes_min = toolhead.Coord(*[r[0] for r in ranges], e=0.)
         self.axes_max = toolhead.Coord(*[r[1] for r in ranges], e=0.)
+        # Option to bypass Z home together for debugging
+        self.bypass_z_home_together = config.getboolean('bypass_z_home_together', True)
         self.dc_module = None
         if config.has_section('dual_carriage'):
             dc_config = config.getsection('dual_carriage')
@@ -56,7 +65,56 @@ class CartesianXY3Z:
                                               above=0., maxval=max_velocity)
         self.max_b_accel = config.getfloat('max_b_accel', self.max_z_accel,
                                            above=0., maxval=max_accel)
+        # Get the post-homing Z movement distance (default 62.8mm)
+        self.post_homing_z_lift = config.getfloat('post_homing_z_lift', -60)
         self.limits = [(1.0, -1.0)] * 5  # For x, y, z, a, b axes
+        
+        # Initialize safety module directly
+        self.safety_module = None
+        if cartesianxy3z_safety is not None:
+            try:
+                # Log safety module configuration status
+                logging.info("CartesianXY3Z: Initializing safety module")
+                
+                # Check which parameters exist in the config
+                safety_params = [
+                    'joint_ball_diameter', 'wagon_length', 'wagon_rail_z_offset',
+                    'x_distance_between_joints_ab', 'y_distance_plate_to_joint_z',
+                    'y_overhang_plate_to_joints_ab', 'plate_thickness',
+                    'printing_area_x_length', 'printing_area_y_length',
+                    'joint_ball_inset', 'alu_mount_plate_thickness',
+                    'joint_mount_thickness', 'y_distance_joints_ab_to_rail',
+                    'x_railspace_ab_inwards', 'x_railspace_ab_outwards',
+                    'y_railspace_z_inwards', 'total_plate_height'
+                ]
+                
+                # Check each parameter and log whether it's using default or config value
+                found_params = []
+                default_params = []
+                for param in safety_params:
+                    # Use sentinel to check if parameter exists in config
+                    sentinel_obj = object()
+                    val = config.get(param, sentinel_obj, note_valid=False)
+                    if val is not sentinel_obj:
+                        found_params.append(param)
+                    else:
+                        default_params.append(param)
+                
+                if found_params:
+                    logging.info("CartesianXY3Z Safety: Found %d parameters in config: %s", 
+                                len(found_params), ", ".join(found_params))
+                
+                if default_params:
+                    logging.info("CartesianXY3Z Safety: Using defaults for %d parameters: %s", 
+                                len(default_params), ", ".join(default_params))
+                
+                # Create safety module with config
+                self.safety_module = cartesianxy3z_safety.CartesianXY3ZSafety(config)
+                logging.info("CartesianXY3Z: Safety module loaded successfully")
+                
+            except Exception as e:
+                logging.warning("CartesianXY3Z: Failed to initialize safety module: %s", str(e))
+                self.safety_module = None
 
     def get_steppers(self):
         return [s for rail in self.rails for s in rail.get_steppers()]
@@ -167,158 +225,174 @@ class CartesianXY3Z:
             gcode.respond_info(f"DEBUG: {axis_name} home_rails FAILED with error: {str(e)}")
 
     def home_z_axes_together(self, homing_state):
-        # Get the Z, A, B rails if they need to be homed
-        z_rails = []
-        z_axes = []
-        for axis_name in ['z', 'a', 'b']:
-            axis = "xyzab".index(axis_name)
-            if axis in homing_state.get_axes():
-                z_rails.append(self.rails[axis])
-                z_axes.append(axis)
+        # This method performs coordinated force move for all Z/A/B axes together
+        # When any endstop triggers, that axis stops and retracts slightly
+        # Then waits for other axes to complete their fast homing
         
-        if not z_rails:
-            return  # No Z axes to home
-        
-        # Determine movement for all Z axes together
-        forcepos = [None, None, None, None, None]  # x, y, z, a, b
-        homepos = [None, None, None, None, None]  # x, y, z, a, b
-        
-        # Set the target positions for all Z axes
-        for i, axis in enumerate(z_axes):
-            rail = z_rails[i]
-            position_min, position_max = rail.get_range()
-            hi = rail.get_homing_info()
-            
-            # All Z axes move in the same direction during initial movement
-            if hi.positive_dir:
-                forcepos[axis] = position_min + 1.0  # Move to near minimum
-            else:
-                forcepos[axis] = position_max - 1.0  # Move to near maximum
-        
-        # Get gcode object for logging
         gcode = self.printer.lookup_object('gcode')
-        gcode.respond_info(f"DEBUG: Starting Z/A/B axes initial positioning with rails: {z_rails}")
+        toolhead = homing_state.toolhead
+        z_axes = [2, 3, 4]  # z, a, b
         
-        # Use proper homing motion instead of regular move
-        # Create a temporary homepos with all Z axes at the same target position
-        homepos_z = [None] * 5  # x, y, z, a, b
+        gcode.respond_info("DEBUG: Starting home_z_axes_together")
         
-        # Choose a direction that moves all Z axes safely (use first rail's direction as reference)
-        reference_rail = z_rails[0]
-        reference_hi = reference_rail.get_homing_info()
-        homing_speed = getattr(reference_hi, 'speed', 5.0)  # Use first rail's speed
-        
-        # Create a dummy forcepoos for coordinated Z movement
-        dummy_forcepos = [None] * 5  # x, y, z, a, b
-        
-        for axis in z_axes:
-            min_pos, max_pos = self.rails[axis].get_range()
-            # Choose target position based on homing direction of reference rail
-            if getattr(reference_hi, 'positive_dir', False):
-                dummy_forcepos[axis] = min_pos - 10.0  # Force movement in positive direction
-                homepos_z[axis] = min_pos + 5.0  # Target position slightly above min
-                gcode.respond_info(f"DEBUG: Axis {axis} moving in positive direction")
-            else:
-                dummy_forcepos[axis] = max_pos + 10.0  # Force movement in negative direction
-                homepos_z[axis] = max_pos - 5.0  # Target position slightly below max
-                gcode.respond_info(f"DEBUG: Axis {axis} moving in negative direction")
-        
-        # Use a proper homing move that will stop when any endstop triggers
         try:
-            # Get homing object for proper endstop-aware moves
-            homing_obj = self.printer.lookup_object('homing')
+            # Phase 1: Force move all Z/A/B axes together until endstops trigger
+            # This is the fast homing phase where all axes move simultaneously
             
-            # Create a combined list of endstops from all z_rails
-            all_endstops = []
-            for rail in z_rails:
-                rail_endstops = rail.get_endstops()
-                all_endstops.extend(rail_endstops)
+            # Reset positions for homing
+            homing_axes_str = 'zab'
+            toolhead.set_position([0., 0., 0., 0., 0.] + toolhead.get_position()[5:], homing_axes=homing_axes_str)
             
-            gcode.respond_info(f"DEBUG: Monitoring endstops for Z move: {all_endstops}")
-            
-            # Create a HomingMove object with all Z endstops
-            hmove = homing_obj.HomingMove(self.printer, all_endstops, toolhead=homing_state.toolhead)
-            
-            # Reset position before move
-            toolhead = homing_state.toolhead
-            toolhead.set_position([0., 0., 0., 0., 0.] + toolhead.get_position()[5:], homing_axes=[])
-            
-            # Calculate target position for synchronous movement
+            # Calculate force move positions for all Z axes
             current_pos = toolhead.get_position()
-            move_pos = list(current_pos)
+            force_move_distance = 356.0  # Large distance to ensure endstop contact
             
-            # Update target positions for all Z axes to move together
+            # Create individual homing moves for each axis to allow independent stopping
+            axis_states = {}  # Track which axes are still moving
+            
             for axis in z_axes:
-                # Use the homepos_z values we calculated above based on homing direction
-                move_pos[axis] = homepos_z[axis]
+                rail = self.rails[axis]
+                hi = rail.get_homing_info()
+                axis_name = 'xyzab'[axis]
+                
+                # Determine movement direction
+                if getattr(hi, 'positive_dir', False):
+                    target_pos = current_pos[axis] + force_move_distance
+                    direction = "positive"
+                else:
+                    target_pos = current_pos[axis] - force_move_distance
+                    direction = "negative"
+                
+                axis_states[axis] = {
+                    'rail': rail,
+                    'target_pos': target_pos,
+                    'direction': direction,
+                    'completed': False,
+                    'endstops': rail.get_endstops()
+                }
+                
+                gcode.respond_info(f"DEBUG: Axis {axis_name} will force move in {direction} direction")
             
-            gcode.respond_info(f"DEBUG: Starting coordinated homing move for Z/A/B axes to: {move_pos}")
+            # Start coordinated force move using HomingMove with all endstops
+            all_endstops = []
+            for axis_info in axis_states.values():
+                all_endstops.extend(axis_info['endstops'])
             
-            # Use a proper homing move that will monitor endstops
-            # The homing_move method will stop when any endstop triggers
-            hmove.homing_move(move_pos, 5.0)  # Slow speed for safety
+            # Create target position for coordinated move
+            move_pos = list(current_pos)
+            for axis, info in axis_states.items():
+                move_pos[axis] = info['target_pos']
             
-            gcode.respond_info(f"DEBUG: Z/A/B axes coordinated homing move completed")
+            gcode.respond_info("DEBUG: Starting coordinated force move for all Z/A/B axes")
+            fast_speed = 15.0  # Fast force move speed
             
-            # Check which endstops were triggered (if any)
-            for i, rail in enumerate(z_rails):
-                endstops = rail.get_endstops()
-                for es, name in endstops:
-                    triggered = False
-                    for s in es.get_steppers():
-                        if s.get_name() in hmove.stepper_positions:
-                            triggered = True
-                            gcode.respond_info(f"DEBUG: Endstop '{name}' on axis {z_axes[i]} was triggered during coordinated move")
+            # Use HomingMove to coordinate all axes - when ANY endstop triggers, ALL axes stop
+            hmove = HomingMove(self.printer, all_endstops, toolhead=toolhead)
+            hmove.homing_move(move_pos, fast_speed, check_triggered=True)
             
-            gcode.respond_info(f"DEBUG: Coordinated Z/A/B move completed - ready for individual homing")
-        
+            gcode.respond_info("DEBUG: Coordinated force move completed - at least one endstop triggered")
+            
+            # Phase 2: Retract all axes slightly from endstops
+            retract_distance = 2.0  # Small retraction to back off endstops
+            current_pos = toolhead.get_position()
+            retract_pos = list(current_pos)
+            
+            for axis in z_axes:
+                rail = self.rails[axis]
+                hi = rail.get_homing_info()
+                axis_name = 'xyzab'[axis]
+                
+                # Retract in opposite direction of homing
+                if getattr(hi, 'positive_dir', False):
+                    retract_pos[axis] = current_pos[axis] - retract_distance
+                else:
+                    retract_pos[axis] = current_pos[axis] + retract_distance
+                
+                gcode.respond_info(f"DEBUG: Retracting {axis_name} axis by {retract_distance}mm")
+            
+            # Perform retraction move
+            toolhead.move(retract_pos, fast_speed)
+            toolhead.wait_moves()
+            gcode.respond_info("DEBUG: All Z/A/B axes retracted from endstops")
+            
+            gcode.respond_info("DEBUG: Coordinated z homing fast homing completed")
             
         except Exception as e:
-            gcode.respond_info(f"DEBUG: Z/A/B axes initial positioning failed: {str(e)}")
-            # Don't throw an error here, we'll try to home axes individually
+            gcode.respond_info(f"ERROR: Coordinated z homing fast homing failed: {str(e)}")
+            gcode.respond_info("DEBUG: Will proceed with individual axis homing")
+            # Don't raise exception - let individual homing handle recovery
     
     def home(self, homing_state):
-        # Custom homing sequence: Z/A/B together first, then individually, then X, then Y
-        axes = homing_state.get_axes()
-        
-        # Debug logging
         gcode = self.printer.lookup_object('gcode')
-        gcode.respond_info(f"DEBUG: home method called with axes={axes}")
+        axes = homing_state.get_axes()
+        z_axes_homed = False
         
-        # First move Z, A, B axes together if any of them need to be homed
+        # Check if any Z axes need to be homed
         z_axes_to_home = []
         for axis_name in ['z', 'a', 'b']:
             axis = "xyzab".index(axis_name)
             if axis in axes:
                 z_axes_to_home.append(axis)
+                z_axes_homed = True
         
-        gcode.respond_info(f"DEBUG: z_axes_to_home={z_axes_to_home}")
-        
+        # Handle Z/A/B axes homing
         if z_axes_to_home:
-            # First move Z, A, B axes together to get them roughly aligned
-            gcode.respond_info("DEBUG: Starting home_z_axes_together")
-            self.home_z_axes_together(homing_state)
-            gcode.respond_info("DEBUG: Completed home_z_axes_together")
+            # Only use coordinated homing if ALL Z, A, B axes are being homed together
+            # This happens with G28 (all axes) or G28 Z A B (explicit all Z axes)
+            all_z_axes = [2, 3, 4]  # z, a, b
             
-            # Then home each Z axis individually in the specified order
-            for axis_name in ['z', 'a', 'b']:
-                axis = "xyzab".index(axis_name)
-                if axis in axes:
-                    gcode.respond_info(f"DEBUG: Starting individual homing for {axis_name}-axis")
+            if set(z_axes_to_home) != set(all_z_axes):
+                gcode.respond_info("DEBUG: Using individual homing due to not all Z axes being homed")
+                
+                # Home each Z axis individually
+                for axis in z_axes_to_home:
+                    axis_name = 'xyzab'[axis]
+                    gcode.respond_info(f"Starting individual homing for {axis_name}-axis")
                     self.home_axis(homing_state, axis, self.rails[axis])
+                    gcode.respond_info(f"Completed individual homing for {axis_name}-axis")
+            else:
+                # Use coordinated homing followed by individual precision homing
+                gcode.respond_info("Starting coordinated z-together homing fast homing sequence")
+                self.home_z_axes_together(homing_state)
+                gcode.respond_info("Completed coordinated z-together homing fast homing")
+                
+                # Now do individual homing for precision (Z, then A, then B)
+                for axis in [2, 3, 4]:  # z, a, b in order
+                    if axis in z_axes_to_home:
+                        axis_name = 'xyzab'[axis]
+                        gcode.respond_info(f"Starting individual precision homing for {axis_name}-axis")
+                        self.home_axis(homing_state, axis, self.rails[axis])
+                        gcode.respond_info(f"Completed individual precision homing for {axis_name}-axis")
         
-        # Then home X if needed
-        if 0 in axes:  # X axis
-            gcode.respond_info("DEBUG: Starting X-axis homing")
+        # Perform post-homing Z lift if Z was homed (only lift Z axis by 62.8mm)
+        #if 2 in z_axes_to_home:  # Only if Z axis was homed
+         #   toolhead = homing_state.toolhead
+          #  current_pos = toolhead.get_position()
+           # new_pos = list(current_pos)
+            
+            # Apply the lift only to Z axis (index 2) - 62.8mm away from endstop
+            #new_pos[2] += self.post_homing_z_lift
+            
+            #gcode.respond_info(f"DEBUG: Moving Z axis away from endstop by {self.post_homing_z_lift}mm")
+            #try:
+            #    toolhead.move(new_pos, self.max_z_velocity)
+                #toolhead.wait_moves()
+                #gcode.respond_info("DEBUG: Post-homing Z lift completed")
+                #new_pos[2] = 445.0  # Set Z to 445mm
+                #toolhead.set_position(new_pos)
+                #gcode.respond_info("DEBUG: Setting kinematic position Z=445")
+            #except Exception as e:
+            #    gcode.respond_info(f"ERROR: Post-homing Z movement failed: {str(e)}")
+        
+        # Home X axis
+        if 0 in axes:
             if self.dc_module is not None and 0 == self.dual_carriage_axis:
-                gcode.respond_info("DEBUG: Using dual_carriage module for X-axis homing")
                 self.dc_module.home(homing_state)
             else:
-                gcode.respond_info("DEBUG: Using standard homing for X-axis")
                 self.home_axis(homing_state, 0, self.rails[0])
         
-        # Finally home Y if needed
-        if 1 in axes:  # Y axis
+        # Home Y axis
+        if 1 in axes:
             gcode.respond_info("DEBUG: Starting Y-axis homing")
             if self.dc_module is not None and 1 == self.dual_carriage_axis:
                 gcode.respond_info("DEBUG: Using dual_carriage module for Y-axis homing")
@@ -354,17 +428,22 @@ class CartesianXY3Z:
         # Move with Z, A, or B - update velocity and accel for slower axes
         self._check_endstops(move)
         
-        # Call external safety module if it exists
-        try:
-            safety_module = self.printer.lookup_object('cartesianxy3z_safety')
-            # The safety module will raise an exception if the move is unsafe
-            safety_module.check_move(move)
-        except self.printer.config_error:
-            # Safety module not loaded, continue without safety checks
+        # Use directly imported safety module if available
+        if self.safety_module is not None:
+            try:
+                # The safety module will raise an exception if the move is unsafe
+                self.safety_module.check_move(move)
+                gcode = self.printer.lookup_object('gcode')
+                gcode.respond_info("CartesianXY3Z Safety: Move is safe")
+            except Exception as e:
+                logging.warning("CartesianXY3Z: Safety check failed: %s", str(e))
+                # Continue with the move even if safety check fails
+                # The safety module will have raised appropriate warnings
+        else:
+            # Safety module not available, continue without safety checks
             gcode = self.printer.lookup_object('gcode')
-            gcode.respond_info("CartesianXY3Z Safety: Module not found - continuing without safety checks")
-            logging.info("CartesianXY3Z: Safety module not found, continuing without safety checks") #store info into the klipper log
-            pass
+            gcode.respond_info("CartesianXY3Z Safety: Module not available - continuing without safety checks")
+            logging.info("CartesianXY3Z: Safety module not available, continuing without safety checks")
         
         # Calculate the slowest axis ratio for Z, A, B
         z_ratio = 1.0
