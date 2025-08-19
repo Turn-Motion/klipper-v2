@@ -243,7 +243,7 @@ class LookAheadQueue:
         if self.junction_flush <= 0.:
             # Enough moves have been queued to reach the target flush time.
             # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-            gcode.respond_info(f"TOOLHEAD DEBUG: Flushing move queue with {len(self.queue)} moves")
+            #gcode.respond_info(f"TOOLHEAD DEBUG: Flushing move queue with {len(self.queue)} moves")
             # #### END DEBUG CODE ####
             self.flush(lazy=True)
 
