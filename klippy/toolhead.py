@@ -104,16 +104,16 @@ class Move:
         
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
         # Only print debug for moves that have extruder movement
-        if abs(self.axes_d[5]) > 0.00001:
-            gcode = self.toolhead.printer.lookup_object('gcode')
-            gcode.respond_info(f"TOOLHEAD JUNCTION DEBUG: Move has E={self.axes_d[5]}, extruder_v2={extruder_v2}, final max_start_v2={self.max_start_v2}")
+        #if abs(self.axes_d[5]) > 0.00001:
+        #    gcode = self.toolhead.printer.lookup_object('gcode')
+        #    gcode.respond_info(f"TOOLHEAD JUNCTION DEBUG: Move has E={self.axes_d[5]}, extruder_v2={extruder_v2}, final max_start_v2={self.max_start_v2}")
             
-            # Check if extruder is limiting the junction velocity
-            if max_start_v2 == extruder_v2:
-                gcode.respond_info("TOOLHEAD JUNCTION DEBUG: Extruder is limiting the junction velocity!")
+        #    # Check if extruder is limiting the junction velocity
+        #    if max_start_v2 == extruder_v2:
+        #        gcode.respond_info("TOOLHEAD JUNCTION DEBUG: Extruder is limiting the junction velocity!")
             
-            # Show key values that went into the calculation
-            gcode.respond_info(f"TOOLHEAD JUNCTION DEBUG: self.max_cruise_v2={self.max_cruise_v2}, prev max_cruise_v2={prev_move.max_cruise_v2}")
+        #    # Show key values that went into the calculation
+        #    gcode.respond_info(f"TOOLHEAD JUNCTION DEBUG: self.max_cruise_v2={self.max_cruise_v2}, prev max_cruise_v2={prev_move.max_cruise_v2}")
         # #### END DEBUG CODE ####
     def set_junction(self, start_v2, cruise_v2, end_v2):
         # Determine accel, cruise, and decel portions of the move distance
@@ -219,17 +219,17 @@ class LookAheadQueue:
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
         # Debug extruder movement
         gcode = self.toolhead.printer.lookup_object('gcode')
-        gcode.respond_info(f"TOOLHEAD MOVE DEBUG: Adding move with axes_d={move.axes_d}, axes_r={move.axes_r}")
+        #gcode.respond_info(f"TOOLHEAD MOVE DEBUG: Adding move with axes_d={move.axes_d}, axes_r={move.axes_r}")
         if abs(move.axes_d[5]) > 0.00001:  # Check if this is an extruder move
-            gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Extruder move detected! E distance={move.axes_d[5]}, E ratio={move.axes_r[5]}")
-            gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move details - start_pos={move.start_pos}, end_pos={move.end_pos}")
-            gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move params - accel={move.accel}, cruise_v2={move.max_cruise_v2}")
+            gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Extruder move detected! E distance={move.axes_d[5]}")
+            #gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move details - start_pos={move.start_pos}, end_pos={move.end_pos}")
+            #gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move params - accel={move.accel}, cruise_v2={move.max_cruise_v2}")
         # #### END DEBUG CODE ####
 
         self.queue.append(move)
         if len(self.queue) == 1:
             # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-            gcode.respond_info(f"TOOLHEAD DEBUG: First move in queue, no junction to calculate. E move present: {abs(move.axes_d[5]) > 0.00001}")
+            #gcode.respond_info(f"TOOLHEAD DEBUG: First move in queue, no junction to calculate. E move present: {abs(move.axes_d[5]) > 0.00001}")
             # #### END DEBUG CODE ####
             return
         move.calc_junction(self.queue[-2])
@@ -237,7 +237,7 @@ class LookAheadQueue:
         if self.junction_flush <= 0.:
             # Enough moves have been queued to reach the target flush time.
             # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-            gcode.respond_info(f"TOOLHEAD DEBUG: Flushing move queue with {len(self.queue)} moves, E move present: {abs(move.axes_d[5]) > 0.00001}")
+            gcode.respond_info(f"TOOLHEAD DEBUG: Flushing move queue with {len(self.queue)} moves")
             # #### END DEBUG CODE ####
             self.flush(lazy=True)
 
@@ -402,19 +402,19 @@ class ToolHead:
         next_move_time = self.print_time
         
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-        gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Starting at print_time={next_move_time:.6f}")
+        #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Starting at print_time={next_move_time:.6f}")
         # #### END DEBUG CODE ####
         
         for move in moves:
             # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
             has_extruder = bool(move.axes_d[5])
-            gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Processing move - kinematic={move.is_kinematic_move}, extruder={has_extruder}, E_distance={move.axes_d[5]:.6f}")
+            #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Processing move - kinematic={move.is_kinematic_move}, extruder={has_extruder}, E_distance={move.axes_d[5]:.6f}")
             # #### END DEBUG CODE ####
             
             if move.is_kinematic_move:
                 # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Sending kinematic move to trapq_append at time={next_move_time:.6f}")
-                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Move timing - accel_t={move.accel_t:.6f}, cruise_t={move.cruise_t:.6f}, decel_t={move.decel_t:.6f}")
+                #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Sending kinematic move to trapq_append at time={next_move_time:.6f}")
+                #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Move timing - accel_t={move.accel_t:.6f}, cruise_t={move.cruise_t:.6f}, decel_t={move.decel_t:.6f}")
                 # #### END DEBUG CODE ####
                 
                 self.trapq_append(
@@ -427,14 +427,14 @@ class ToolHead:
                     move.start_v, move.cruise_v, move.accel)
             if move.axes_d[5]:
                 # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE DETECTED! *** Calling extruder.move() at time={next_move_time:.6f}")
-                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Extruder move details - E_distance={move.axes_d[5]:.6f}, start_v={move.start_v:.6f}, cruise_v={move.cruise_v:.6f}")
+                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE DETECTED! *** E_distance={move.axes_d[5]:.6f}")
+                #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Extruder move details - E_distance={move.axes_d[5]:.6f}, start_v={move.start_v:.6f}, cruise_v={move.cruise_v:.6f}")
                 # #### END DEBUG CODE ####
                 
                 self.extruder.move(next_move_time, move)
                 
                 # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE COMPLETED *** extruder.move() returned successfully")
+                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE COMPLETED ***")
                 # #### END DEBUG CODE ####
                 
             next_move_time = (next_move_time + move.accel_t
@@ -567,9 +567,9 @@ class ToolHead:
             self.kin.check_move(move)
             extruder_move = bool(axes_d[5])
             if extruder_move:
-                gcode_logging_debug.respond_info(
-                    f"TOOLHEAD DEBUG: Mixed move with extruder component delta_e={axes_d[5]:.4f}, calling extruder.check_move()"
-                )
+                #gcode_logging_debug.respond_info(
+                #    f"TOOLHEAD DEBUG: Mixed move with extruder component delta_e={axes_d[5]:.4f}, calling extruder.check_move()"
+                #)
                 self.extruder.check_move(move)
         elif axes_d[5]:
             # Extruder only move
@@ -578,9 +578,9 @@ class ToolHead:
             )
             self.extruder.check_move(move)
         self.commanded_pos[:] = newpos
-        gcode_logging_debug.respond_info(
-            f"TOOLHEAD DEBUG: Updated commanded_pos to {['%.4f' % p for p in self.commanded_pos]}, adding move to queue"
-        )
+        #gcode_logging_debug.respond_info(
+        #    f"TOOLHEAD DEBUG: Updated commanded_pos to {['%.4f' % p for p in self.commanded_pos]}, adding move to queue"
+        #)
         self.lookahead.add_move(move)
         if self.print_time > self.need_check_pause:
             self._check_pause()

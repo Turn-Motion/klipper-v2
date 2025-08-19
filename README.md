@@ -47,6 +47,17 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### CartesianXY3Z Speed Limiting deleted for Debug (19.08.2025)
+Disable the Z, A, and B axes speed limiting in the CartesianXY3Z kinematics module. This allows testing unsynchronized movement issues that may occur when using the A and B axes. The speed limiting code calculates a ratio based on the slowest axis among Z, A, and B, and applies it to maintain synchronized movement. Commenting out this code allows the axes to move at their full configured speeds without this coordination, which can help diagnose movement and extrusion-related issues.
+
+### Reduced Logging / Ztilt Logging (06.08.2025)
+- Reduced verbose debug logging in toolhead.py and extruder.py modules while preserving essential start/end logs for key code flows.
+- Enhanced Ztilt logging about the Ztilt process, including the initial parameters, final parameters, and per-position adjustments.
+
+### Reset Z Tilt (05.08.2025)
+- Fixed stepper detection for Z, A, and B axes using name-based identification when `is_active_axis()` fails
+- Reset Z-tilt to use conventional method, just improve the stepper detection.
+
 ### Division by Zero Protection in Motion Planning (04.08.2025)
 - Added safety checks in toolhead.py to prevent division by zero errors in motion timing calculations
 

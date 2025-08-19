@@ -17,11 +17,14 @@ class ZAdjustHelper:
                                             self.handle_connect)
     def handle_connect(self):
         kin = self.printer.lookup_object('toolhead').get_kinematics()
+        gcode = self.printer.lookup_object('gcode')
         logging.info("Z_TILT DEBUG: Kinematics type: %s", type(kin).__name__)
+        gcode.respond_info("Z-Tilt: Kinematics type: %s" % type(kin).__name__)
         
         # Get all steppers and log their details
         all_steppers = kin.get_steppers()
         logging.info("Z_TILT DEBUG: Total steppers found: %d", len(all_steppers))
+        gcode.respond_info("Z-Tilt: Total steppers found: %d" % len(all_steppers))
         for i, s in enumerate(all_steppers):
             logging.info("Z_TILT DEBUG: Stepper %d: name=%s, z=%s, a=%s, b=%s", 
                         i, s.get_name(), s.is_active_axis('z'), 
@@ -47,6 +50,7 @@ class ZAdjustHelper:
         # since they physically move in the Z direction
         if hasattr(kin, 'rails') and len(kin.rails) >= 5:  # CartesianXY3Z has 5 rails: x,y,z,a,b
             logging.info("Z_TILT DEBUG: CartesianXY3Z detected with %d rails", len(kin.rails))
+            gcode.respond_info("Z-Tilt: CartesianXY3Z kinematics detected with %d rails" % len(kin.rails))
             
             # Original implementation (commented out)
             # a_steppers = [s for s in kin.get_steppers() if s.is_active_axis('a')]
@@ -54,11 +58,12 @@ class ZAdjustHelper:
             #    logging.info("Z_TILT DEBUG: A-stepper %d: %s", i, s.get_name())
             
             # TEMPORARY FIX: Find A-axis steppers by name
+            a_steppers = []
             for s in kin.get_steppers():
                 name = s.get_name()
                 if name == 'stepper_a' or s.is_active_axis('a'):
                     logging.info("Z_TILT DEBUG: Adding A stepper: %s", name)
-                    z_steppers.append(s)
+                    a_steppers.append(s)
             
             logging.info("Z_TILT DEBUG: Found %d A-axis steppers", len(a_steppers))
             
@@ -81,6 +86,7 @@ class ZAdjustHelper:
             z_steppers.extend(a_steppers)
             z_steppers.extend(b_steppers)
             logging.info("Z_TILT DEBUG: After adding A+B, total Z steppers: %d", len(z_steppers))
+            gcode.respond_info("Z-Tilt: Using %d Z steppers (including A and B axes)" % len(z_steppers))
         else:
             logging.info("Z_TILT DEBUG: Not CartesianXY3Z or missing rails attribute")
         # ---- Turn V2 ----
@@ -96,17 +102,28 @@ class ZAdjustHelper:
         # Log the names of the Z steppers found
         stepper_names = [s.get_name() for s in z_steppers]
         logging.info("Z-Tilt using Z steppers: %s", stepper_names)
+        gcode.respond_info("Z-Tilt using Z steppers: %s" % stepper_names)
         
         self.z_steppers = z_steppers
     def adjust_steppers(self, adjustments, speed):
         toolhead = self.printer.lookup_object('toolhead')
         gcode = self.printer.lookup_object('gcode')
         curpos = toolhead.get_position()
+        
+        logging.info("Z_TILT DEBUG: adjust_steppers called with adjustments=%s, speed=%.3f", adjustments, speed)
+        logging.info("Z_TILT DEBUG: Current position before adjustment: X=%.3f Y=%.3f Z=%.3f", 
+                   curpos[0], curpos[1], curpos[2])
         # Report on movements
         stepstrs = ["%s = %.6f" % (s.get_name(), a)
                     for s, a in zip(self.z_steppers, adjustments)]
         msg = "Making the following Z adjustments:\n%s" % ("\n".join(stepstrs),)
         gcode.respond_info(msg)
+        
+        # Log detailed stepper information
+        logging.info("Z_TILT DEBUG: Detailed stepper adjustments:")
+        for i, (stepper, adj) in enumerate(zip(self.z_steppers, adjustments)):
+            logging.info("Z_TILT DEBUG:   Stepper %d: %s, adjustment=%.6f", 
+                       i, stepper.get_name(), adj)
         # Disable Z stepper movements
         toolhead.flush_step_generation()
         for s in self.z_steppers:
@@ -114,28 +131,48 @@ class ZAdjustHelper:
         # Move each z stepper (sorted from lowest to highest) until they match
         positions = [(-a, s) for a, s in zip(adjustments, self.z_steppers)]
         positions.sort(key=(lambda k: k[0]))
+        
+        logging.info("Z_TILT DEBUG: Sorted stepper positions for movement:")
+        for i, (offset, stepper) in enumerate(positions):
+            logging.info("Z_TILT DEBUG:   %d: %s, offset=%.6f", 
+                       i, stepper.get_name(), offset)
         first_stepper_offset, first_stepper = positions[0]
         z_low = curpos[2] - first_stepper_offset
+        
+        logging.info("Z_TILT DEBUG: Base Z calculation: first_stepper=%s, offset=%.6f, z_low=%.6f", 
+                   first_stepper.get_name(), first_stepper_offset, z_low)
         for i in range(len(positions)-1):
             stepper_offset, stepper = positions[i]
             next_stepper_offset, next_stepper = positions[i+1]
+            
+            logging.info("Z_TILT DEBUG: Processing stepper pair %d: %s (offset=%.6f) -> %s (offset=%.6f)", 
+                       i, stepper.get_name(), stepper_offset, next_stepper.get_name(), next_stepper_offset)
             toolhead.flush_step_generation()
             stepper.set_trapq(toolhead.get_trapq())
             curpos[2] = z_low + next_stepper_offset
+            
+            logging.info("Z_TILT DEBUG: Setting stepper %s trapq and moving to Z=%.6f", 
+                       stepper.get_name(), curpos[2])
             try:
+                logging.info("Z_TILT DEBUG: Executing move to Z=%.6f at speed=%.3f", curpos[2], speed)
                 toolhead.move(curpos, speed)
                 toolhead.set_position(curpos)
-            except:
+                logging.info("Z_TILT DEBUG: Move completed successfully")
+            except Exception as e:
                 logging.exception("ZAdjustHelper adjust_steppers")
+                logging.info("Z_TILT DEBUG: Move failed with error: %s", str(e))
                 toolhead.flush_step_generation()
                 for s in self.z_steppers:
                     s.set_trapq(toolhead.get_trapq())
                 raise
         # Z should now be level - do final cleanup
         last_stepper_offset, last_stepper = positions[-1]
+        logging.info("Z_TILT DEBUG: Final cleanup - last stepper: %s, offset=%.6f", 
+                   last_stepper.get_name(), last_stepper_offset)
         toolhead.flush_step_generation()
         last_stepper.set_trapq(toolhead.get_trapq())
         curpos[2] += first_stepper_offset
+        logging.info("Z_TILT DEBUG: Final position set to Z=%.6f", curpos[2])
         toolhead.set_position(curpos)
 
 class ZAdjustStatus:
@@ -162,6 +199,13 @@ class RetryHelper:
             config.getfloat("retry_tolerance", 0., above=0.)
         self.value_label = "Probed points range"
         self.error_msg_extra = error_msg_extra
+        self.debug = False
+        
+        # Log configuration
+        if self.default_max_retries > 0:
+            self.gcode.respond_info(
+                "Z-Tilt: Configured with %d retries and %.6f tolerance" % 
+                (self.default_max_retries, self.default_retry_tolerance))
     def start(self, gcmd):
         self.max_retries = gcmd.get_int('RETRIES', self.default_max_retries,
                                         minval=0, maxval=30)
@@ -206,111 +250,120 @@ class ZTilt:
         self.probe_helper.minimum_points(2)
         self.z_status = ZAdjustStatus(self.printer)
         self.z_helper = ZAdjustHelper(config, len(self.z_positions))
-        
-        # Configuration for the homing sequence
-        self.home_xy_before_z = config.getboolean('home_xy_before_z', True)
-        self.xy_position = config.getfloatlist('xy_position', [250., 250.], count=2)
-        self.z_endstop_name = config.get('z_endstop_sensor', 'probe')
-        self.z_hop = config.getfloat('z_hop', 5.0)
-        
         # Register Z_TILT_ADJUST command
         gcode = self.printer.lookup_object('gcode')
         gcode.register_command('Z_TILT_ADJUST', self.cmd_Z_TILT_ADJUST,
                                desc=self.cmd_Z_TILT_ADJUST_help)
-    
-    def up_home_z(self):
-        """Move Z upward until the hot end sensor is triggered"""
-        gcode = self.printer.lookup_object('gcode')
-        toolhead = self.printer.lookup_object('toolhead')
-        
-        # Get current position
-        curpos = toolhead.get_position()
-        
-        # Execute up-homing by running a gcode command
-        gcode.respond_info("Performing up-home Z operation")
-        try:
-            # Try to use the specified endstop for up-homing
-            gcode.run_script_from_command("PROBE_UP")
-        except Exception as e:
-            gcode.respond_info("Warning: PROBE_UP failed, using fallback method: %s" % str(e))
-            # Fallback method: Move Z up by z_hop distance
-            curpos[2] += self.z_hop
-            toolhead.move(curpos, 5.0)
-            gcode.respond_info("Moved Z up by %.1fmm as fallback" % self.z_hop)
-    
-    cmd_Z_TILT_ADJUST_help = "Adjust the Z tilt with complete homing sequence"
+    cmd_Z_TILT_ADJUST_help = "Adjust the Z tilt"
     def cmd_Z_TILT_ADJUST(self, gcmd):
         gcode = self.printer.lookup_object('gcode')
-        toolhead = self.printer.lookup_object('toolhead')
-        
-        # Reset Z tilt status
         self.z_status.reset()
-        
-        # Step 1: Home X and Y if configured
-        if self.home_xy_before_z:
-            gcode.respond_info("Homing X and Y axes")
-            try:
-                gcode.run_script_from_command("G28 X Y")
-            except Exception as e:
-                raise gcmd.error("Error homing X Y: %s" % str(e))
-        
-        # Step 2: Move to XY position
-        gcode.respond_info("Moving to position X=%.1f Y=%.1f" % 
-                          (self.xy_position[0], self.xy_position[1]))
-        try:
-            curpos = toolhead.get_position()
-            curpos[0] = self.xy_position[0]
-            curpos[1] = self.xy_position[1]
-            toolhead.move(curpos, 50.0)
-        except Exception as e:
-            raise gcmd.error("Error moving to XY position: %s" % str(e))
-        
-        # Step 3: Perform up-home Z
-        self.up_home_z()
-        
-        # Step 4: Start the Z-tilt adjustment process
-        gcode.respond_info("Starting Z-tilt adjustment")
         self.retry_helper.start(gcmd)
+        gcode.respond_info("Starting Z-Tilt adjustment...")
         self.probe_helper.start_probe(gcmd)
-        
-        # Note: The probe_finalize method will be called after probing completes
-        # and will handle the actual Z adjustment
-    
     def probe_finalize(self, offsets, positions):
         # Setup for coordinate descent analysis
         z_offset = offsets[2]
+        gcode = self.printer.lookup_object('gcode')
+        logging.info("Z_TILT DEBUG: Probe finalize called with offsets=%s, positions=%s", offsets, positions)
         logging.info("Calculating bed tilt with: %s", positions)
+        gcode.respond_info("Z-Tilt: Calculating bed tilt with probed points")
         params = { 'x_adjust': 0., 'y_adjust': 0., 'z_adjust': z_offset }
+        logging.info("Z_TILT DEBUG: Initial parameters: x_adjust=%.6f, y_adjust=%.6f, z_adjust=%.6f", 
+                   params['x_adjust'], params['y_adjust'], params['z_adjust'])
+        
         # Perform coordinate descent
         def adjusted_height(pos, params):
             x, y, z = pos
-            return (z - x*params['x_adjust'] - y*params['y_adjust']
-                    - params['z_adjust'])
+            result = (z - x*params['x_adjust'] - y*params['y_adjust'] - params['z_adjust'])
+            return result
+        
         def errorfunc(params):
             total_error = 0.
+            errors = []
             for pos in positions:
-                total_error += adjusted_height(pos, params)**2
+                adj_height = adjusted_height(pos, params)
+                error = adj_height**2
+                total_error += error
+                errors.append((pos, adj_height, error))
+            
+            # Log detailed error calculations periodically (not every iteration to avoid log flooding)
+            if self.retry_helper.debug and hasattr(errorfunc, 'call_count'):
+                errorfunc.call_count += 1
+                if errorfunc.call_count % 10 == 0:  # Log every 10th call
+                    logging.info("Z_TILT DEBUG: Error calculation iteration %d", errorfunc.call_count)
+                    for i, (pos, adj_height, err) in enumerate(errors):
+                        logging.info("Z_TILT DEBUG:   Point %d (%.3f,%.3f,%.3f): adjusted_height=%.6f, error=%.6f", 
+                                    i, pos[0], pos[1], pos[2], adj_height, err)
+                    logging.info("Z_TILT DEBUG:   Total error: %.6f", total_error)
             return total_error
+        
+        # Initialize call counter for error function
+        errorfunc.call_count = 0
+        
+        logging.info("Z_TILT DEBUG: Starting coordinate descent calculation")
+        gcode.respond_info("Z-Tilt: Calculating optimal adjustments...")
         new_params = mathutil.coordinate_descent(
             params.keys(), params, errorfunc)
+        logging.info("Z_TILT DEBUG: Coordinate descent completed after %d iterations", errorfunc.call_count)
+        gcode.respond_info("Z-Tilt: Calculation completed after %d iterations" % errorfunc.call_count)
+        
         # Apply results
         speed = self.probe_helper.get_lift_speed()
         logging.info("Calculated bed tilt parameters: %s", new_params)
+        logging.info("Z_TILT DEBUG: Final parameters: x_adjust=%.6f, y_adjust=%.6f, z_adjust=%.6f", 
+                   new_params['x_adjust'], new_params['y_adjust'], new_params['z_adjust'])
+        gcode.respond_info("Z-Tilt: Calculated parameters: x_adjust=%.6f, y_adjust=%.6f, z_adjust=%.6f" % 
+                        (new_params['x_adjust'], new_params['y_adjust'], new_params['z_adjust']))
+        
         x_adjust = new_params['x_adjust']
         y_adjust = new_params['y_adjust']
         z_adjust = (new_params['z_adjust'] - z_offset
                     - x_adjust * offsets[0] - y_adjust * offsets[1])
-        adjustments = [x*x_adjust + y*y_adjust + z_adjust
-                       for x, y in self.z_positions]
+        
+        logging.info("Z_TILT DEBUG: Calculated final adjustments: x_adjust=%.6f, y_adjust=%.6f, z_adjust=%.6f", 
+                   x_adjust, y_adjust, z_adjust)
+        logging.info("Z_TILT DEBUG: Using offsets[0]=%.6f, offsets[1]=%.6f, z_offset=%.6f", 
+                   offsets[0], offsets[1], z_offset)
+        
+        # Calculate per-position adjustments
+        adjustments = [x*x_adjust + y*y_adjust + z_adjust for x, y in self.z_positions]
+        
+        # Display per-position adjustments to user
+        adj_msg = ["Z-Tilt: Per-position adjustments:"]
+        for i, (pos, adj) in enumerate(zip(self.z_positions, adjustments)):
+            adj_msg.append("  Position (%.1f,%.1f): adjustment=%.6f" % (pos[0], pos[1], adj))
+        gcode.respond_info('\n'.join(adj_msg))
+        
+        logging.info("Z_TILT DEBUG: Per-position adjustments:")
+        for i, (pos, adj) in enumerate(zip(self.z_positions, adjustments)):
+            logging.info("Z_TILT DEBUG:   Position %d (%.3f,%.3f): adjustment=%.6f", 
+                       i, pos[0], pos[1], adj)
+        
+        # Log before applying adjustments
+        logging.info("Z_TILT DEBUG: About to apply adjustments to steppers at speed=%.3f", speed)
+        
+        # Apply the adjustments to steppers
+        gcode.respond_info("Z-Tilt: Applying calculated adjustments to steppers...")
         self.z_helper.adjust_steppers(adjustments, speed)
         
-        # After adjustments are complete, perform another up-home Z
-        gcode = self.printer.lookup_object('gcode')
-        gcode.respond_info("Z-tilt adjustment complete, performing final up-home Z")
-        self.up_home_z()
+        # Log after applying adjustments
+        logging.info("Z_TILT DEBUG: Stepper adjustments completed")
+        gcode.respond_info("Z-Tilt: Stepper adjustments completed")
         
-        return self.z_status.check_retry_result(
-            self.retry_helper.check_retry([p[2] for p in positions]))
+        # Check retry status
+        z_positions = [p[2] for p in positions]
+        retry_result = self.retry_helper.check_retry(z_positions)
+        logging.info("Z_TILT DEBUG: Retry check result: %s with z_positions=%s", 
+                   retry_result, z_positions)
+        
+        # Report final status to user
+        if retry_result == "done":
+            gcode.respond_info("Z-Tilt: Adjustment completed successfully")
+        else:
+            gcode.respond_info("Z-Tilt: Retrying adjustment")
+        
+        return self.z_status.check_retry_result(retry_result)
     def get_status(self, eventtime):
             return self.z_status.get_status(eventtime)
 
