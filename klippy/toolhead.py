@@ -35,17 +35,17 @@ class Move:
         self.move_d = move_d = max(xy_move_d, z_move_d, a_move_d, b_move_d)
         
         # Debug: Show which axis dominates the move
-        if move_d > 0.1:  # Only log significant moves
-            dominant = "XY"
-            if move_d == z_move_d:
-                dominant = "Z"
-            elif move_d == a_move_d:
-                dominant = "A"
-            elif move_d == b_move_d:
-                dominant = "B"
-            toolhead.printer.lookup_object('gcode').respond_info(
-                "Move distances: XY=%.2f Z=%.2f A=%.2f B=%.2f | Dominant=%s (%.2f)" 
-                % (xy_move_d, z_move_d, a_move_d, b_move_d, dominant, move_d))
+        # if move_d > 0.1:  # Only log significant moves
+        #     dominant = "XY"
+        #     if move_d == z_move_d:
+        #         dominant = "Z"
+        #     elif move_d == a_move_d:
+        #         dominant = "A"
+        #     elif move_d == b_move_d:
+        #         dominant = "B"
+        #     toolhead.printer.lookup_object('gcode').respond_info(
+        #         "Move distances: XY=%.2f Z=%.2f A=%.2f B=%.2f | Dominant=%s (%.2f)" 
+        #         % (xy_move_d, z_move_d, a_move_d, b_move_d, dominant, move_d))
         
         # For moves with small XY components relative to Z/A/B,
         # reduce acceleration to ensure visible cruise phase
@@ -56,9 +56,9 @@ class Move:
                 old_accel = self.accel
                 self.accel = toolhead.max_accel * max(0.1, xy_ratio * 2)
                 # Debug logging to show in Klipper interface
-                toolhead.printer.lookup_object('gcode').respond_info(
-                    "CartesianXY3Z: Small XY ratio %.2f%% - Reduced accel from %.1f to %.1f mm/s²" 
-                    % (xy_ratio * 100, old_accel, self.accel))
+                # toolhead.printer.lookup_object('gcode').respond_info(
+                #     "CartesianXY3Z: Small XY ratio %.2f%% - Reduced accel from %.1f to %.1f mm/s²" 
+                #     % (xy_ratio * 100, old_accel, self.accel))
             
         if move_d < .000000001:
             # Extrude only move
@@ -251,12 +251,13 @@ class LookAheadQueue:
         del queue[:flush_count]
     def add_move(self, move):
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-        # Debug extruder movement        gcode = self.toolhead.printer.lookup_object('gcode')
-        #gcode.respond_info(f"TOOLHEAD MOVE DEBUG: Adding move with axes_d={move.axes_d}, axes_r={move.axes_r}")
-        if abs(move.axes_d[5]) > 0.00001:  # Check if this is an extruder move
-            gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Extruder move detected! E distance={move.axes_d[5]}")
-            #gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move details - start_pos={move.start_pos}, end_pos={move.end_pos}")
-            #gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move params - accel={move.accel}, cruise_v2={move.max_cruise_v2}")
+        # Debug extruder movement
+        # gcode = self.toolhead.printer.lookup_object('gcode')
+        # gcode.respond_info(f"TOOLHEAD MOVE DEBUG: Adding move with axes_d={move.axes_d}, axes_r={move.axes_r}")
+        # if abs(move.axes_d[5]) > 0.00001:  # Check if this is an extruder move
+        #     gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Extruder move detected! E distance={move.axes_d[5]}")
+        #     gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move details - start_pos={move.start_pos}, end_pos={move.end_pos}")
+        #     gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move params - accel={move.accel}, cruise_v2={move.max_cruise_v2}")
         # #### END DEBUG CODE ####
 
         self.queue.append(move)
