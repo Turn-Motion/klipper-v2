@@ -58,12 +58,14 @@ Fixed sequential axis movement issue in CartesianXY3Z kinematics where Z, A, B a
 move_d = max(xy_distance, z_distance, a_distance, b_distance)
 ```
 
+**Additional improvement:** For moves where XY distance is less than 20% of the dominant axis, acceleration is reduced proportionally to ensure a visible cruise phase. This prevents small XY movements from being dominated by acceleration/deceleration.
+
 This ensures:
 - **Proper timing**: The axis with the largest movement dictates the move duration
-- **Synchronized movement**: All axes move together, starting and ending at the same time
-- **Correct speed ratios**: Each axis moves at a speed proportional to its distance relative to the dominant axis
+- **Synchronized movement**: All axes move together with visible cruise phases
+- **Smooth motion**: Small XY movements are no longer jerky or appear to happen only at the end
 
-Perfect for tilting bed systems where Z, A, B axes often travel dominant distances. The dominant axis runs at its configured max speed while others scale proportionally.
+Perfect for tilting bed systems where Z, A, B axes often travel dominant distances while XY makes small adjustments.
 
 ### Reduced Logging / Ztilt Logging (06.08.2025)
 - Reduced verbose debug logging in toolhead.py and extruder.py modules while preserving essential start/end logs for key code flows.

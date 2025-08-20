@@ -34,10 +34,31 @@ class Move:
         # Use the maximum to ensure all axes have sufficient time
         self.move_d = move_d = max(xy_move_d, z_move_d, a_move_d, b_move_d)
         
-        # Ensure minimum move distance to prevent synchronization issues
-        # with very small movements (helps with numerical stability) -- debug test function
-        if move_d > .000000001 and move_d < 0.01:
-            self.move_d = move_d = 0.01
+        # Debug: Show which axis dominates the move
+        if move_d > 0.1:  # Only log significant moves
+            dominant = "XY"
+            if move_d == z_move_d:
+                dominant = "Z"
+            elif move_d == a_move_d:
+                dominant = "A"
+            elif move_d == b_move_d:
+                dominant = "B"
+            toolhead.printer.lookup_object('gcode').respond_info(
+                "Move distances: XY=%.2f Z=%.2f A=%.2f B=%.2f | Dominant=%s (%.2f)" 
+                % (xy_move_d, z_move_d, a_move_d, b_move_d, dominant, move_d))
+        
+        # For moves with small XY components relative to Z/A/B,
+        # reduce acceleration to ensure visible cruise phase
+        if move_d > .000000001 and xy_move_d > .000000001:
+            xy_ratio = xy_move_d / move_d
+            if xy_ratio < 0.2:  # XY is less than 20% of dominant axis
+                # Reduce acceleration proportionally to ensure cruise phase
+                old_accel = self.accel
+                self.accel = toolhead.max_accel * max(0.1, xy_ratio * 2)
+                # Debug logging to show in Klipper interface
+                toolhead.printer.lookup_object('gcode').respond_info(
+                    "CartesianXY3Z: Small XY ratio %.2f%% - Reduced accel from %.1f to %.1f mm/s²" 
+                    % (xy_ratio * 100, old_accel, self.accel))
             
         if move_d < .000000001:
             # Extrude only move
