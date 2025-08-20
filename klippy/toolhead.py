@@ -49,16 +49,17 @@ class Move:
         
         # For moves with small XY components relative to Z/A/B,
         # reduce acceleration to ensure visible cruise phase
-        if move_d > .000000001 and xy_move_d > .000000001:
-            xy_ratio = xy_move_d / move_d
-            if xy_ratio < 0.2:  # XY is less than 20% of dominant axis
-                # Reduce acceleration proportionally to ensure cruise phase
-                old_accel = self.accel
-                self.accel = toolhead.max_accel * max(0.1, xy_ratio * 2)
-                # Debug logging to show in Klipper interface
-                # toolhead.printer.lookup_object('gcode').respond_info(
-                #     "CartesianXY3Z: Small XY ratio %.2f%% - Reduced accel from %.1f to %.1f mm/s²" 
-                #     % (xy_ratio * 100, old_accel, self.accel))
+        # DISABLED: This affects ALL axes, not just XY - causes Z/A/B to use wrong acceleration
+        # if move_d > .000000001 and xy_move_d > .000000001:
+        #     xy_ratio = xy_move_d / move_d
+        #     if xy_ratio < 0.2:  # XY is less than 20% of dominant axis
+        #         # Reduce acceleration proportionally to ensure cruise phase
+        #         old_accel = self.accel
+        #         self.accel = toolhead.max_accel * max(0.1, xy_ratio * 2)
+        #         # Debug logging to show in Klipper interface
+        #         # toolhead.printer.lookup_object('gcode').respond_info(
+        #         #     "CartesianXY3Z: Small XY ratio %.2f%% - Reduced accel from %.1f to %.1f mm/s²" 
+        #         #     % (xy_ratio * 100, old_accel, self.accel))
             
         if move_d < .000000001:
             # Extrude only move

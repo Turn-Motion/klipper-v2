@@ -445,19 +445,18 @@ class CartesianXY3Z:
             gcode.respond_info("CartesianXY3Z Safety: Module not available - continuing without safety checks")
             logging.info("CartesianXY3Z: Safety module not available, continuing without safety checks")
         
-        # DEBUG: Temporarily disabled z_ratio calculation and speed limiting
         # Calculate the slowest axis ratio for Z, A, B
-        # z_ratio = 1.0
-        # if move.axes_d[2]:  # Z axis
-        #     z_ratio = min(z_ratio, move.move_d / abs(move.axes_d[2]))
-        # if move.axes_d[3]:  # A axis
-        #     z_ratio = min(z_ratio, move.move_d / abs(move.axes_d[3]))
-        # if move.axes_d[4]:  # B axis
-        #     z_ratio = min(z_ratio, move.move_d / abs(move.axes_d[4]))
+        z_ratio = 1.0
+        if move.axes_d[2]:  # Z axis
+            z_ratio = min(z_ratio, move.move_d / abs(move.axes_d[2]))
+        if move.axes_d[3]:  # A axis
+            z_ratio = min(z_ratio, move.move_d / abs(move.axes_d[3]))
+        if move.axes_d[4]:  # B axis
+            z_ratio = min(z_ratio, move.move_d / abs(move.axes_d[4]))
             
         # Use the slowest axis settings
-        # move.limit_speed(
-        #     self.max_z_velocity * z_ratio, self.max_z_accel * z_ratio)
+        move.limit_speed(
+            self.max_z_velocity * z_ratio, self.max_z_accel * z_ratio)
 
     def get_status(self, eventtime):
         axes = [a for a, (l, h) in zip("xyzab", self.limits) if l <= h]
