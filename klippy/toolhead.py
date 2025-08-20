@@ -462,14 +462,14 @@ class ToolHead:
                     move.start_v, move.cruise_v, move.accel)
             if move.axes_d[5]:
                 # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE DETECTED! *** E_distance={move.axes_d[5]:.6f}")
+                #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE DETECTED! *** E_distance={move.axes_d[5]:.6f}")
                 #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Extruder move details - E_distance={move.axes_d[5]:.6f}, start_v={move.start_v:.6f}, cruise_v={move.cruise_v:.6f}")
                 # #### END DEBUG CODE ####
                 
                 self.extruder.move(next_move_time, move)
                 
                 # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE COMPLETED ***")
+                #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE COMPLETED ***")
                 # #### END DEBUG CODE ####
                 
             next_move_time = (next_move_time + move.accel_t
@@ -591,9 +591,9 @@ class ToolHead:
     def move(self, newpos, speed):
         # Create a move and add it to the move queue
         gcode_logging_debug = self.printer.lookup_object('gcode')
-        gcode_logging_debug.respond_info(
-            f"TOOLHEAD DEBUG: move() called with newpos={['%.4f' % p for p in newpos]} speed={speed}"
-        )
+        #gcode_logging_debug.respond_info(
+        #    f"TOOLHEAD DEBUG: move() called with newpos={['%.4f' % p for p in newpos]} speed={speed}"
+        #)
         move = Move(self, self.commanded_pos, newpos, speed)
         # Perform kinematic check if any axes move
         axes_d = move.axes_d
@@ -608,9 +608,9 @@ class ToolHead:
                 self.extruder.check_move(move)
         elif axes_d[5]:
             # Extruder only move
-            gcode_logging_debug.respond_info(
-                f"TOOLHEAD DEBUG: Extruder-only move detected with delta_e={axes_d[5]:.4f}"
-            )
+            #gcode.respond_info(
+            #    f"TOOLHEAD DEBUG: Extruder-only move detected with delta_e={axes_d[5]:.4f}"
+            #)
             self.extruder.check_move(move)
         self.commanded_pos[:] = newpos
         #gcode_logging_debug.respond_info(

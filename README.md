@@ -47,6 +47,23 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Debug Output Cleanup (20.08.2025)
+Cleaned up verbose debug output across multiple modules to reduce console noise while preserving essential information:
+
+**Files Modified:**
+- `toolhead.py` - Commented out detailed move debug messages, kept "Processing x moves" 
+- `gcode_move.py` - Commented out GCodeMove debug messages
+- `homing.py` - Commented out detailed endstop/position debug messages
+- `cartesianxy3z.py` - Commented out verbose homing debug messages  
+- `extruder.py` - Commented out extruder move debug messages
+
+**Console Output Now Shows Only:**
+- "TOOLHEAD PROCESS_MOVES DEBUG: Processing x moves"
+- "Starting/Completed individual precision homing for [axis]"
+- Essential error messages
+
+This significantly reduces log verbosity while maintaining visibility into key operations and error conditions.
+
 ### CartesianXY3Z Kinematic - Coordinated Movement Fix (20.08.2025)
 Fixed sequential axis movement issue in CartesianXY3Z kinematics where Z, A, B axes would move separately from X, Y axes. The root cause was incorrect move distance calculation in `toolhead.py` that was including all axes in the distance formula.
 

@@ -126,11 +126,11 @@ class GCodeMove:
                 param_str_list_log_corrected.append(f"{axis_char_log_corrected}:{raw_val_corrected}")
         
         gcode_obj_log_1_corrected = self.printer.lookup_object('gcode')
-        gcode_obj_log_1_corrected.respond_info(
-            f"GCodeMove Debug: CMD='{gcmd.get_command()}' RAW_PARAMS_DICT='{params}' "
-            f"PARSED_FOR_LOG='{', '.join(param_str_list_log_corrected)}' "
-            f"LAST_POS_BEFORE_UPDATE={['%.4f' % p for p in self.last_position]}"
-        )
+        #gcode_obj_log_1_corrected.respond_info(
+        #    f"GCodeMove Debug: CMD='{gcmd.get_command()}' RAW_PARAMS_DICT='{params}' "
+        #    f"PARSED_FOR_LOG='{', '.join(param_str_list_log_corrected)}' "
+        #    f"LAST_POS_BEFORE_UPDATE={['%.4f' % p for p in self.last_position]}"
+        #)
         # --- End of first corrected logging part ---
         try:
             for pos, axis in enumerate('XYZAB'):  # Handle XYZAB axes
@@ -161,9 +161,9 @@ class GCodeMove:
                              % (gcmd.get_commandline(),))
         # --- Start of second logging part ---
         gcode_obj_log_2 = self.printer.lookup_object('gcode')
-        gcode_obj_log_2.respond_info(
-            f"GCodeMove Debug: LAST_POS_AFTER_UPDATE_TO_SEND={['%.4f' % p for p in self.last_position]}"
-        )
+        #gcode_obj_log_2.respond_info(
+        #    f"GCodeMove Debug: LAST_POS_AFTER_UPDATE_TO_SEND={['%.4f' % p for p in self.last_position]}"
+        #)
         # --- End of logging snippet ---
         self.move_with_transform(self.last_position, self.speed)
     # G-Code coordinate manipulation

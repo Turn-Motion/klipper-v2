@@ -205,7 +205,7 @@ class PrinterExtruder:
     def check_move(self, move):
         # Debug extruder move check
         gcode = self.printer.lookup_object('gcode')
-        gcode.respond_info(f"EXTRUDER DEBUG: check_move called for {self.name}")
+        #gcode.respond_info(f"EXTRUDER DEBUG: check_move called for {self.name}")
         axis_r = move.axes_r[5]
         #gcode.respond_info(f"EXTRUDER DEBUG: axis_r={axis_r}, can_extrude={self.heater.can_extrude}, min_temp={self.heater.min_extrude_temp}")
         # Commenting out this early return which might prevent extruder-only moves
@@ -218,7 +218,7 @@ class PrinterExtruder:
             raise self.printer.command_error(error_msg)
         if (not move.axes_d[0] and not move.axes_d[1]) or axis_r < 0.:
             # Extrude only move (or retraction move) - limit accel and velocity
-            gcode.respond_info(f"EXTRUDER DEBUG: Extrude-only move detected: E distance={move.axes_d[5]}")
+            #gcode.respond_info(f"EXTRUDER DEBUG: Extrude-only move detected: E distance={move.axes_d[5]}")
             if abs(move.axes_d[5]) > self.max_e_dist:
                 error_msg = "Extrude only move too long (%.3fmm vs %.3fmm)\nSee the 'max_extrude_only_distance' config option for details" % (move.axes_d[5], self.max_e_dist)
                 #gcode.respond_info(f"EXTRUDER DEBUG: ERROR - {error_msg}")
@@ -257,7 +257,7 @@ class PrinterExtruder:
     def move(self, print_time, move):
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
         gcode = self.printer.lookup_object('gcode')
-        gcode.respond_info(f"EXTRUDER MOVE DEBUG: *** EXTRUDER.MOVE() CALLED *** for {self.name} with E={move.axes_d[5]:.6f}")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: *** EXTRUDER.MOVE() CALLED *** for {self.name} with E={move.axes_d[5]:.6f}")
         #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Input move - axes_d[5]={move.axes_d[5]:.6f}, axes_r[5]={move.axes_r[5]:.6f}")
         #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Move timing - accel_t={move.accel_t:.6f}, cruise_t={move.cruise_t:.6f}, decel_t={move.decel_t:.6f}")
         #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Move velocities - start_v={move.start_v:.6f}, cruise_v={move.cruise_v:.6f}, end_v2={move.end_v2:.6f}")
@@ -303,7 +303,7 @@ class PrinterExtruder:
                           start_v, cruise_v, accel)             # scaled start_v, cruise_v, accel for extruder
         
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-        gcode.respond_info(f"EXTRUDER MOVE DEBUG: *** TRAPQ_APPEND COMPLETED ***")
+        #gcode.respond_info(f"EXTRUDER MOVE DEBUG: *** TRAPQ_APPEND COMPLETED ***")
         #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Updated last_position from {self.last_position:.6f} to {move.end_pos[5]:.6f}")
         # #### END DEBUG CODE ####
         

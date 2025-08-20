@@ -84,8 +84,8 @@ class HomingMove:
         
         # DEBUG
         gcode = self.printer.lookup_object('gcode')
-        gcode.respond_info(f"DEBUG: homing_move starting with movepos={movepos}, speed={speed}, triggered={triggered}")
-        gcode.respond_info(f"DEBUG: endstops: {self.endstops}")
+        #gcode.respond_info(f"DEBUG: homing_move starting with movepos={movepos}, speed={speed}, triggered={triggered}")
+        #gcode.respond_info(f"DEBUG: endstops: {self.endstops}")
         
         kin_spos = {s.get_name(): s.get_commanded_position()
                     for s in kin.get_steppers()}
@@ -94,66 +94,67 @@ class HomingMove:
                                    for s in es.get_steppers() ]
         
         # DEBUG
-        gcode.respond_info(f"DEBUG: stepper_positions: {[(sp.stepper_name, sp.start_pos) for sp in self.stepper_positions]}")
+        #gcode.respond_info(f"DEBUG: stepper_positions: {[(sp.stepper_name, sp.start_pos) for sp in self.stepper_positions]}")
         
         # Start endstop checking
         print_time = self.toolhead.get_last_move_time()
         endstop_triggers = []
         for mcu_endstop, name in self.endstops:
             rest_time = self._calc_endstop_rate(mcu_endstop, movepos, speed)
-            gcode.respond_info(f"DEBUG: Setting up endstop {name} with rest_time={rest_time}, sample_time={ENDSTOP_SAMPLE_TIME}, sample_count={ENDSTOP_SAMPLE_COUNT}")
+            #gcode.respond_info(f"DEBUG: Setting up endstop {name} with rest_time={rest_time}, sample_time={ENDSTOP_SAMPLE_TIME}, sample_count={ENDSTOP_SAMPLE_COUNT}")
             try:
                 wait = mcu_endstop.home_start(print_time, ENDSTOP_SAMPLE_TIME,
                                           ENDSTOP_SAMPLE_COUNT, rest_time,
                                           triggered=triggered)
                 endstop_triggers.append(wait)
-                gcode.respond_info(f"DEBUG: Successfully registered endstop trigger for {name}")
+                #gcode.respond_info(f"DEBUG: Successfully registered endstop trigger for {name}")
             except Exception as e:
-                gcode.respond_info(f"DEBUG: Error setting up endstop {name}: {str(e)}")
+                #gcode.respond_info(f"DEBUG: Error setting up endstop {name}: {str(e)}")
+                pass
         
         all_endstop_trigger = multi_complete(self.printer, endstop_triggers)
-        gcode.respond_info(f"DEBUG: Created multi_complete endstop trigger with {len(endstop_triggers)} endstops")
+        #gcode.respond_info(f"DEBUG: Created multi_complete endstop trigger with {len(endstop_triggers)} endstops")
         
         self.toolhead.dwell(HOMING_START_DELAY)
-        gcode.respond_info(f"DEBUG: Starting drip_move to position {movepos} at speed {speed}")
+        #gcode.respond_info(f"DEBUG: Starting drip_move to position {movepos} at speed {speed}")
         
         # Issue move
         error = None
         try:
             self.toolhead.drip_move(movepos, speed, all_endstop_trigger)
-            gcode.respond_info(f"DEBUG: drip_move completed without exceptions")
+            #gcode.respond_info(f"DEBUG: drip_move completed without exceptions")
         except self.printer.command_error as e:
             error = "Error during homing move: %s" % (str(e),)
-            gcode.respond_info(f"DEBUG: drip_move failed with error: {error}")
+            #gcode.respond_info(f"DEBUG: drip_move failed with error: {error}")
         # Wait for endstops to trigger
         trigger_times = {}
         move_end_print_time = self.toolhead.get_last_move_time()
-        gcode.respond_info(f"DEBUG: Checking endstop triggers at move_end_print_time={move_end_print_time}")
+        #gcode.respond_info(f"DEBUG: Checking endstop triggers at move_end_print_time={move_end_print_time}")
         
         for mcu_endstop, name in self.endstops:
             try:
-                gcode.respond_info(f"DEBUG: Waiting for endstop {name} trigger")
+                #gcode.respond_info(f"DEBUG: Waiting for endstop {name} trigger")
                 trigger_time = mcu_endstop.home_wait(move_end_print_time)
-                gcode.respond_info(f"DEBUG: Endstop {name} trigger_time={trigger_time}")
+                #gcode.respond_info(f"DEBUG: Endstop {name} trigger_time={trigger_time}")
             except self.printer.command_error as e:
                 if error is None:
                     error = "Error during homing %s: %s" % (name, str(e))
-                gcode.respond_info(f"DEBUG: Error waiting for endstop {name}: {str(e)}")
+                #gcode.respond_info(f"DEBUG: Error waiting for endstop {name}: {str(e)}")
                 continue
             
             if trigger_time > 0.:
                 trigger_times[name] = trigger_time
-                gcode.respond_info(f"DEBUG: Endstop {name} TRIGGERED at time {trigger_time}")
+                #gcode.respond_info(f"DEBUG: Endstop {name} TRIGGERED at time {trigger_time}")
             elif check_triggered and error is None:
                 error = "No trigger on %s after full movement" % (name,)
-                gcode.respond_info(f"DEBUG: Endstop {name} did NOT trigger during movement")
+                #gcode.respond_info(f"DEBUG: Endstop {name} did NOT trigger during movement")
         # Determine stepper halt positions
         self.toolhead.flush_step_generation()
-        gcode.respond_info(f"DEBUG: Determining stepper halt positions, trigger_times={trigger_times}")
+        #gcode.respond_info(f"DEBUG: Determining stepper halt positions, trigger_times={trigger_times}")
         for sp in self.stepper_positions:
             tt = trigger_times.get(sp.endstop_name, move_end_print_time)
             sp.note_home_end(tt)
-            gcode.respond_info(f"DEBUG: Stepper {sp.stepper_name} start_pos={sp.start_pos}, halt_pos={sp.halt_pos}, trig_pos={sp.trig_pos}")
+            #gcode.respond_info(f"DEBUG: Stepper {sp.stepper_name} start_pos={sp.start_pos}, halt_pos={sp.halt_pos}, trig_pos={sp.trig_pos}")
         if probe_pos:
             halt_steps = {sp.stepper_name: sp.halt_pos - sp.start_pos
                           for sp in self.stepper_positions}
