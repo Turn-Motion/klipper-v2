@@ -33,6 +33,12 @@ class Move:
         
         # Use the maximum to ensure all axes have sufficient time
         self.move_d = move_d = max(xy_move_d, z_move_d, a_move_d, b_move_d)
+        
+        # Ensure minimum move distance to prevent synchronization issues
+        # with very small movements (helps with numerical stability) -- debug test function
+        if move_d > .000000001 and move_d < 0.01:
+            self.move_d = move_d = 0.01
+            
         if move_d < .000000001:
             # Extrude only move
             self.end_pos = (start_pos[0], start_pos[1], start_pos[2],
