@@ -25,13 +25,14 @@ class Move:
         # Note: In this system, indices 0-4 are XYZAB and index 5 is E (extruder)
         self.axes_d = axes_d = [end_pos[i] - start_pos[i] for i in range(6)]
         # Calculate total movement distance (excluding E axis)
-        # For tilting bed, use 5D Euclidean distance for proper synchronization
-        # This ensures all axes (X, Y, Z, A, B) move simultaneously
-        self.move_d = move_d = math.sqrt(
-            axes_d[0]**2 + axes_d[1]**2 + axes_d[2]**2 + 
-            (axes_d[3]**2 if len(axes_d) > 3 else 0) +
-            (axes_d[4]**2 if len(axes_d) > 4 else 0)
-        )
+        # For tilting bed with dominant Z/A/B movements, use maximum distance
+        xy_move_d = math.sqrt(axes_d[0]**2 + axes_d[1]**2)
+        z_move_d = abs(axes_d[2])
+        a_move_d = abs(axes_d[3]) if len(axes_d) > 3 else 0
+        b_move_d = abs(axes_d[4]) if len(axes_d) > 4 else 0
+        
+        # Use the maximum to ensure all axes have sufficient time
+        self.move_d = move_d = max(xy_move_d, z_move_d, a_move_d, b_move_d)
         if move_d < .000000001:
             # Extrude only move
             self.end_pos = (start_pos[0], start_pos[1], start_pos[2],

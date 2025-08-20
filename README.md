@@ -48,20 +48,22 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 ## Feature Updates
 
 ### CartesianXY3Z Kinematic - Coordinated Movement Fix (20.08.2025)
-Fixed sequential axis movement issue in CartesianXY3Z kinematics where Z, A, B axes would move separately from X, Y axes, especially when XY movements were small. The root cause was incorrect move distance calculation in `toolhead.py`.
+Fixed sequential axis movement issue in CartesianXY3Z kinematics where Z, A, B axes would move separately from X, Y axes. The root cause was incorrect move distance calculation in `toolhead.py` that was including all axes in the distance formula.
 
-**The Fix:** Modified `move_d` calculation to use 5D Euclidean distance:
-```
-move_d = sqrt(X² + Y² + Z² + A² + B²)
+**The Fix:** Modified `move_d` calculation to use the maximum distance among:
+- XY combined distance: `sqrt(X² + Y²)`  
+- Individual Z, A, B axis distances: `abs(Z)`, `abs(A)`, `abs(B)`
+
+```python
+move_d = max(xy_distance, z_distance, a_distance, b_distance)
 ```
 
 This ensures:
-- **True synchronized movement**: All axes start and end together
-- **Proper ratio calculation**: Small XY movements aren't overwhelmed by large Z/A/B movements
-- **Balanced timing**: Each axis contributes proportionally to the total move time
-- **No sequential movement**: Fixes the issue where axes would move one after another
+- **Proper timing**: The axis with the largest movement dictates the move duration
+- **Synchronized movement**: All axes move together, starting and ending at the same time
+- **Correct speed ratios**: Each axis moves at a speed proportional to its distance relative to the dominant axis
 
-Perfect for tilting bed systems where Z, A, B axes often travel dominant distances while maintaining precise XY positioning.
+Perfect for tilting bed systems where Z, A, B axes often travel dominant distances. The dominant axis runs at its configured max speed while others scale proportionally.
 
 ### Reduced Logging / Ztilt Logging (06.08.2025)
 - Reduced verbose debug logging in toolhead.py and extruder.py modules while preserving essential start/end logs for key code flows.
