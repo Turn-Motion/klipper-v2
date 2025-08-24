@@ -47,6 +47,43 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Debug Output Cleanup (20.08.2025)
+Cleaned up verbose debug output across multiple modules to reduce console noise while preserving essential information:
+
+**Files Modified:**
+- `toolhead.py` - Commented out detailed move debug messages, kept "Processing x moves" 
+- `gcode_move.py` - Commented out GCodeMove debug messages
+- `homing.py` - Commented out detailed endstop/position debug messages
+- `cartesianxy3z.py` - Commented out verbose homing debug messages  
+- `extruder.py` - Commented out extruder move debug messages
+
+**Console Output Now Shows Only:**
+- "TOOLHEAD PROCESS_MOVES DEBUG: Processing x moves"
+- "Starting/Completed individual precision homing for [axis]"
+- Essential error messages
+
+This significantly reduces log verbosity while maintaining visibility into key operations and error conditions.
+
+### CartesianXY3Z Kinematic - Coordinated Movement Fix (20.08.2025)
+Fixed sequential axis movement issue in CartesianXY3Z kinematics where Z, A, B axes would move separately from X, Y axes. The root cause was incorrect move distance calculation in `toolhead.py` that was including all axes in the distance formula.
+
+**The Fix:** Modified `move_d` calculation to use the maximum distance among:
+- XY combined distance: `sqrt(X² + Y²)`  
+- Individual Z, A, B axis distances: `abs(Z)`, `abs(A)`, `abs(B)`
+
+```python
+move_d = max(xy_distance, z_distance, a_distance, b_distance)
+```
+
+**Additional improvement:** For moves where XY distance is less than 20% of the dominant axis, acceleration is reduced proportionally to ensure a visible cruise phase. This prevents small XY movements from being dominated by acceleration/deceleration.
+
+This ensures:
+- **Proper timing**: The axis with the largest movement dictates the move duration
+- **Synchronized movement**: All axes move together with visible cruise phases
+- **Smooth motion**: Small XY movements are no longer jerky or appear to happen only at the end
+
+Perfect for tilting bed systems where Z, A, B axes often travel dominant distances while XY makes small adjustments.
+
 ### Reduced Logging / Ztilt Logging (06.08.2025)
 - Reduced verbose debug logging in toolhead.py and extruder.py modules while preserving essential start/end logs for key code flows.
 - Enhanced Ztilt logging about the Ztilt process, including the initial parameters, final parameters, and per-position adjustments.
