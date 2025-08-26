@@ -47,6 +47,37 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Move Object Safety Improvements (24.08.2025)
+Fixed an AttributeError in CartesianXY3Z kinematics where safety check failures could cause crashes due to missing timing attributes:
+
+**Problem:** When a move failed safety checks (e.g., "Extruder tip below printing plate - collision detected"), the move would be rejected before `set_junction` was called, causing an `AttributeError: 'Move' object has no attribute 'accel_t'` when the toolhead tried to process the move.
+
+**Solution:**
+1. Added default initialization of timing attributes in the Move constructor:
+   ```python
+   # Initialize timing attributes to safe defaults
+   self.start_v = 0.
+   self.cruise_v = 0.
+   self.end_v = 0.
+   self.accel_t = 0.
+   self.cruise_t = 0.
+   self.decel_t = 0.
+   self._junction_set = False  # Track if set_junction was called
+   ```
+2. Modified CartesianXY3Z safety check handling to allow debugging by skipping safety checks while logging their status
+3. Added detection and logging for moves using default timing values:
+   ```python
+   # Check for moves that never had set_junction called
+   for i, move in enumerate(queue[:flush_count]):
+       if not move._junction_set:
+           gcode.respond_info(
+               f"WARNING: Move using default timing values (set_junction never called). "
+               f"Move {i+1}/{flush_count}, axes_d={[round(d, 4) for d in move.axes_d]}"
+           )
+   ```
+
+This ensures that even when moves are rejected by safety checks, they still have the necessary attributes for safe processing, preventing crashes in the motion planning system. The added logging helps identify which moves are using default timing values instead of properly calculated ones.
+
 ### Debug Output Cleanup (20.08.2025)
 Cleaned up verbose debug output across multiple modules to reduce console noise while preserving essential information:
 

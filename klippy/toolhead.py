@@ -87,6 +87,17 @@ class Move:
         self.smooth_delta_v2 = 2.0 * move_d * toolhead.max_accel_to_decel
         self.end_v2 = 0. # Initialize end_v2 to a default value
         self.next_junction_v2 = 999999999.9
+        
+        # Initialize timing attributes to safe defaults
+        # This ensures they're always available even if set_junction is never called
+        self.start_v = 0.
+        self.cruise_v = 0.
+        self.end_v = 0.
+        self.accel_t = 0.
+        self.cruise_t = 0.
+        self.decel_t = 0.
+        # Flag to track if set_junction has been called
+        self._junction_set = False
     def limit_speed(self, speed, accel):
         speed2 = speed**2
         if speed2 < self.max_cruise_v2:
@@ -246,6 +257,16 @@ class LookAheadQueue:
             next_smoothed_v2 = smoothed_v2
         if update_flush_count or not flush_count:
             return
+        # Check for moves that never had set_junction called
+        gcode = self.toolhead.printer.lookup_object('gcode')
+        for i, move in enumerate(queue[:flush_count]):
+            if not move._junction_set:
+                # Log when default timing values are being used
+                gcode.respond_info(
+                    f"WARNING: Move using default timing values (set_junction never called). "
+                    f"Move {i+1}/{flush_count}, axes_d={[round(d, 4) for d in move.axes_d]}"
+                )
+                
         # Generate step times for all moves ready to be flushed
         self.toolhead._process_moves(queue[:flush_count])
         # Remove processed moves from the queue
