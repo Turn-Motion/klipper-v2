@@ -47,6 +47,12 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Improved Z-Axis Homing with Dynamic Position Limits (02.09.2025)
+Enhanced the Z-axis homing process in CartesianXY3Z kinematics to use printer.cfg position limits:
+- Initial Z/A/B positions now set to their respective `position_min` values from printer.cfg
+- Force move distances now dynamically calculated using `position_max`/`position_min` values
+- Proper handling of inverted Z-axis setups where the probe is fixed at the top
+
 ### Z_tilt CartesianXY3Z Support (02.09.2025)
 Enhanced Z_tilt module to properly support CartesianXY3Z kinematics by including A and B axis steppers in the Z tilt adjustment process. This allows for proper bed leveling on printers with multiple Z-axis motors including those on A and B axes. Added comprehensive debug logging to help diagnose stepper detection issues. Implemented a temporary fix to detect steppers by name (stepper_z, stepper_a, stepper_b) when is_active_axis() method fails to correctly identify them.
 
