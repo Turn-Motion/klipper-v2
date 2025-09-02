@@ -47,6 +47,19 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Z_tilt CartesianXY3Z Support (02.09.2025)
+Enhanced Z_tilt module to properly support CartesianXY3Z kinematics by including A and B axis steppers in the Z tilt adjustment process. This allows for proper bed leveling on printers with multiple Z-axis motors including those on A and B axes. Added comprehensive debug logging to help diagnose stepper detection issues. Implemented a temporary fix to detect steppers by name (stepper_z, stepper_a, stepper_b) when is_active_axis() method fails to correctly identify them.
+
+**Fixed axis-specific movement issue (02.09.2025):**
+- Fixed critical bug where Z_TILT_ADJUST would move Z axis positively but not A and B axes, causing out-of-range errors
+- Added axis detection system that maps each stepper to its correct coordinate index (Z=2, A=3, B=4)
+- Modified movement logic to update the appropriate coordinate for each stepper based on its axis
+- Preserved original position during adjustment to avoid accumulating changes to the wrong axes
+- Added detailed axis-specific logging for easier troubleshooting
+
+This ensures all Z, A, and B steppers move correctly during tilt adjustment, preventing position errors and improving calibration reliability for printers with inverted Z-axis configurations.
+
+
 ### Move Object Safety Improvements (24.08.2025)
 Fixed an AttributeError in CartesianXY3Z kinematics where safety check failures could cause crashes due to missing timing attributes:
 
@@ -131,9 +144,6 @@ Changed the default extruder coordinate system to use relative mode (M83) at sta
 
 ### CartesianXY3Z Safety Module Direct Import (04.08.2025)
 The CartesianXY3Z kinematics now directly imports the safety module from extras/cartesianxy3z_safety.py without requiring a [cartesianxy3z_safety] section in printer.cfg. This allows safety checks to run automatically when the kinematics loads. The module logs which parameters are found in the config and which are using default values, making it easier to diagnose configuration issues. Fixed compatibility issues with ConfigWrapper to properly detect parameters using Klipper's sentinel pattern instead of has_option(). -- Need to be tested - latest update
-
-### Z_tilt CartesianXY3Z Support (04.08.2025)
-Enhanced Z_tilt module to properly support CartesianXY3Z kinematics by including A and B axis steppers in the Z tilt adjustment process. This allows for proper bed leveling on printers with multiple Z-axis motors including those on A and B axes. Added comprehensive debug logging to help diagnose stepper detection issues. Implemented a temporary fix to detect steppers by name (stepper_z, stepper_a, stepper_b) when is_active_axis() method fails to correctly identify them. -- Need to be tested
 
 ### Extruder Position Reset (04.08.2025)
 Modified extruder movement handling to reset the last_position to 0 after processing each move. This prevents position accumulation issues and ensures proper relative extrusion behavior, fixing cases where extruder moves would update position tracking but not physically move the extruder motor. -- Need to be tested
