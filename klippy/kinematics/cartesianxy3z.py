@@ -242,13 +242,17 @@ class CartesianXY3Z:
             # Phase 1: Force move all Z/A/B axes together until endstops trigger
             # This is the fast homing phase where all axes move simultaneously
             
-            # Reset positions for homing
+            # Reset positions for homing using position_min from each rail
             homing_axes_str = 'zab'
-            toolhead.set_position([0., 0., 0., 0., 0.] + toolhead.get_position()[5:], homing_axes=homing_axes_str)
+            z_min, _ = self.rails[2].get_range()  # Z axis
+            a_min, _ = self.rails[3].get_range()  # A axis
+            b_min, _ = self.rails[4].get_range()  # B axis
+            
+            # Set position to position_min for Z, A, B axes
+            toolhead.set_position([0., 0., z_min, a_min, b_min] + toolhead.get_position()[5:], homing_axes=homing_axes_str)
             
             # Calculate force move positions for all Z axes
             current_pos = toolhead.get_position()
-            force_move_distance = 356.0  # Large distance to ensure endstop contact
             
             # Create individual homing moves for each axis to allow independent stopping
             axis_states = {}  # Track which axes are still moving
@@ -258,12 +262,17 @@ class CartesianXY3Z:
                 hi = rail.get_homing_info()
                 axis_name = 'xyzab'[axis]
                 
+                # Get position_min and position_max for this axis
+                position_min, position_max = rail.get_range()
+                
                 # Determine movement direction
                 if getattr(hi, 'positive_dir', False):
-                    target_pos = current_pos[axis] + force_move_distance
+                    # Use position_max for force move distance
+                    target_pos = position_max
                     direction = "positive"
                 else:
-                    target_pos = current_pos[axis] - force_move_distance
+                    # Use position_min for force move distance in negative direction
+                    target_pos = position_min
                     direction = "negative"
                 
                 axis_states[axis] = {
