@@ -100,6 +100,14 @@ class ProbeCommandHelper:
         # Move away from the bed
         self.probe_calibrate_z = curpos[2]
         curpos[2] += 5.
+        # For 5-axis XYZAB system, also move A and B axes
+        toolhead = self.printer.lookup_object('toolhead')
+        kin = toolhead.get_kinematics()
+        if hasattr(kin, 'rails') and len(kin.rails) >= 5:  # CartesianXY3Z
+            if len(curpos) < 5:
+                curpos.extend([0.0] * (5 - len(curpos)))
+            curpos[3] = curpos[2]  # A axis follows Z
+            curpos[4] = curpos[2]  # B axis follows Z
         self._move(curpos, params['lift_speed'])
         # Move the nozzle over the probe point
         x_offset, y_offset, z_offset = self.probe.get_offsets()
@@ -478,7 +486,27 @@ class ProbePointsHelper:
     def get_lift_speed(self):
         return self.lift_speed
     def _move(self, coord, speed):
-        self.printer.lookup_object('toolhead').manual_move(coord, speed)
+        toolhead = self.printer.lookup_object('toolhead')
+        
+        # For 5-axis XYZAB system where A and B are Z-axes, coordinate Z/A/B movements
+        kin = toolhead.get_kinematics()
+        if hasattr(kin, 'rails') and len(kin.rails) >= 5:  # CartesianXY3Z with A/B as Z-axes
+            # If Z coordinate is specified, also apply to A and B axes
+            if len(coord) >= 3 and coord[2] is not None:
+                # Extend coord to include A and B axes if not already specified
+                coord = list(coord)
+                while len(coord) < 5:
+                    coord.append(None)
+                
+                # Apply Z movement to A and B axes as well (they are Z-axes)
+                if coord[3] is None:  # A axis
+                    coord[3] = coord[2]
+                if coord[4] is None:  # B axis
+                    coord[4] = coord[2]
+                    
+                logging.info("PROBE DEBUG: Coordinating Z/A/B movement: %s", coord)
+        
+        toolhead.manual_move(coord, speed)
     def _raise_tool(self):
         toolhead = self.printer.lookup_object('toolhead')
         z_pos = toolhead.get_position()[2]
@@ -487,13 +515,26 @@ class ProbePointsHelper:
         # assume z position is OK if higher than target_z
         if z_pos >= target_z:
             return
-        self._move([None, None, target_z], self.lift_speed)
+        
+        # For 5-axis XYZAB system, move Z/A/B together
+        kin = toolhead.get_kinematics()
+        if hasattr(kin, 'rails') and len(kin.rails) >= 5:  # CartesianXY3Z
+            self._move([None, None, target_z, target_z, target_z], self.lift_speed)
+        else:
+            self._move([None, None, target_z], self.lift_speed)
     def _raise_tool_manual(self, is_first=False):
         speed = self.lift_speed
         if is_first:
             # Use full speed to first probe position
             speed = self.speed
-        self._move([None, None, self.horizontal_move_z], speed)
+        
+        # For 5-axis XYZAB system, move Z/A/B together
+        toolhead = self.printer.lookup_object('toolhead')
+        kin = toolhead.get_kinematics()
+        if hasattr(kin, 'rails') and len(kin.rails) >= 5:  # CartesianXY3Z
+            self._move([None, None, self.horizontal_move_z, self.horizontal_move_z, self.horizontal_move_z], speed)
+        else:
+            self._move([None, None, self.horizontal_move_z], speed)
     def _invoke_callback(self, results):
         # Flush lookahead queue
         toolhead = self.printer.lookup_object('toolhead')

@@ -47,6 +47,23 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### 5-Axis XYZAB Probe and Z-Tilt Coordination (11.09.2025)
+Enhanced probe and Z-tilt systems to properly handle 5-axis XYZAB kinematics where A and B axes function as additional Z-axes for tilting bed systems.
+
+**Key Improvements:**
+- **Probe Movement Coordination**: Modified `probe.py` to automatically coordinate Z/A/B axes during all probe operations
+- **Z-Tilt Enhancement**: Updated `z_tilt.py` to ensure coordinated movement of all Z-type axes during bed leveling
+- **Automatic Detection**: System detects CartesianXY3Z kinematics (5+ rails) and applies coordination automatically
+- **Movement Translation**: When Z movement is commanded (e.g., `[None, None, 5]`), it's automatically extended to `[None, None, 5, 5, 5]` for Z/A/B coordination
+
+**Technical Details:**
+- Fixed issue where probe movements showed `axes_d=[0,0,5,0,0,0]` instead of expected `axes_d=[0,0,5,5,5,0]`
+- All probe lifting operations (`_raise_tool`, `_raise_tool_manual`) now move Z/A/B together
+- Z-tilt stepper adjustments coordinate all Z-type axes to maintain bed level
+- Added comprehensive debug logging to track coordination events
+
+This ensures proper synchronized movement for tilting bed systems where Z, A, and B axes must move together to maintain bed orientation during probing and leveling operations.
+
 ### Improved Z-Axis Homing with Dynamic Position Limits (02.09.2025)
 Enhanced the Z-axis homing process in CartesianXY3Z kinematics to use printer.cfg position limits:
 - Initial Z/A/B positions now set to their respective `position_min` values from printer.cfg

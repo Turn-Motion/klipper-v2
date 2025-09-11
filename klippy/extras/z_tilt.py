@@ -189,6 +189,21 @@ class ZAdjustHelper:
             try:
                 logging.info("Z_TILT DEBUG: Executing move to %s=%.6f at speed=%.3f", 
                            axis_name, curpos[axis_idx], speed)
+                
+                # For 5-axis XYZAB system, ensure Z/A/B coordination during stepper adjustment
+                kin = toolhead.get_kinematics()
+                if hasattr(kin, 'rails') and len(kin.rails) >= 5:  # CartesianXY3Z
+                    # Ensure curpos has all 5 axes
+                    while len(curpos) < 5:
+                        curpos.append(orig_pos[len(curpos)] if len(curpos) < len(orig_pos) else 0.0)
+                    
+                    # If moving Z axis, also coordinate A and B
+                    if axis_idx == 2:  # Z axis
+                        curpos[3] = curpos[2]  # A follows Z
+                        curpos[4] = curpos[2]  # B follows Z
+                        logging.info("Z_TILT DEBUG: Coordinating Z/A/B movement: Z=%.6f, A=%.6f, B=%.6f", 
+                                   curpos[2], curpos[3], curpos[4])
+                
                 toolhead.move(curpos, speed)
                 toolhead.set_position(curpos)
                 logging.info("Z_TILT DEBUG: Move completed successfully")
