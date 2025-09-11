@@ -288,8 +288,24 @@ class HomingViaProbeHelper:
         return self
     def run_probe(self, gcmd):
         toolhead = self.printer.lookup_object('toolhead')
+        gcode = self.printer.lookup_object('gcode')
         pos = toolhead.get_position()
         pos[2] = self.z_min_position
+        
+        # Check for CartesianXY3Z kinematics with 5+ rails (Z/A/B coordination)
+        kin = toolhead.get_kinematics()
+        if hasattr(kin, 'rails') and len(kin.rails) >= 5:
+            gcode.respond_info("ProbeSession: Detected CartesianXY3Z with %d rails - coordinating Z/A/B probe movement" % len(kin.rails))
+            # Ensure pos has enough elements for 5-axis system
+            while len(pos) < 5:
+                pos.append(0.0)
+            # Coordinate A and B axes with Z during probing
+            pos[3] = self.z_min_position  # A axis
+            pos[4] = self.z_min_position  # B axis
+            gcode.respond_info("ProbeSession: Coordinated probe position - Z/A/B all set to %.3f" % self.z_min_position)
+        else:
+            gcode.respond_info("ProbeSession: Standard kinematics - Z-only probe movement")
+        
         speed = self.param_helper.get_probe_params(gcmd)['probe_speed']
         phoming = self.printer.lookup_object('homing')
         self.results.append(phoming.probing_move(self.mcu_probe, pos, speed))
