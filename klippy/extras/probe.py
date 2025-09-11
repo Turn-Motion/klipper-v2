@@ -487,24 +487,53 @@ class ProbePointsHelper:
         return self.lift_speed
     def _move(self, coord, speed):
         toolhead = self.printer.lookup_object('toolhead')
+        gcode = self.printer.lookup_object('gcode')
+        
+        # Debug: Log all move attempts
+        logging.info("PROBE DEBUG: _move called with coord=%s, speed=%.3f", coord, speed)
+        gcode.respond_info("PROBE DEBUG: _move called with coord=%s, speed=%.3f" % (coord, speed))
         
         # For 5-axis XYZAB system where A and B are Z-axes, coordinate Z/A/B movements
         kin = toolhead.get_kinematics()
-        if hasattr(kin, 'rails') and len(kin.rails) >= 5:  # CartesianXY3Z with A/B as Z-axes
-            # If Z coordinate is specified, also apply to A and B axes
-            if len(coord) >= 3 and coord[2] is not None:
-                # Extend coord to include A and B axes if not already specified
-                coord = list(coord)
-                while len(coord) < 5:
-                    coord.append(None)
+        logging.info("PROBE DEBUG: Kinematics type: %s", type(kin).__name__)
+        gcode.respond_info("PROBE DEBUG: Kinematics type: %s" % type(kin).__name__)
+        
+        if hasattr(kin, 'rails'):
+            rail_count = len(kin.rails)
+            logging.info("PROBE DEBUG: Rails count: %d", rail_count)
+            gcode.respond_info("PROBE DEBUG: Rails count: %d" % rail_count)
+            
+            if rail_count >= 5:  # CartesianXY3Z with A/B as Z-axes
+                logging.info("PROBE DEBUG: CartesianXY3Z detected, checking Z coordinate")
+                gcode.respond_info("PROBE DEBUG: CartesianXY3Z detected, checking Z coordinate")
                 
-                # Apply Z movement to A and B axes as well (they are Z-axes)
-                if coord[3] is None:  # A axis
-                    coord[3] = coord[2]
-                if coord[4] is None:  # B axis
-                    coord[4] = coord[2]
+                # If Z coordinate is specified, also apply to A and B axes
+                if len(coord) >= 3 and coord[2] is not None:
+                    logging.info("PROBE DEBUG: Z coordinate found: %.3f, extending to A/B", coord[2])
+                    gcode.respond_info("PROBE DEBUG: Z coordinate found: %.3f, extending to A/B" % coord[2])
                     
-                logging.info("PROBE DEBUG: Coordinating Z/A/B movement: %s", coord)
+                    # Extend coord to include A and B axes if not already specified
+                    coord = list(coord)
+                    while len(coord) < 5:
+                        coord.append(None)
+                    
+                    # Apply Z movement to A and B axes as well (they are Z-axes)
+                    if coord[3] is None:  # A axis
+                        coord[3] = coord[2]
+                    if coord[4] is None:  # B axis
+                        coord[4] = coord[2]
+                        
+                    logging.info("PROBE DEBUG: Coordinating Z/A/B movement: %s", coord)
+                    gcode.respond_info("PROBE DEBUG: Coordinating Z/A/B movement: %s" % coord)
+                else:
+                    logging.info("PROBE DEBUG: No Z coordinate to extend (coord length: %d, Z value: %s)", len(coord), coord[2] if len(coord) > 2 else "N/A")
+                    gcode.respond_info("PROBE DEBUG: No Z coordinate to extend")
+            else:
+                logging.info("PROBE DEBUG: Not CartesianXY3Z (rails < 5)")
+                gcode.respond_info("PROBE DEBUG: Not CartesianXY3Z (rails < 5)")
+        else:
+            logging.info("PROBE DEBUG: Kinematics has no rails attribute")
+            gcode.respond_info("PROBE DEBUG: Kinematics has no rails attribute")
         
         toolhead.manual_move(coord, speed)
     def _raise_tool(self):
@@ -531,9 +560,27 @@ class ProbePointsHelper:
         # For 5-axis XYZAB system, move Z/A/B together
         toolhead = self.printer.lookup_object('toolhead')
         kin = toolhead.get_kinematics()
-        if hasattr(kin, 'rails') and len(kin.rails) >= 5:  # CartesianXY3Z
-            self._move([None, None, self.horizontal_move_z, self.horizontal_move_z, self.horizontal_move_z], speed)
+        gcode = self.printer.lookup_object('gcode')
+        
+        logging.info("PROBE DEBUG: _raise_tool_manual - kinematics: %s", type(kin).__name__)
+        gcode.respond_info("PROBE DEBUG: _raise_tool_manual - kinematics: %s" % type(kin).__name__)
+        
+        if hasattr(kin, 'rails'):
+            rail_count = len(kin.rails)
+            logging.info("PROBE DEBUG: _raise_tool_manual - rails count: %d", rail_count)
+            gcode.respond_info("PROBE DEBUG: _raise_tool_manual - rails count: %d" % rail_count)
+            
+            if rail_count >= 5:  # CartesianXY3Z
+                logging.info("PROBE DEBUG: _raise_tool_manual - Using 5-axis coordination")
+                gcode.respond_info("PROBE DEBUG: _raise_tool_manual - Using 5-axis coordination")
+                self._move([None, None, self.horizontal_move_z, self.horizontal_move_z, self.horizontal_move_z], speed)
+            else:
+                logging.info("PROBE DEBUG: _raise_tool_manual - Using 3-axis mode (rails < 5)")
+                gcode.respond_info("PROBE DEBUG: _raise_tool_manual - Using 3-axis mode (rails < 5)")
+                self._move([None, None, self.horizontal_move_z], speed)
         else:
+            logging.info("PROBE DEBUG: _raise_tool_manual - No rails attribute, using 3-axis mode")
+            gcode.respond_info("PROBE DEBUG: _raise_tool_manual - No rails attribute, using 3-axis mode")
             self._move([None, None, self.horizontal_move_z], speed)
     def _invoke_callback(self, results):
         # Flush lookahead queue
