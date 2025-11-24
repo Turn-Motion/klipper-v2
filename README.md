@@ -47,6 +47,32 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Multi-Extruder Tool Change Position Synchronization Fix (24.11.2025)
+Fixed a critical bug in `extruder.py` where switching back to a previously used extruder (e.g., T0 → T1 → T0) would cause "Internal error in stepcompress" failures.
+
+**Root Cause:** When activating an extruder via `ACTIVATE_EXTRUDER` command, the toolhead's commanded position was updated but the extruder stepper's internal position was not synchronized with the extruder's `last_position`. This caused a position mismatch that led to invalid step calculations.
+
+**The Bug Sequence:**
+1. T0 active, extrudes to E=10mm → T0.last_position = 10, stepper position = 10
+2. Switch to T1 → T0.last_position preserved at 10, but stepper position not updated
+3. Switch back to T0 → toolhead commanded position set to 10, stepper still at old position
+4. Next extrusion → **stepcompress error** due to position mismatch
+
+**Why T1 Didn't Have This Issue:**
+- T1 starts at last_position = 0 (never used before)
+- Stepper internal position = 0 (default initialization)
+- Both positions match, so first T1 activation works fine
+- Only extruders being **reactivated** after previous use experienced the bug
+
+**The Fix:**
+```python
+# In cmd_ACTIVATE_EXTRUDER (line 346-347)
+if self.extruder_stepper is not None:
+    self.extruder_stepper.stepper.set_position([self.last_position, 0., 0., 0., 0.])
+```
+
+This ensures the stepper's internal position is synchronized with `last_position` before every extruder activation, preventing position mismatches. Also updated `sync_to_extruder` to use 5 coordinates (XYZAB) for consistency with the 5-axis system.
+
 ### 5-Axis XYZAB Probe and Z-Tilt Coordination (11.09.2025)
 Enhanced probe and Z-tilt systems to properly handle 5-axis XYZAB kinematics where A and B axes function as additional Z-axes for tilting bed systems.
 

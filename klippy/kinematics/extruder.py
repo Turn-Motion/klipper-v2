@@ -61,7 +61,7 @@ class ExtruderStepper:
         if extruder is None or not isinstance(extruder, PrinterExtruder):
             raise self.printer.command_error("'%s' is not a valid extruder."
                                              % (extruder_name,))
-        self.stepper.set_position([extruder.last_position, 0., 0.])
+        self.stepper.set_position([extruder.last_position, 0., 0., 0., 0.])
         self.stepper.set_trapq(extruder.get_trapq())
         self.motion_queue = extruder_name
     def _set_pressure_advance(self, pressure_advance, smooth_time):
@@ -307,7 +307,8 @@ class PrinterExtruder:
         #gcode.respond_info(f"EXTRUDER MOVE DEBUG: Updated last_position from {self.last_position:.6f} to {move.end_pos[5]:.6f}")
         # #### END DEBUG CODE ####
         
-        self.last_position = 0 # Reset last_position to 0 after processing move, Chien
+        # self.last_position = 0 # DISABLED: Causes stepcompress errors with large E values
+        self.last_position = move.end_pos[5]  # Properly track extruder position
     def find_past_position(self, print_time):
         if self.extruder_stepper is None:
             return 0.
@@ -340,6 +341,10 @@ class PrinterExtruder:
             return
         gcmd.respond_info("Activating extruder %s" % (self.name,))
         toolhead.flush_step_generation()
+        # Update stepper position to match extruder's last_position
+        # This prevents stepcompress errors when switching back to this extruder
+        if self.extruder_stepper is not None:
+            self.extruder_stepper.stepper.set_position([self.last_position, 0., 0., 0., 0.])
         toolhead.set_extruder(self, self.last_position)
         self.printer.send_event("extruder:activate_extruder")
 
