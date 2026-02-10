@@ -25,7 +25,42 @@ class Move:
         # Note: In this system, indices 0-4 are XYZAB and index 5 is E (extruder)
         self.axes_d = axes_d = [end_pos[i] - start_pos[i] for i in range(6)]
         # Calculate total movement distance (excluding E axis)
-        self.move_d = move_d = math.sqrt(sum([d*d for d in axes_d]))
+        # For tilting bed with dominant Z/A/B movements, use maximum distance
+        xy_move_d = math.sqrt(axes_d[0]**2 + axes_d[1]**2)
+        z_move_d = abs(axes_d[2])
+        a_move_d = abs(axes_d[3]) if len(axes_d) > 3 else 0
+        b_move_d = abs(axes_d[4]) if len(axes_d) > 4 else 0
+        
+        # Use the maximum to ensure all axes have sufficient time
+        self.move_d = move_d = max(xy_move_d, z_move_d, a_move_d, b_move_d)
+        
+        # Debug: Show which axis dominates the move
+        # if move_d > 0.1:  # Only log significant moves
+        #     dominant = "XY"
+        #     if move_d == z_move_d:
+        #         dominant = "Z"
+        #     elif move_d == a_move_d:
+        #         dominant = "A"
+        #     elif move_d == b_move_d:
+        #         dominant = "B"
+        #     toolhead.printer.lookup_object('gcode').respond_info(
+        #         "Move distances: XY=%.2f Z=%.2f A=%.2f B=%.2f | Dominant=%s (%.2f)" 
+        #         % (xy_move_d, z_move_d, a_move_d, b_move_d, dominant, move_d))
+        
+        # For moves with small XY components relative to Z/A/B,
+        # reduce acceleration to ensure visible cruise phase
+        # DISABLED: This affects ALL axes, not just XY - causes Z/A/B to use wrong acceleration
+        # if move_d > .000000001 and xy_move_d > .000000001:
+        #     xy_ratio = xy_move_d / move_d
+        #     if xy_ratio < 0.2:  # XY is less than 20% of dominant axis
+        #         # Reduce acceleration proportionally to ensure cruise phase
+        #         old_accel = self.accel
+        #         self.accel = toolhead.max_accel * max(0.1, xy_ratio * 2)
+        #         # Debug logging to show in Klipper interface
+        #         # toolhead.printer.lookup_object('gcode').respond_info(
+        #         #     "CartesianXY3Z: Small XY ratio %.2f%% - Reduced accel from %.1f to %.1f mm/s²" 
+        #         #     % (xy_ratio * 100, old_accel, self.accel))
+            
         if move_d < .000000001:
             # Extrude only move
             self.end_pos = (start_pos[0], start_pos[1], start_pos[2],
@@ -52,6 +87,17 @@ class Move:
         self.smooth_delta_v2 = 2.0 * move_d * toolhead.max_accel_to_decel
         self.end_v2 = 0. # Initialize end_v2 to a default value
         self.next_junction_v2 = 999999999.9
+        
+        # Initialize timing attributes to safe defaults
+        # This ensures they're always available even if set_junction is never called
+        self.start_v = 0.
+        self.cruise_v = 0.
+        self.end_v = 0.
+        self.accel_t = 0.
+        self.cruise_t = 0.
+        self.decel_t = 0.
+        # Flag to track if set_junction has been called
+        self._junction_set = False
     def limit_speed(self, speed, accel):
         speed2 = speed**2
         if speed2 < self.max_cruise_v2:
@@ -211,6 +257,16 @@ class LookAheadQueue:
             next_smoothed_v2 = smoothed_v2
         if update_flush_count or not flush_count:
             return
+        # Check for moves that never had set_junction called
+        gcode = self.toolhead.printer.lookup_object('gcode')
+        for i, move in enumerate(queue[:flush_count]):
+            if not move._junction_set:
+                # Log when default timing values are being used
+                gcode.respond_info(
+                    f"WARNING: Move using default timing values (set_junction never called). "
+                    f"Move {i+1}/{flush_count}, axes_d={[round(d, 4) for d in move.axes_d]}"
+                )
+                
         # Generate step times for all moves ready to be flushed
         self.toolhead._process_moves(queue[:flush_count])
         # Remove processed moves from the queue
@@ -218,12 +274,12 @@ class LookAheadQueue:
     def add_move(self, move):
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
         # Debug extruder movement
-        gcode = self.toolhead.printer.lookup_object('gcode')
-        #gcode.respond_info(f"TOOLHEAD MOVE DEBUG: Adding move with axes_d={move.axes_d}, axes_r={move.axes_r}")
-        if abs(move.axes_d[5]) > 0.00001:  # Check if this is an extruder move
-            gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Extruder move detected! E distance={move.axes_d[5]}")
-            #gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move details - start_pos={move.start_pos}, end_pos={move.end_pos}")
-            #gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move params - accel={move.accel}, cruise_v2={move.max_cruise_v2}")
+        # gcode = self.toolhead.printer.lookup_object('gcode')
+        # gcode.respond_info(f"TOOLHEAD MOVE DEBUG: Adding move with axes_d={move.axes_d}, axes_r={move.axes_r}")
+        # if abs(move.axes_d[5]) > 0.00001:  # Check if this is an extruder move
+        #     gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Extruder move detected! E distance={move.axes_d[5]}")
+        #     gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move details - start_pos={move.start_pos}, end_pos={move.end_pos}")
+        #     gcode.respond_info(f"TOOLHEAD E-MOVE DEBUG: Move params - accel={move.accel}, cruise_v2={move.max_cruise_v2}")
         # #### END DEBUG CODE ####
 
         self.queue.append(move)
@@ -237,7 +293,7 @@ class LookAheadQueue:
         if self.junction_flush <= 0.:
             # Enough moves have been queued to reach the target flush time.
             # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-            gcode.respond_info(f"TOOLHEAD DEBUG: Flushing move queue with {len(self.queue)} moves")
+            #gcode.respond_info(f"TOOLHEAD DEBUG: Flushing move queue with {len(self.queue)} moves")
             # #### END DEBUG CODE ####
             self.flush(lazy=True)
 
@@ -427,14 +483,14 @@ class ToolHead:
                     move.start_v, move.cruise_v, move.accel)
             if move.axes_d[5]:
                 # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE DETECTED! *** E_distance={move.axes_d[5]:.6f}")
+                #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE DETECTED! *** E_distance={move.axes_d[5]:.6f}")
                 #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Extruder move details - E_distance={move.axes_d[5]:.6f}, start_v={move.start_v:.6f}, cruise_v={move.cruise_v:.6f}")
                 # #### END DEBUG CODE ####
                 
                 self.extruder.move(next_move_time, move)
                 
                 # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-                gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE COMPLETED ***")
+                #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: *** EXTRUDER MOVE COMPLETED ***")
                 # #### END DEBUG CODE ####
                 
             next_move_time = (next_move_time + move.accel_t
@@ -556,9 +612,9 @@ class ToolHead:
     def move(self, newpos, speed):
         # Create a move and add it to the move queue
         gcode_logging_debug = self.printer.lookup_object('gcode')
-        gcode_logging_debug.respond_info(
-            f"TOOLHEAD DEBUG: move() called with newpos={['%.4f' % p for p in newpos]} speed={speed}"
-        )
+        #gcode_logging_debug.respond_info(
+        #    f"TOOLHEAD DEBUG: move() called with newpos={['%.4f' % p for p in newpos]} speed={speed}"
+        #)
         move = Move(self, self.commanded_pos, newpos, speed)
         # Perform kinematic check if any axes move
         axes_d = move.axes_d
@@ -573,9 +629,9 @@ class ToolHead:
                 self.extruder.check_move(move)
         elif axes_d[5]:
             # Extruder only move
-            gcode_logging_debug.respond_info(
-                f"TOOLHEAD DEBUG: Extruder-only move detected with delta_e={axes_d[5]:.4f}"
-            )
+            #gcode.respond_info(
+            #    f"TOOLHEAD DEBUG: Extruder-only move detected with delta_e={axes_d[5]:.4f}"
+            #)
             self.extruder.check_move(move)
         self.commanded_pos[:] = newpos
         #gcode_logging_debug.respond_info(

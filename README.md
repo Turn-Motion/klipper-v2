@@ -47,8 +47,135 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
-### CartesianXY3Z Speed Limiting deleted for Debug (19.08.2025)
-Disable the Z, A, and B axes speed limiting in the CartesianXY3Z kinematics module. This allows testing unsynchronized movement issues that may occur when using the A and B axes. The speed limiting code calculates a ratio based on the slowest axis among Z, A, and B, and applies it to maintain synchronized movement. Commenting out this code allows the axes to move at their full configured speeds without this coordination, which can help diagnose movement and extrusion-related issues.
+### Multi-Extruder Tool Change Position Synchronization Fix (24.11.2025)
+Fixed a critical bug in `extruder.py` where switching back to a previously used extruder (e.g., T0 → T1 → T0) would cause "Internal error in stepcompress" failures.
+
+**Root Cause:** When activating an extruder via `ACTIVATE_EXTRUDER` command, the toolhead's commanded position was updated but the extruder stepper's internal position was not synchronized with the extruder's `last_position`. This caused a position mismatch that led to invalid step calculations.
+
+**The Bug Sequence:**
+1. T0 active, extrudes to E=10mm → T0.last_position = 10, stepper position = 10
+2. Switch to T1 → T0.last_position preserved at 10, but stepper position not updated
+3. Switch back to T0 → toolhead commanded position set to 10, stepper still at old position
+4. Next extrusion → **stepcompress error** due to position mismatch
+
+**Why T1 Didn't Have This Issue:**
+- T1 starts at last_position = 0 (never used before)
+- Stepper internal position = 0 (default initialization)
+- Both positions match, so first T1 activation works fine
+- Only extruders being **reactivated** after previous use experienced the bug
+
+**The Fix:**
+```python
+# In cmd_ACTIVATE_EXTRUDER (line 346-347)
+if self.extruder_stepper is not None:
+    self.extruder_stepper.stepper.set_position([self.last_position, 0., 0., 0., 0.])
+```
+
+This ensures the stepper's internal position is synchronized with `last_position` before every extruder activation, preventing position mismatches. Also updated `sync_to_extruder` to use 5 coordinates (XYZAB) for consistency with the 5-axis system.
+
+### 5-Axis XYZAB Probe and Z-Tilt Coordination (11.09.2025)
+Enhanced probe and Z-tilt systems to properly handle 5-axis XYZAB kinematics where A and B axes function as additional Z-axes for tilting bed systems.
+
+**Key Improvements:**
+- **Probe Movement Coordination**: Modified `probe.py` to automatically coordinate Z/A/B axes during all probe operations
+- **Z-Tilt Enhancement**: Updated `z_tilt.py` to ensure coordinated movement of all Z-type axes during bed leveling
+- **Automatic Detection**: System detects CartesianXY3Z kinematics (5+ rails) and applies coordination automatically
+- **Movement Translation**: When Z movement is commanded (e.g., `[None, None, 5]`), it's automatically extended to `[None, None, 5, 5, 5]` for Z/A/B coordination
+
+**Technical Details:**
+- Fixed issue where probe movements showed `axes_d=[0,0,5,0,0,0]` instead of expected `axes_d=[0,0,5,5,5,0]`
+- All probe lifting operations (`_raise_tool`, `_raise_tool_manual`) now move Z/A/B together
+- Z-tilt stepper adjustments coordinate all Z-type axes to maintain bed level
+- Added comprehensive debug logging to track coordination events
+
+This ensures proper synchronized movement for tilting bed systems where Z, A, and B axes must move together to maintain bed orientation during probing and leveling operations.
+
+### Improved Z-Axis Homing with Dynamic Position Limits (02.09.2025)
+Enhanced the Z-axis homing process in CartesianXY3Z kinematics to use printer.cfg position limits:
+- Initial Z/A/B positions now set to their respective `position_min` values from printer.cfg
+- Force move distances now dynamically calculated using `position_max`/`position_min` values
+- Proper handling of inverted Z-axis setups where the probe is fixed at the top
+
+### Z_tilt CartesianXY3Z Support (02.09.2025)
+Enhanced Z_tilt module to properly support CartesianXY3Z kinematics by including A and B axis steppers in the Z tilt adjustment process. This allows for proper bed leveling on printers with multiple Z-axis motors including those on A and B axes. Added comprehensive debug logging to help diagnose stepper detection issues. Implemented a temporary fix to detect steppers by name (stepper_z, stepper_a, stepper_b) when is_active_axis() method fails to correctly identify them.
+
+**Fixed axis-specific movement issue (02.09.2025):**
+- Fixed critical bug where Z_TILT_ADJUST would move Z axis positively but not A and B axes, causing out-of-range errors
+- Added axis detection system that maps each stepper to its correct coordinate index (Z=2, A=3, B=4)
+- Modified movement logic to update the appropriate coordinate for each stepper based on its axis
+- Preserved original position during adjustment to avoid accumulating changes to the wrong axes
+- Added detailed axis-specific logging for easier troubleshooting
+
+This ensures all Z, A, and B steppers move correctly during tilt adjustment, preventing position errors and improving calibration reliability for printers with inverted Z-axis configurations.
+
+
+### Move Object Safety Improvements (24.08.2025)
+Fixed an AttributeError in CartesianXY3Z kinematics where safety check failures could cause crashes due to missing timing attributes:
+
+**Problem:** When a move failed safety checks (e.g., "Extruder tip below printing plate - collision detected"), the move would be rejected before `set_junction` was called, causing an `AttributeError: 'Move' object has no attribute 'accel_t'` when the toolhead tried to process the move.
+
+**Solution:**
+1. Added default initialization of timing attributes in the Move constructor:
+   ```python
+   # Initialize timing attributes to safe defaults
+   self.start_v = 0.
+   self.cruise_v = 0.
+   self.end_v = 0.
+   self.accel_t = 0.
+   self.cruise_t = 0.
+   self.decel_t = 0.
+   self._junction_set = False  # Track if set_junction was called
+   ```
+2. Modified CartesianXY3Z safety check handling to allow debugging by skipping safety checks while logging their status
+3. Added detection and logging for moves using default timing values:
+   ```python
+   # Check for moves that never had set_junction called
+   for i, move in enumerate(queue[:flush_count]):
+       if not move._junction_set:
+           gcode.respond_info(
+               f"WARNING: Move using default timing values (set_junction never called). "
+               f"Move {i+1}/{flush_count}, axes_d={[round(d, 4) for d in move.axes_d]}"
+           )
+   ```
+
+This ensures that even when moves are rejected by safety checks, they still have the necessary attributes for safe processing, preventing crashes in the motion planning system. The added logging helps identify which moves are using default timing values instead of properly calculated ones.
+
+### Debug Output Cleanup (20.08.2025)
+Cleaned up verbose debug output across multiple modules to reduce console noise while preserving essential information:
+
+**Files Modified:**
+- `toolhead.py` - Commented out detailed move debug messages, kept "Processing x moves" 
+- `gcode_move.py` - Commented out GCodeMove debug messages
+- `homing.py` - Commented out detailed endstop/position debug messages
+- `cartesianxy3z.py` - Commented out verbose homing debug messages  
+- `extruder.py` - Commented out extruder move debug messages
+
+**Console Output Now Shows Only:**
+- "TOOLHEAD PROCESS_MOVES DEBUG: Processing x moves"
+- "Starting/Completed individual precision homing for [axis]"
+- Essential error messages
+
+This significantly reduces log verbosity while maintaining visibility into key operations and error conditions.
+
+### CartesianXY3Z Kinematic - Coordinated Movement Fix (20.08.2025)
+Fixed sequential axis movement issue in CartesianXY3Z kinematics where Z, A, B axes would move separately from X, Y axes. The root cause was incorrect move distance calculation in `toolhead.py` that was including all axes in the distance formula.
+
+**The Fix:** Modified `move_d` calculation to use the maximum distance among:
+- XY combined distance: `sqrt(X² + Y²)`  
+- Individual Z, A, B axis distances: `abs(Z)`, `abs(A)`, `abs(B)`
+
+```python
+move_d = max(xy_distance, z_distance, a_distance, b_distance)
+```
+
+**Additional improvement:** For moves where XY distance is less than 20% of the dominant axis, acceleration is reduced proportionally to ensure a visible cruise phase. This prevents small XY movements from being dominated by acceleration/deceleration.
+
+This ensures:
+- **Proper timing**: The axis with the largest movement dictates the move duration
+- **Synchronized movement**: All axes move together with visible cruise phases
+- **Smooth motion**: Small XY movements are no longer jerky or appear to happen only at the end
+
+Perfect for tilting bed systems where Z, A, B axes often travel dominant distances while XY makes small adjustments.
 
 ### Reduced Logging / Ztilt Logging (06.08.2025)
 - Reduced verbose debug logging in toolhead.py and extruder.py modules while preserving essential start/end logs for key code flows.
@@ -66,9 +193,6 @@ Changed the default extruder coordinate system to use relative mode (M83) at sta
 
 ### CartesianXY3Z Safety Module Direct Import (04.08.2025)
 The CartesianXY3Z kinematics now directly imports the safety module from extras/cartesianxy3z_safety.py without requiring a [cartesianxy3z_safety] section in printer.cfg. This allows safety checks to run automatically when the kinematics loads. The module logs which parameters are found in the config and which are using default values, making it easier to diagnose configuration issues. Fixed compatibility issues with ConfigWrapper to properly detect parameters using Klipper's sentinel pattern instead of has_option(). -- Need to be tested - latest update
-
-### Z_tilt CartesianXY3Z Support (04.08.2025)
-Enhanced Z_tilt module to properly support CartesianXY3Z kinematics by including A and B axis steppers in the Z tilt adjustment process. This allows for proper bed leveling on printers with multiple Z-axis motors including those on A and B axes. Added comprehensive debug logging to help diagnose stepper detection issues. Implemented a temporary fix to detect steppers by name (stepper_z, stepper_a, stepper_b) when is_active_axis() method fails to correctly identify them. -- Need to be tested
 
 ### Extruder Position Reset (04.08.2025)
 Modified extruder movement handling to reset the last_position to 0 after processing each move. This prevents position accumulation issues and ensures proper relative extrusion behavior, fixing cases where extruder moves would update position tracking but not physically move the extruder motor. -- Need to be tested
