@@ -438,8 +438,8 @@ class CartesianXY3Z:
                 # Call safety check and block move if unsafe
                 is_safe = self.safety_module.check_move(move)
                 if not is_safe:
-                    # Move was blocked by safety checks, error message already sent
-                    return
+                    raise move.move_error(
+                        "Safety check blocked move")
                 logging.info("CartesianXY3Z: Safety check passed")
             except Exception as e:
                 gcode = self.printer.lookup_object('gcode')
