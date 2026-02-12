@@ -24,6 +24,9 @@ class CartesianXY3ZSafety:
         self.gcode.register_command('CHECK_CARTESIANXY3Z_SAFETY',
             self.cmd_CHECK_CARTESIANXY3Z_SAFETY,
             desc=self.cmd_CHECK_CARTESIANXY3Z_SAFETY_help)
+        self.gcode.register_command('PREVIEW_MOVE',
+            self.cmd_PREVIEW_MOVE,
+            desc=self.cmd_PREVIEW_MOVE_help)
 
     def handle_connect(self):
         self.toolhead = self.printer.lookup_object('toolhead')
@@ -144,7 +147,7 @@ class CartesianXY3ZSafety:
                 return False, "A-B distance exceeded"
    
             # ============================================================================
-            # SECONDARY BOUNDARY CONDITIONS � GOING OFF RAILS
+            # SECONDARY BOUNDARY CONDITIONS � GOING OFF RAILS
             # ============================================================================
             # Level 2: Wagon rail limit checks
             # Check A/B wagon X-position limits
@@ -282,6 +285,67 @@ class CartesianXY3ZSafety:
             f"  z_now: ({z_now[0]:.3f}, {z_now[1]:.3f}, {z_now[2]:.3f})\n"
             f"  z_norm: ({z_norm[0]:.3f}, {z_norm[1]:.3f}, {z_norm[2]:.3f})"
         )
+
+    cmd_PREVIEW_MOVE_help = "Preview a move without executing - check safety only"
+    def cmd_PREVIEW_MOVE(self, gcmd):
+        """Preview a move and check safety without sending to firmware"""
+        try:
+            # Get current position as starting point
+            current_pos = list(self.toolhead.get_position())
+            
+            gcmd.respond_info(
+                f"Current position: X={current_pos[0]:.2f} Y={current_pos[1]:.2f} "
+                f"Z={current_pos[2]:.2f} A={current_pos[3]:.2f} B={current_pos[4]:.2f}"
+            )
+            
+            # Parse G-code parameters (X, Y, Z, A, B)
+            target_pos = current_pos[:]
+            
+            if gcmd.get('X') is not None:
+                target_pos[0] = gcmd.get_float('X')
+            if gcmd.get('Y') is not None:
+                target_pos[1] = gcmd.get_float('Y')
+            if gcmd.get('Z') is not None:
+                target_pos[2] = gcmd.get_float('Z')
+            if gcmd.get('A') is not None:
+                target_pos[3] = gcmd.get_float('A')
+            if gcmd.get('B') is not None:
+                target_pos[4] = gcmd.get_float('B')
+            
+            gcmd.respond_info(
+                f"Target position:  X={target_pos[0]:.2f} Y={target_pos[1]:.2f} "
+                f"Z={target_pos[2]:.2f} A={target_pos[3]:.2f} B={target_pos[4]:.2f}"
+            )
+            
+            # Check safety at target position
+            is_safe, error = self.check_safety(target_pos)
+            
+            if is_safe:
+                gcmd.respond_info("✓ Move is SAFE - would be allowed")
+            else:
+                gcmd.respond_info(f"✗ Move is BLOCKED: {error}")
+            
+            # Show detailed analysis
+            z_mz, z_ab, csx, csz, i_ab, x_ab = self.calc_intermediate_values(target_pos)
+            points = self.calc_point_positions(target_pos)
+            x_now, y_now, z_now, z_norm = self.calc_vectors(points)
+            
+            gcmd.respond_info(
+                f"\nIntermediate values:\n"
+                f"  z_mz: {z_mz:.3f}, z_ab: {z_ab:.3f}\n"
+                f"  csx: {csx:.3f}, csz: {csz:.3f}\n"
+                f"  i_ab: {i_ab}, x_ab: {x_ab:.3f}\n\n"
+                f"Point positions:\n"
+                f"  P_Z: ({points['P_Z'][0]:.3f}, {points['P_Z'][1]:.3f}, {points['P_Z'][2]:.3f})\n"
+                f"  P_A: ({points['P_A'][0]:.3f}, {points['P_A'][1]:.3f}, {points['P_A'][2]:.3f})\n"
+                f"  P_B: ({points['P_B'][0]:.3f}, {points['P_B'][1]:.3f}, {points['P_B'][2]:.3f})\n"
+                f"  P_E: ({points['P_E'][0]:.3f}, {points['P_E'][1]:.3f}, {points['P_E'][2]:.3f})\n\n"
+                f"Bed orientation:\n"
+                f"  z_norm: ({z_norm[0]:.3f}, {z_norm[1]:.3f}, {z_norm[2]:.3f})"
+            )
+            
+        except Exception as e:
+            gcmd.respond_info(f"Preview error: {str(e)}")
 
     def get_status(self, eventtime):
         """Return safety status for use in macros"""
