@@ -435,13 +435,17 @@ class CartesianXY3Z:
         # Use directly imported safety module if available
         if self.safety_module is not None:
             try:
-                self.safety_module.check_move(move)
-                gcode = self.printer.lookup_object('gcode')
-                gcode.respond_info("CartesianXY3Z Safety: Safety check starts")
-                logging.info("CartesianXY3Z: Safety check starts")
+                # Call safety check and block move if unsafe
+                is_safe = self.safety_module.check_move(move)
+                if not is_safe:
+                    # Move was blocked by safety checks, error message already sent
+                    return
+                logging.info("CartesianXY3Z: Safety check passed")
             except Exception as e:
-                # This should never happen since we're skipping the check
-                logging.warning("CartesianXY3Z: Unexpected error in skipped safety check: %s", str(e))
+                gcode = self.printer.lookup_object('gcode')
+                gcode.respond_info(f"CartesianXY3Z: Safety system error: {str(e)}")
+                logging.error("CartesianXY3Z: Safety check failed with exception: %s", str(e))
+                raise move.move_error(f"Safety system error: {str(e)}")
         else:
             # Safety module not available, continue without safety checks
             logging.info("CartesianXY3Z: Safety module not available, continuing without safety checks")
