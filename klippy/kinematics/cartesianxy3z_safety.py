@@ -205,7 +205,7 @@ class CartesianXY3ZSafety:
                     vec_P_E_to_offset[1] * z_now[1] + 
                     vec_P_E_to_offset[2] * z_now[2])
 
-            if dist < 0:
+            if dist > 0:
                 return False, "Extruder collision with print bed detected"
     
             # ============================================================================
