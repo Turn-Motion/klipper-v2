@@ -9,10 +9,7 @@ import stepper
 from extras.homing import HomingMove
 from . import idex_modes
 # Direct import of safety module
-try:
-    from extras import cartesianxy3z_safety
-except ImportError:
-    cartesianxy3z_safety = None
+from . import cartesianxy3z_safety
 
 class CartesianXY3Z:
     def __init__(self, toolhead, config):
@@ -76,16 +73,18 @@ class CartesianXY3Z:
                 # Log safety module configuration status
                 logging.info("CartesianXY3Z: Initializing safety module")
                 
-                # Check which parameters exist in the config
+                # Option: Use the exact parameter names that safety.py expects
                 safety_params = [
-                    'joint_ball_diameter', 'wagon_length', 'wagon_rail_z_offset',
-                    'x_distance_between_joints_ab', 'y_distance_plate_to_joint_z',
-                    'y_overhang_plate_to_joints_ab', 'plate_thickness',
-                    'printing_area_x_length', 'printing_area_y_length',
-                    'joint_ball_inset', 'alu_mount_plate_thickness',
-                    'joint_mount_thickness', 'y_distance_joints_ab_to_rail',
-                    'x_railspace_ab_inwards', 'x_railspace_ab_outwards',
-                    'y_railspace_z_inwards', 'total_plate_height'
+                    'x_distance_between_joints_ab',
+                    'y_distance_between_ab_center_and_z',
+                    'flex_plate_thickness',
+                    'printing_area_x_length',
+                    'printing_area_y_length',
+                    'total_measured_height',
+                    'offset_measure_point_1_to_rotation_center',
+                    'offset_measure_point_2_to_plate_surface',
+                    'x_railspace_ab_outwards_neutral',      
+                    'y_railspace_z_inwards_neutral'
                 ]
                 
                 # Check each parameter and log whether it's using default or config value
@@ -200,19 +199,13 @@ class CartesianXY3Z:
                 forcepos[axis] = position_max  # Default to moving to max position for Z axes
                 #gcode.respond_info(f"DEBUG: {axis_name} using fallback forcepos={forcepos[axis]}")
 
-        
-        # Perform homing
-        #gcode.respond_info(f"DEBUG: {axis_name} Starting home_rails with forcepos={forcepos}, homepos={homepos}")
-        
         # Check what speed will be used
         homing_speed = getattr(hi, 'speed', 5.0)  # Default to 5mm/s if not specified
         second_homing_speed = getattr(hi, 'second_homing_speed', homing_speed/2.0)
         retract_dist = getattr(hi, 'retract_dist', 5.0)
         retract_speed = getattr(hi, 'retract_speed', homing_speed/2.0)
         
-        #gcode.respond_info(f"DEBUG: {axis_name} Homing speeds: initial={homing_speed}, second={second_homing_speed}")
-        #gcode.respond_info(f"DEBUG: {axis_name} Retract: dist={retract_dist}, speed={retract_speed}")
-        
+       
         try:
             homing_state.home_rails([rail], forcepos, homepos)
             #gcode.respond_info(f"DEBUG: {axis_name} home_rails completed successfully")
@@ -326,7 +319,6 @@ class CartesianXY3Z:
             toolhead.move(retract_pos, fast_speed)
             toolhead.wait_moves()
             #gcode.respond_info("DEBUG: All Z/A/B axes retracted from endstops")
-            
             #gcode.respond_info("DEBUG: Coordinated z homing fast homing completed")
             
         except Exception as e:
@@ -443,14 +435,17 @@ class CartesianXY3Z:
         # Use directly imported safety module if available
         if self.safety_module is not None:
             try:
-                # DEBUG: Skip actual safety check but log what would have happened
-                # self.safety_module.check_move(move)
-                logging.info("CartesianXY3Z: Safety check SKIPPED for debugging")
-                gcode = self.printer.lookup_object('gcode')
-                gcode.respond_info("CartesianXY3Z Safety: Check SKIPPED (debug mode)")
+                # Call safety check and block move if unsafe
+                is_safe = self.safety_module.check_move(move)
+                if not is_safe:
+                    raise move.move_error(
+                        "Safety check blocked move")
+                logging.info("CartesianXY3Z: Safety check passed")
             except Exception as e:
-                # This should never happen since we're skipping the check
-                logging.warning("CartesianXY3Z: Unexpected error in skipped safety check: %s", str(e))
+                gcode = self.printer.lookup_object('gcode')
+                gcode.respond_info(f"CartesianXY3Z: Safety system error: {str(e)}")
+                logging.error("CartesianXY3Z: Safety check failed with exception: %s", str(e))
+                raise move.move_error(f"Safety system error: {str(e)}")
         else:
             # Safety module not available, continue without safety checks
             logging.info("CartesianXY3Z: Safety module not available, continuing without safety checks")
@@ -477,4 +472,4 @@ class CartesianXY3Z:
         }
 
 def load_kinematics(toolhead, config):
-    return CartesianXY3Z(toolhead, config) 
+    return CartesianXY3Z(toolhead, config)

@@ -47,6 +47,54 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### CartesianXY3Z Safety Code Organization & Documentation (Current)
+**Status: ✅ COMPLETE** — Reorganized and comprehensively documented the CartesianXY3Z safety module with 8 clearly labeled sections (`PRELIMINARY CALCULATIONS`, `PRIMARY BOUNDARY CONDITIONS [Level 0]`, `SECONDARY PRELIMINARY CALCULATIONS`, `PRIMARY MECHANICAL CONSTRAINTS [Level 1]`, `SECONDARY BOUNDARY CONDITIONS [Level 2]`, `TERTIARY CALCULATIONS`, `TERTIARY BOUNDARY CONDITION [Level 3]`, `ALL SAFETY CHECKS PASSED`) featuring visual dividers, inline comments, and step-by-step documentation. Created 7 documentation files: `CARTESIANXY3Z_SAFETY_QUICK_REFERENCE.md`, `CARTESIANXY3Z_SAFETY_CODE_ORGANIZATION.md`, `CARTESIANXY3Z_SAFETY_VISUAL_MAP.md`, `CARTESIANXY3Z_SAFETY_SECTION_POSTER.md`, `CARTESIANXY3Z_SAFETY_IMPLEMENTATION_SUMMARY.md`, `CARTESIANXY3Z_SAFETY_DOCUMENTATION_INDEX.md`, and `IMPLEMENTATION_COMPLETE.md`. Key features include self-documenting code with visual section headers, performance optimization through strategic check ordering (Position boundaries → Mechanical constraints → Wagon rail limits → 3D collision detection), fast-fail design for safety, production-ready code with no syntax errors, and comprehensive documentation enabling developers to quickly understand safety structure, easily locate and modify specific checks, and debug failures with clear error messages.
+
+---
+
+### Multi-Extruder Tool Change Position Synchronization Fix (24.11.2025)
+Fixed a critical bug in `extruder.py` where switching back to a previously used extruder (e.g., T0 → T1 → T0) would cause "Internal error in stepcompress" failures.
+
+**Root Cause:** When activating an extruder via `ACTIVATE_EXTRUDER` command, the toolhead's commanded position was updated but the extruder stepper's internal position was not synchronized with the extruder's `last_position`. This caused a position mismatch that led to invalid step calculations.
+
+**The Bug Sequence:**
+1. T0 active, extrudes to E=10mm → T0.last_position = 10, stepper position = 10
+2. Switch to T1 → T0.last_position preserved at 10, but stepper position not updated
+3. Switch back to T0 → toolhead commanded position set to 10, stepper still at old position
+4. Next extrusion → **stepcompress error** due to position mismatch
+
+**Why T1 Didn't Have This Issue:**
+- T1 starts at last_position = 0 (never used before)
+- Stepper internal position = 0 (default initialization)
+- Both positions match, so first T1 activation works fine
+- Only extruders being **reactivated** after previous use experienced the bug
+
+**The Fix:**
+```python
+# In cmd_ACTIVATE_EXTRUDER (line 346-347)
+if self.extruder_stepper is not None:
+    self.extruder_stepper.stepper.set_position([self.last_position, 0., 0., 0., 0.])
+```
+
+This ensures the stepper's internal position is synchronized with `last_position` before every extruder activation, preventing position mismatches. Also updated `sync_to_extruder` to use 5 coordinates (XYZAB) for consistency with the 5-axis system.
+
+### 5-Axis XYZAB Probe and Z-Tilt Coordination (11.09.2025)
+Enhanced probe and Z-tilt systems to properly handle 5-axis XYZAB kinematics where A and B axes function as additional Z-axes for tilting bed systems.
+
+**Key Improvements:**
+- **Probe Movement Coordination**: Modified `probe.py` to automatically coordinate Z/A/B axes during all probe operations
+- **Z-Tilt Enhancement**: Updated `z_tilt.py` to ensure coordinated movement of all Z-type axes during bed leveling
+- **Automatic Detection**: System detects CartesianXY3Z kinematics (5+ rails) and applies coordination automatically
+- **Movement Translation**: When Z movement is commanded (e.g., `[None, None, 5]`), it's automatically extended to `[None, None, 5, 5, 5]` for Z/A/B coordination
+
+**Technical Details:**
+- Fixed issue where probe movements showed `axes_d=[0,0,5,0,0,0]` instead of expected `axes_d=[0,0,5,5,5,0]`
+- All probe lifting operations (`_raise_tool`, `_raise_tool_manual`) now move Z/A/B together
+- Z-tilt stepper adjustments coordinate all Z-type axes to maintain bed level
+- Added comprehensive debug logging to track coordination events
+
+This ensures proper synchronized movement for tilting bed systems where Z, A, and B axes must move together to maintain bed orientation during probing and leveling operations.
+
 ### Improved Z-Axis Homing with Dynamic Position Limits (02.09.2025)
 Enhanced the Z-axis homing process in CartesianXY3Z kinematics to use printer.cfg position limits:
 - Initial Z/A/B positions now set to their respective `position_min` values from printer.cfg

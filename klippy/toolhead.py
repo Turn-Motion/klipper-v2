@@ -618,21 +618,46 @@ class ToolHead:
         move = Move(self, self.commanded_pos, newpos, speed)
         # Perform kinematic check if any axes move
         axes_d = move.axes_d
-        if axes_d[0] or axes_d[1] or axes_d[2] or axes_d[3] or axes_d[4]:
-            # Move kinematic axes
-            self.kin.check_move(move)
-            extruder_move = bool(axes_d[5])
-            if extruder_move:
-                #gcode_logging_debug.respond_info(
-                #    f"TOOLHEAD DEBUG: Mixed move with extruder component delta_e={axes_d[5]:.4f}, calling extruder.check_move()"
-                #)
+        try:
+            if axes_d[0] or axes_d[1] or axes_d[2] or axes_d[3] or axes_d[4]:
+                # Move kinematic axes
+                # Log what check is about to start
+                axes_moving = []
+                if axes_d[0]: axes_moving.append('X')
+                if axes_d[1]: axes_moving.append('Y')
+                if axes_d[2]: axes_moving.append('Z')
+                if axes_d[3]: axes_moving.append('A')
+                if axes_d[4]: axes_moving.append('B')
+                axes_str = ','.join(axes_moving)
+                gcode_logging_debug.respond_info(
+                    f"TOOLHEAD: Starting kinematic check for axes [{axes_str}] - "
+                    f"Move from ({self.commanded_pos[0]:.2f}, {self.commanded_pos[1]:.2f}, {self.commanded_pos[2]:.2f}, "
+                    f"{self.commanded_pos[3]:.2f}, {self.commanded_pos[4]:.2f}) to "
+                    f"({newpos[0]:.2f}, {newpos[1]:.2f}, {newpos[2]:.2f}, {newpos[3]:.2f}, {newpos[4]:.2f})"
+                )
+                logging.info(f"TOOLHEAD: Kinematic check for axes [{axes_str}]")
+                # Eng of log -- chien
+                self.kin.check_move(move)
+                extruder_move = bool(axes_d[5])
+                if extruder_move:
+                    self.extruder.check_move(move)
+            elif axes_d[5]:
+                # Extruder only move
                 self.extruder.check_move(move)
-        elif axes_d[5]:
-            # Extruder only move
-            #gcode.respond_info(
-            #    f"TOOLHEAD DEBUG: Extruder-only move detected with delta_e={axes_d[5]:.4f}"
-            #)
-            self.extruder.check_move(move)
+        except self.printer.command_error as e:
+            # Move check failed: flush queued moves so everything
+            # before this point still executes, then pause the print
+            gcode_logging_debug.respond_info(
+                "TOOLHEAD: Move check failed: %s -- "
+                "flushing prior moves and pausing" % (str(e),))
+            logging.warning(
+                "TOOLHEAD: Move check failed, pausing: %s", str(e))
+            self._flush_lookahead()
+            pause_resume = self.printer.lookup_object(
+                'pause_resume', None)
+            if pause_resume is not None:
+                gcode_logging_debug.run_script_from_command("PAUSE")
+            raise
         self.commanded_pos[:] = newpos
         #gcode_logging_debug.respond_info(
         #    f"TOOLHEAD DEBUG: Updated commanded_pos to {['%.4f' % p for p in self.commanded_pos]}, adding move to queue"
