@@ -3,6 +3,30 @@ import logging
 import math
 
 
+def add(a, b):
+    return [x + y for x, y in zip(a, b)]
+
+def sub(a, b):
+    return [x - y for x, y in zip(a, b)]
+
+def mul(v, s):
+    return [x * s for x in v]
+
+def div(v, s):
+    return [x / s for x in v]
+
+def dot(a, b):
+    return sum(x * y for x, y in zip(a, b))
+
+def cross(a, b):
+    ax, ay, az = a
+    bx, by, bz = b
+    return [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx]
+
+def norm(a):
+    return math.sqrt(dot(a, a))
+
+
 class CartesianXY3ZSafety:
     def __init__(self, config):
         self.printer = config.get_printer()
@@ -19,6 +43,7 @@ class CartesianXY3ZSafety:
         self.d_flex = config.getfloat('flex_plate_thickness', 6.0)
         self.x_out = config.getfloat('x_railspace_ab_outwards_neutral', 59.5)
         self.y_in = config.getfloat('y_railspace_z_inwards_neutral', 101.1)
+        self.r_ex = config.getfloat('extruder_radius', 0.5) #Outer radius of extruder tip
         self.z_tot = self.h_tot - self.d_1r - self.d_2p + self.d_flex
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
         self.gcode.register_command('CHECK_CARTESIANXY3Z_SAFETY',
@@ -32,6 +57,10 @@ class CartesianXY3ZSafety:
         self.toolhead = self.printer.lookup_object('toolhead')
 
     def calc_intermediate_values(self, pos):
+        # ============================================================================
+        # Real-time CALCULATIONS
+        # ============================================================================
+        # Extract position coordinates
         x, y = pos[0], pos[1]
         z, a, b = pos[2], pos[3], pos[4]
         z_mz = z - (a + b) / 2
@@ -40,21 +69,17 @@ class CartesianXY3ZSafety:
             csx = 0.0
         else:
             csx = math.sqrt(self.d_x**2 - z_ab**2)
-        if abs(z_mz) >= self.d_y:
-            csz = 0.0
-        else:
-            csz = math.sqrt(1 - (z_mz**2) / (self.d_y**2))
         i_ab = -1 if a > b else 1
         if csx == 0:
             x_ab = 0.0
         else:
             x_ab = (csx - self.d_x) / 2 - i_ab * z_mz * z_ab / csx
-        return z_mz, z_ab, csx, csz, i_ab, x_ab
+        return z_mz, z_ab, csx, i_ab, x_ab
 
     def calc_point_positions(self, pos):
         x, y = pos[0], pos[1]
         z, a, b = pos[2], pos[3], pos[4]
-        z_mz, z_ab, csx, csz, i_ab, x_ab = self.calc_intermediate_values(pos)
+        z_mz, z_ab, csx, i_ab, x_ab = self.calc_intermediate_values(pos)
         P_Z_x = self.p_x / 2
         if abs(z_ab) >= self.d_x:
             P_Z_y = (self.p_y - self.d_y) / 2
@@ -64,19 +89,19 @@ class CartesianXY3ZSafety:
                 P_Z_y = (self.p_y - self.d_y) / 2
             else:
                 P_Z_y = math.sqrt(self.d_y**2 - z_mz**2 / denom) + (self.p_y - self.d_y) / 2
-        P_Z_z = z
+        P_Z_z = -z
         if csx == 0:
             P_A_x = self.p_x / 2
         else:
             P_A_x = z_mz * z_ab / csx - csx / 2 + self.p_x / 2
         P_A_y = (self.p_y - self.d_y) / 2
-        P_A_z = a
+        P_A_z = -a
         if csx == 0:
             P_B_x = self.p_x / 2
         else:
             P_B_x = z_mz * z_ab / csx + csx / 2 + self.p_x / 2
         P_B_y = (self.p_y - self.d_y) / 2
-        P_B_z = b
+        P_B_z = -b
         P_E_x = x
         P_E_y = y
         P_E_z = self.z_tot
@@ -91,21 +116,10 @@ class CartesianXY3ZSafety:
         P_A = points['P_A']
         P_B = points['P_B']
         P_Z = points['P_Z']
-        x_now = (P_B[0] - P_A[0], P_B[1] - P_A[1], P_B[2] - P_A[2])
-        mid_x = (P_A[0] + P_B[0]) / 2
-        mid_y = (P_A[1] + P_B[1]) / 2
-        mid_z = (P_A[2] + P_B[2]) / 2
-        y_now = (P_Z[0] - mid_x, P_Z[1] - mid_y, P_Z[2] - mid_z)
-        z_now = (
-            x_now[1] * y_now[2] - x_now[2] * y_now[1],
-            x_now[2] * y_now[0] - x_now[0] * y_now[2],
-            x_now[0] * y_now[1] - x_now[1] * y_now[0]
-        )
-        z_norm_magnitude = math.sqrt(z_now[0]**2 + z_now[1]**2 + z_now[2]**2)
-        if z_norm_magnitude > 0:
-            z_norm = (z_now[0] / z_norm_magnitude, z_now[1] / z_norm_magnitude, z_now[2] / z_norm_magnitude)
-        else:
-            z_norm = (0, 0, 1)
+        x_now = sub(P_B, P_A)
+        y_now = sub(P_Z, div(add(P_A, P_B), 2))
+        z_now = cross(x_now, y_now)
+        z_norm = div(z_now, norm(z_now))
         return x_now, y_now, z_now, z_norm
 
     def check_safety(self, pos):
@@ -132,35 +146,42 @@ class CartesianXY3ZSafety:
             # SECONDARY PRELIMINARY CALCULATIONS
             # ============================================================================
             # Calculate intermediate values needed for remaining checks
-            z_mz, z_ab, csx, csz, i_ab, x_ab = self.calc_intermediate_values(pos)
-            max_z_distance = math.sqrt(self.d_y**2 - self.d_x**2 / 4)
-   
+            z_mz, z_ab, csx, i_ab, x_ab = self.calc_intermediate_values(pos)
+
             # ============================================================================
             # PRIMARY MECHANICAL CONSTRAINTS
             # ============================================================================
             # Level 1: Primary boundary conditions - mechanical joint distances
-            if abs(z - a) > max_z_distance:
+            if abs(z - a) > math.sqrt(self.d_y**2 + self.d_x**2 / 4):
                 return False, "Z-A distance exceeded"
-            if abs(z - b) > max_z_distance:
+            if abs(z - b) > math.sqrt(self.d_y**2 + self.d_x**2 / 4):
                 return False, "Z-B distance exceeded"
             if abs(a - b) > self.d_x:
                 return False, "A-B distance exceeded"
    
             # ============================================================================
-            # SECONDARY BOUNDARY CONDITIONS � GOING OFF RAILS
+            # SECONDARY BOUNDARY CONDITIONS - GOING OFF RAILS
             # ============================================================================
             # Level 2: Wagon rail limit checks
-            # Check A/B wagon X-position limits
-            if abs(z_ab) > 0:
-                max_z_mz = min(
-                    self.x_out + (self.d_x - csx) / 2,
-                    self.d_x - (self.d_x + csx) / 2
-                ) * csx / abs(z_ab)
-                if abs(z_mz) > max_z_mz:
-                    return False, "A/B wagon approaching rail limit"
-            
-            # Check Z wagon Y-position limits
-            if abs(z_mz) > math.sqrt(self.d_y**2 - (self.d_y - self.y_in)**2):
+            # Check A wagon X-position limit
+            if csx > 0:
+                max_xa = abs(z_mz * z_ab / csx - csx / 2 + self.d_x / 2)
+                if max_xa > self.x_out:
+                    return False, "A wagon approaching rail limit"
+
+            # Check B wagon X-position limit
+            if csx > 0:
+                max_xb = abs(z_mz * z_ab / csx + csx / 2 - self.d_x / 2)
+                if max_xb > self.x_out:
+                    return False, "B wagon approaching rail limit"
+
+            # Check Z wagon Y-position limit
+            denom_z = 1 - (z_ab**2) / (self.d_x**2)
+            if denom_z > 0:
+                max_y = abs(math.sqrt(self.d_y**2 - z_mz**2 / denom_z) - self.d_y)
+            else:
+                max_y = float('inf')
+            if max_y > self.y_in:
                 return False, "Z wagon approaching rail limit"
   
             # ============================================================================
@@ -170,42 +191,22 @@ class CartesianXY3ZSafety:
             points = self.calc_point_positions(pos)
             
             # Calculate orientation vectors of the tilted bed plane
-            x_now, y_now, z_now, z_norm = self.calc_vectors(points)
-    
+            _, _, _, z_norm = self.calc_vectors(points)
+
             # ============================================================================
             # TERTIARY BOUNDARY CONDITION: COLLISION OF EXTRUDER TIP WITH BED
             # ============================================================================
             # Level 3: Extruder tip collision detection with tilting print bed
   
-            # Extract key point positions
-            P_E = points['P_E']      # Extruder tip position (x, y, z_tot)
-            P_A = points['P_A']      # A-axis joint position
-            
-            # Calculate the reference point on the bed surface
-            # P_A_offset = P_A + z_tot * z_norm
-            # This represents a point on the bed surface directly above P_A
-            P_A_offset = (
-                P_A[0] + self.z_tot * z_norm[0],
-                P_A[1] + self.z_tot * z_norm[1],
-                P_A[2] + self.z_tot * z_norm[2]
-            )
-    
-            # Calculate vector from reference point to extruder tip
-            vec_P_E_to_offset = (
-                P_E[0] - P_A_offset[0],
-                P_E[1] - P_A_offset[1],
-                P_E[2] - P_A_offset[2]
-            )
-            
-            # Project extruder position onto bed normal vector using dot product
-            # This gives the signed distance from the bed plane to the extruder tip
-            # If dist < 0: extruder is below bed plane = COLLISION
-            # If dist > 0: extruder is above bed plane = SAFE
-            dist = (vec_P_E_to_offset[0] * z_now[0] + 
-                    vec_P_E_to_offset[1] * z_now[1] + 
-                    vec_P_E_to_offset[2] * z_now[2])
+            P_E = points['P_E']
+            P_A = points['P_A']
 
-            if dist > 0:
+            # dist = dot(sub(P_E, add(P_A, mul(z_norm, z_tot))), z_norm)
+            #        - r_ex * sin(acos(z_norm[2]))
+            dist = (dot(sub(P_E, add(P_A, mul(z_norm, self.z_tot))), z_norm)
+                    - self.r_ex * math.sin(math.acos(z_norm[2])))
+
+            if dist < 0:
                 return False, "Extruder collision with print bed detected"
     
             # ============================================================================
@@ -266,13 +267,13 @@ class CartesianXY3ZSafety:
             self.is_safe = False
             self.last_error = error
             gcmd.respond_info(f"Safety check FAILED: {error}")
-        z_mz, z_ab, csx, csz, i_ab, x_ab = self.calc_intermediate_values(pos)
+        z_mz, z_ab, csx, i_ab, x_ab = self.calc_intermediate_values(pos)
         points = self.calc_point_positions(pos)
         x_now, y_now, z_now, z_norm = self.calc_vectors(points)
         gcmd.respond_info(
             f"Intermediate values:\n"
             f"  z_mz: {z_mz:.3f}, z_ab: {z_ab:.3f}\n"
-            f"  csx: {csx:.3f}, csz: {csz:.3f}\n"
+            f"  csx: {csx:.3f}\n"
             f"  i_ab: {i_ab}, x_ab: {x_ab:.3f}\n\n"
             f"Point positions:\n"
             f"  P_Z: ({points['P_Z'][0]:.3f}, {points['P_Z'][1]:.3f}, {points['P_Z'][2]:.3f})\n"
@@ -326,14 +327,14 @@ class CartesianXY3ZSafety:
                 gcmd.respond_info(f"✗ Move is BLOCKED: {error}")
             
             # Show detailed analysis
-            z_mz, z_ab, csx, csz, i_ab, x_ab = self.calc_intermediate_values(target_pos)
+            z_mz, z_ab, csx, i_ab, x_ab = self.calc_intermediate_values(target_pos)
             points = self.calc_point_positions(target_pos)
             x_now, y_now, z_now, z_norm = self.calc_vectors(points)
             
             gcmd.respond_info(
                 f"\nIntermediate values:\n"
                 f"  z_mz: {z_mz:.3f}, z_ab: {z_ab:.3f}\n"
-                f"  csx: {csx:.3f}, csz: {csz:.3f}\n"
+                f"  csx: {csx:.3f}\n"
                 f"  i_ab: {i_ab}, x_ab: {x_ab:.3f}\n\n"
                 f"Point positions:\n"
                 f"  P_Z: ({points['P_Z'][0]:.3f}, {points['P_Z'][1]:.3f}, {points['P_Z'][2]:.3f})\n"
