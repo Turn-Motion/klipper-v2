@@ -67,6 +67,7 @@ class CartesianXY3Z:
         self.limits = [(1.0, -1.0)] * 5  # For x, y, z, a, b axes
         
         # Initialize safety module directly
+        self.is_homing = False
         self.safety_module = None
         if cartesianxy3z_safety is not None:
             try:
@@ -327,6 +328,13 @@ class CartesianXY3Z:
             # Don't raise exception - let individual homing handle recovery
     
     def home(self, homing_state):
+        self.is_homing = True
+        try:
+            self._do_home(homing_state)
+        finally:
+            self.is_homing = False
+
+    def _do_home(self, homing_state):
         gcode = self.printer.lookup_object('gcode')
         axes = homing_state.get_axes()
         z_axes_homed = False
@@ -432,8 +440,8 @@ class CartesianXY3Z:
         # Move with Z, A, or B - update velocity and accel for slower axes
         self._check_endstops(move)
         
-        # Use directly imported safety module if available
-        if self.safety_module is not None:
+        # Skip safety check during homing - positions are not yet known
+        if self.safety_module is not None and not self.is_homing:
             try:
                 is_safe = self.safety_module.check_move(move)
             except Exception as e:
