@@ -33,16 +33,16 @@ class CartesianXY3ZSafety:
         self.gcode = self.printer.lookup_object('gcode')
         self.is_safe = True
         self.last_error = ""
-        self.d_x = config.getfloat('x_distance_between_joints_ab', 650.0)
-        self.d_y = config.getfloat('y_distance_between_ab_center_and_z', 605.0)
+        self.d_x = config.getfloat('x_distance_between_joints_ab', 646.0)
+        self.d_y = config.getfloat('y_distance_between_ab_center_and_z', 302.5)
         self.h_tot = config.getfloat('total_measured_height', 8.0)
         self.d_1r = config.getfloat('offset_measure_point_1_to_rotation_center', 4.0)
-        self.d_2p = config.getfloat('offset_measure_point_2_to_plate_surface', 4.0)
+        self.d_2p = config.getfloat('offset_measure_point_2_to_plate_surface', 0.0)
         self.p_x = config.getfloat('printing_area_x_length', 600.0)
         self.p_y = config.getfloat('printing_area_y_length', 300.0)
-        self.d_flex = config.getfloat('flex_plate_thickness', 6.0)
-        self.x_out = config.getfloat('x_railspace_ab_outwards_neutral', 59.5)
-        self.y_in = config.getfloat('y_railspace_z_inwards_neutral', 101.1)
+        self.d_flex = config.getfloat('flex_plate_thickness', 2.52)
+        self.x_out = config.getfloat('x_railspace_ab_outwards_neutral', 255)
+        self.y_out = config.getfloat('y_railspace_z_inwards_neutral', 170)
         self.r_ex = config.getfloat('extruder_radius', 0.5) #Outer radius of extruder tip
         self.z_tot = self.h_tot - self.d_1r - self.d_2p + self.d_flex
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
@@ -132,18 +132,12 @@ class CartesianXY3ZSafety:
             x, y = pos[0], pos[1]
             z, a, b = pos[2], pos[3], pos[4]
 
-            # ============================================================================
-            # PRIMARY BOUNDARY CONDITIONS
-            # ============================================================================
-            # Level 0: X and Y position boundaries
-            # The extruder tip must be within the printing area
-            if x < 0 or x > self.p_x:
-                return False, f"X position {x:.2f} outside printing area (0 to {self.p_x})"
-            if y < 0 or y > self.p_y:
-                return False, f"Y position {y:.2f} outside printing area (0 to {self.p_y})"
+            # Note: X/Y boundary checks are handled by _check_endstops()
+            # in cartesianxy3z.py using printer.cfg axis limits.
+            # This module only checks Z/A/B mechanical constraints.
 
             # ============================================================================
-            # SECONDARY PRELIMINARY CALCULATIONS
+            # PRELIMINARY CALCULATIONS
             # ============================================================================
             # Calculate intermediate values needed for remaining checks
             z_mz, z_ab, csx, i_ab, x_ab = self.calc_intermediate_values(pos)
@@ -181,7 +175,7 @@ class CartesianXY3ZSafety:
                 max_y = abs(math.sqrt(self.d_y**2 - z_mz**2 / denom_z) - self.d_y)
             else:
                 max_y = float('inf')
-            if max_y > self.y_in:
+            if max_y > self.y_out:
                 return False, "Z wagon approaching rail limit"
   
             # ============================================================================
