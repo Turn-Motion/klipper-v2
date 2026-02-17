@@ -435,20 +435,17 @@ class CartesianXY3Z:
         # Use directly imported safety module if available
         if self.safety_module is not None:
             try:
-                # Call safety check and block move if unsafe
                 is_safe = self.safety_module.check_move(move)
-                if not is_safe:
-                    raise move.move_error(
-                        "Safety check blocked move")
-                logging.info("CartesianXY3Z: Safety check passed")
             except Exception as e:
                 gcode = self.printer.lookup_object('gcode')
-                gcode.respond_info(f"CartesianXY3Z: Safety system error: {str(e)}")
-                logging.error("CartesianXY3Z: Safety check failed with exception: %s", str(e))
-                raise move.move_error(f"Safety system error: {str(e)}")
-        else:
-            # Safety module not available, continue without safety checks
-            logging.info("CartesianXY3Z: Safety module not available, continuing without safety checks")
+                gcode.respond_info(
+                    "CartesianXY3Z: Safety system error: %s" % (str(e),))
+                logging.error(
+                    "CartesianXY3Z: Safety check exception: %s", str(e))
+                raise move.move_error(
+                    "Safety system error: %s" % (str(e),))
+            if not is_safe:
+                raise move.move_error("Safety check blocked move")
         
         # Calculate the slowest axis ratio for Z, A, B
         z_ratio = 1.0

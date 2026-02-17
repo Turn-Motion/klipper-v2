@@ -646,18 +646,13 @@ class ToolHead:
                 self.extruder.check_move(move)
         except self.printer.command_error as e:
             # Move check failed: flush queued moves so everything
-            # before this point still executes, then pause the print
+            # before this point still executes, then skip this move
             gcode_logging_debug.respond_info(
-                "TOOLHEAD: Move check failed: %s -- "
-                "flushing prior moves and pausing" % (str(e),))
+                "TOOLHEAD: Move blocked: %s" % (str(e),))
             logging.warning(
-                "TOOLHEAD: Move check failed, pausing: %s", str(e))
+                "TOOLHEAD: Move blocked by check_move: %s", str(e))
             self._flush_lookahead()
-            pause_resume = self.printer.lookup_object(
-                'pause_resume', None)
-            if pause_resume is not None:
-                gcode_logging_debug.run_script_from_command("PAUSE")
-            raise
+            return
         self.commanded_pos[:] = newpos
         #gcode_logging_debug.respond_info(
         #    f"TOOLHEAD DEBUG: Updated commanded_pos to {['%.4f' % p for p in self.commanded_pos]}, adding move to queue"
