@@ -47,21 +47,18 @@ class CartesianXY3Z:
         for s in self.get_steppers():
             s.set_trapq(toolhead.get_trapq())
             toolhead.register_step_generator(s.generate_steps)
-        # Setup boundary checks
-        max_velocity, max_accel = toolhead.get_max_velocity()
-        # Configure max velocity and acceleration for Z, A, and B axes
-        self.max_z_velocity = config.getfloat('max_z_velocity', max_velocity,
-                                              above=0., maxval=max_velocity)
-        self.max_z_accel = config.getfloat('max_z_accel', max_accel,
-                                           above=0., maxval=max_accel)
-        self.max_a_velocity = config.getfloat('max_a_velocity', self.max_z_velocity,
-                                              above=0., maxval=max_velocity)
-        self.max_a_accel = config.getfloat('max_a_accel', self.max_z_accel,
-                                           above=0., maxval=max_accel)
-        self.max_b_velocity = config.getfloat('max_b_velocity', self.max_z_velocity,
-                                              above=0., maxval=max_velocity)
-        self.max_b_accel = config.getfloat('max_b_accel', self.max_z_accel,
-                                           above=0., maxval=max_accel)
+        # Setup boundary checks — Z limits are owned by the toolhead
+        _, max_accel = toolhead.get_max_velocity()
+        self.max_z_velocity = toolhead.max_z_velocity
+        self.max_z_accel = toolhead.max_z_accel
+        # Log loaded velocity/accel limits to klippy.log
+        logging.info(
+            "CartesianXY3Z limits — max_accel: %.1f | "
+            "max_z_velocity: %.1f, max_z_accel: %.1f",
+            max_accel, self.max_z_velocity, self.max_z_accel)
+        # Also send to Mainsail console once printer is ready
+        self.printer.register_event_handler(
+            "klippy:ready", self._handle_ready_log_limits)
         # Get the post-homing Z movement distance (default 62.8mm)
         self.post_homing_z_lift = config.getfloat('post_homing_z_lift', -60)
         self.limits = [(1.0, -1.0)] * 5  # For x, y, z, a, b axes
@@ -115,6 +112,13 @@ class CartesianXY3Z:
             except Exception as e:
                 logging.warning("CartesianXY3Z: Failed to initialize safety module: %s", str(e))
                 self.safety_module = None
+
+    def _handle_ready_log_limits(self):
+        gcode = self.printer.lookup_object('gcode')
+        gcode.respond_info(
+            "CartesianXY3Z axis limits loaded from config:\n"
+            "  max_z_velocity: %.1f  max_z_accel: %.1f"
+            % (self.max_z_velocity, self.max_z_accel))
 
     def get_steppers(self):
         return [s for rail in self.rails for s in rail.get_steppers()]

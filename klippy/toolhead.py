@@ -328,6 +328,10 @@ class ToolHead:
         # Velocity and acceleration control
         self.max_velocity = config.getfloat('max_velocity', above=0.)
         self.max_accel = config.getfloat('max_accel', above=0.)
+        self.max_z_velocity = config.getfloat('max_z_velocity', self.max_velocity,
+                                              above=0., maxval=self.max_velocity)
+        self.max_z_accel = config.getfloat('max_z_accel', self.max_accel,
+                                           above=0., maxval=self.max_accel)
         min_cruise_ratio = 0.5
         if config.getfloat('minimum_cruise_ratio', None) is None:
             req_accel_to_decel = config.getfloat('max_accel_to_decel', None,
