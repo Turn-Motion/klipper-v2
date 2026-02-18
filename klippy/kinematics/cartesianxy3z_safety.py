@@ -33,17 +33,33 @@ class CartesianXY3ZSafety:
         self.gcode = self.printer.lookup_object('gcode')
         self.is_safe = True
         self.last_error = ""
-        self.d_x = config.getfloat('x_distance_between_joints_ab', 646.0)
-        self.d_y = config.getfloat('y_distance_between_ab_center_and_z', 302.5)
-        self.h_tot = config.getfloat('total_measured_height', 8.0)
-        self.d_1r = config.getfloat('offset_measure_point_1_to_rotation_center', 4.0)
-        self.d_2p = config.getfloat('offset_measure_point_2_to_plate_surface', 0.0)
-        self.p_x = config.getfloat('printing_area_x_length', 600.0)
-        self.p_y = config.getfloat('printing_area_y_length', 300.0)
-        self.d_flex = config.getfloat('flex_plate_thickness', 2.52)
-        self.x_out = config.getfloat('x_railspace_ab_outwards_neutral', 255)
-        self.y_out = config.getfloat('y_railspace_z_inwards_neutral', 170)
-        self.r_ex = config.getfloat('extruder_radius', 0.5) #Outer radius of extruder tip
+        # Read parameters from [CartesianXY3ZSafety] section if defined in
+        # printer.cfg; otherwise every parameter keeps its hardcoded default.
+        if config.has_section('CartesianXY3ZSafety'):
+            sc = config.getsection('CartesianXY3ZSafety')
+            self.d_x   = sc.getfloat('x_distance_between_joints_ab', 646.0)
+            self.d_y   = sc.getfloat('y_distance_between_ab_center_and_z', 302.5)
+            self.h_tot = sc.getfloat('total_measured_height', 8.0)
+            self.d_1r  = sc.getfloat('offset_measure_point_1_to_rotation_center', 4.0)
+            self.d_2p  = sc.getfloat('offset_measure_point_2_to_plate_surface', 0.0)
+            self.p_x   = sc.getfloat('printing_area_x_length', 600.0)
+            self.p_y   = sc.getfloat('printing_area_y_length', 300.0)
+            self.d_flex= sc.getfloat('flex_plate_thickness', 2.52)
+            self.x_out = sc.getfloat('x_railspace_ab_outwards_neutral', 255.0)
+            self.y_out = sc.getfloat('y_railspace_z_inwards_neutral', 170.0)
+            self.r_ex  = sc.getfloat('extruder_radius', 0.5)
+        else:
+            self.d_x   = 646.0
+            self.d_y   = 302.5
+            self.h_tot = 8.0
+            self.d_1r  = 4.0
+            self.d_2p  = 0.0
+            self.p_x   = 600.0
+            self.p_y   = 300.0
+            self.d_flex= 2.52
+            self.x_out = 255.0
+            self.y_out = 170.0
+            self.r_ex  = 0.5
         self.z_tot = self.h_tot - self.d_1r - self.d_2p + self.d_flex
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
         self.gcode.register_command('CHECK_CARTESIANXY3Z_SAFETY',
