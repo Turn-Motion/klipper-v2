@@ -1,7 +1,6 @@
 # Safety checks for cartesianxy3z kinematics with tilting bed
 import logging
 import math
-import re
 
 
 def add(a, b):
@@ -202,7 +201,6 @@ class CartesianXY3ZSafety:
             # ============================================================================
             # Calculate point positions (P_Z, P_A, P_B, P_E)
             points = self.calc_point_positions(pos)
-            
             # Calculate orientation vectors of the tilted bed plane
             _, _, _, z_norm = self.calc_vectors(points)
 
@@ -210,18 +208,14 @@ class CartesianXY3ZSafety:
             # TERTIARY BOUNDARY CONDITION: COLLISION OF EXTRUDER TIP WITH BED
             # ============================================================================
             # Level 3: Extruder tip collision detection with tilting print bed
-  
             P_E = points['P_E']
             P_A = points['P_A']
-
             # dist = dot(sub(P_E, add(P_A, mul(z_norm, z_tot))), z_norm)
             #        - r_ex * sin(acos(z_norm[2]))
             dist = (dot(sub(P_E, add(P_A, mul(z_norm, self.z_tot))), z_norm)
                     - self.r_ex * math.sin(math.acos(z_norm[2])))
-
             if dist < 0:
                 return False, "Extruder collision with print bed detected"
-    
             # ============================================================================
             # A/B DISCREPANCY LIMIT WHEN Z IS OFF-CENTRE
             # ============================================================================
@@ -255,8 +249,8 @@ class CartesianXY3ZSafety:
                 return True
             # A/B Discrepancy Check — coupling:
             # A and B must always move together; one cannot move without the other.
-            a_moving = bool(move.axes_d[3])
-            b_moving = bool(move.axes_d[4])
+            a_moving = abs(move.axes_d[3]) >= 1.0
+            b_moving = abs(move.axes_d[4]) >= 1.0
             if a_moving != b_moving:
                 error = "A and B must move together (cannot move one without the other)"
                 self.is_safe = False
@@ -342,13 +336,19 @@ class CartesianXY3ZSafety:
                 f"Z={current_pos[2]:.2f} A={current_pos[3]:.2f} B={current_pos[4]:.2f}"
             )
             
-            # Parse G1-style parameters: PREVIEW_MOVE X10 Y20 Z5 A3 B3
+            # Parse parameters (PREVIEW_MOVE X=10 Y=20 Z=5 A=3 B=3)
             # Unspecified axes keep the current position value.
             target_pos = current_pos[:]
-            axis_map = {'X': 0, 'Y': 1, 'Z': 2, 'A': 3, 'B': 4}
-            for m in re.finditer(r'([XYZAB])([+-]?\d*\.?\d+)',
-                                 gcmd.get_commandline(), re.IGNORECASE):
-                target_pos[axis_map[m.group(1).upper()]] = float(m.group(2))
+            if gcmd.get('X', None) is not None:
+                target_pos[0] = gcmd.get_float('X')
+            if gcmd.get('Y', None) is not None:
+                target_pos[1] = gcmd.get_float('Y')
+            if gcmd.get('Z', None) is not None:
+                target_pos[2] = gcmd.get_float('Z')
+            if gcmd.get('A', None) is not None:
+                target_pos[3] = gcmd.get_float('A')
+            if gcmd.get('B', None) is not None:
+                target_pos[4] = gcmd.get_float('B')
             
             gcmd.respond_info(
                 f"Target position:  X={target_pos[0]:.2f} Y={target_pos[1]:.2f} "
