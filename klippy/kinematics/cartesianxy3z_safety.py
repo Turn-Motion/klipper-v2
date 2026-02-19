@@ -1,6 +1,7 @@
 # Safety checks for cartesianxy3z kinematics with tilting bed
 import logging
 import math
+import re
 
 
 def add(a, b):
@@ -48,6 +49,7 @@ class CartesianXY3ZSafety:
             self.x_out = sc.getfloat('x_railspace_ab_outwards_neutral', 255.0)
             self.y_out = sc.getfloat('y_railspace_z_inwards_neutral', 170.0)
             self.r_ex  = sc.getfloat('extruder_radius', 0.5)
+            #self.d_z_ab = sc.getfloat('height_distance_between_z_ab', 250.0)
         else:
             self.d_x   = 646.0
             self.d_y   = 302.5
@@ -60,6 +62,7 @@ class CartesianXY3ZSafety:
             self.x_out = 255.0
             self.y_out = 170.0
             self.r_ex  = 0.5
+            #self.d_z_ab = 250.0
         self.z_tot = self.h_tot - self.d_1r - self.d_2p + self.d_flex
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
         self.gcode.register_command('CHECK_CARTESIANXY3Z_SAFETY',
@@ -166,9 +169,9 @@ class CartesianXY3ZSafety:
                 return False, "Z-A distance exceeded"
             if abs(z - b) > math.sqrt(self.d_y**2 + self.d_x**2 / 4):
                 return False, "Z-B distance exceeded"
-            if abs(a - b) > self.d_x:
-                return False, "A-B distance exceeded"
-   
+            if abs(z - a) > math.sqrt(self.d_y**2 + self.d_x**2 / 4):
+                return False, "Z-A distance exceeded"
+               
             # ============================================================================
             # SECONDARY BOUNDARY CONDITIONS - GOING OFF RAILS
             # ============================================================================
@@ -193,7 +196,7 @@ class CartesianXY3ZSafety:
                 max_y = float('inf')
             if max_y > self.y_out:
                 return False, "Z wagon approaching rail limit"
-  
+            
             # ============================================================================
             # TERTIARY CALCULATIONS - COLLISION DETECTION SETUP
             # ============================================================================
@@ -309,19 +312,13 @@ class CartesianXY3ZSafety:
                 f"Z={current_pos[2]:.2f} A={current_pos[3]:.2f} B={current_pos[4]:.2f}"
             )
             
-            # Parse G-code parameters (X, Y, Z, A, B)
+            # Parse G1-style parameters: PREVIEW_MOVE X10 Y20 Z5 A3 B3
+            # Unspecified axes keep the current position value.
             target_pos = current_pos[:]
-            
-            if gcmd.get('X') is not None:
-                target_pos[0] = gcmd.get_float('X')
-            if gcmd.get('Y') is not None:
-                target_pos[1] = gcmd.get_float('Y')
-            if gcmd.get('Z') is not None:
-                target_pos[2] = gcmd.get_float('Z')
-            if gcmd.get('A') is not None:
-                target_pos[3] = gcmd.get_float('A')
-            if gcmd.get('B') is not None:
-                target_pos[4] = gcmd.get_float('B')
+            axis_map = {'X': 0, 'Y': 1, 'Z': 2, 'A': 3, 'B': 4}
+            for m in re.finditer(r'([XYZAB])([+-]?\d*\.?\d+)',
+                                 gcmd.get_commandline(), re.IGNORECASE):
+                target_pos[axis_map[m.group(1).upper()]] = float(m.group(2))
             
             gcmd.respond_info(
                 f"Target position:  X={target_pos[0]:.2f} Y={target_pos[1]:.2f} "
@@ -340,12 +337,23 @@ class CartesianXY3ZSafety:
             z_mz, z_ab, csx, i_ab, x_ab = self.calc_intermediate_values(target_pos)
             points = self.calc_point_positions(target_pos)
             x_now, y_now, z_now, z_norm = self.calc_vectors(points)
-            
+
+            # Rail limit values (same logic as check_safety)
+            max_xa = abs(z_mz * z_ab / csx - csx / 2 + self.d_x / 2) if csx > 0 else 0.0
+            max_xb = abs(z_mz * z_ab / csx + csx / 2 - self.d_x / 2) if csx > 0 else 0.0
+            denom_z = 1 - (z_ab**2) / (self.d_x**2)
+            max_y = abs(math.sqrt(self.d_y**2 - z_mz**2 / denom_z) - self.d_y) \
+                    if denom_z > 0 else float('inf')
+
             gcmd.respond_info(
                 f"\nIntermediate values:\n"
                 f"  z_mz: {z_mz:.3f}, z_ab: {z_ab:.3f}\n"
                 f"  csx: {csx:.3f}\n"
                 f"  i_ab: {i_ab}, x_ab: {x_ab:.3f}\n\n"
+                f"Rail limits (limit = x_out:{self.x_out:.1f}, y_out:{self.y_out:.1f}):\n"
+                f"  max_xa: {max_xa:.3f}\n"
+                f"  max_xb: {max_xb:.3f}\n"
+                f"  max_y:  {max_y:.3f}\n\n"
                 f"Point positions:\n"
                 f"  P_Z: ({points['P_Z'][0]:.3f}, {points['P_Z'][1]:.3f}, {points['P_Z'][2]:.3f})\n"
                 f"  P_A: ({points['P_A'][0]:.3f}, {points['P_A'][1]:.3f}, {points['P_A'][2]:.3f})\n"
