@@ -47,7 +47,7 @@ class CartesianXY3ZSafety:
             self.p_y   = sc.getfloat('printing_area_y_length', 300.0)
             self.d_flex= sc.getfloat('flex_plate_thickness', 2.52)
             self.x_out = sc.getfloat('x_railspace_ab_outwards_neutral', 255.0)
-            self.y_out = sc.getfloat('y_railspace_z_inwards_neutral', 170.0)
+            self.y_out = sc.getfloat('y_railspace_z_inwards_neutral', 132.19)
             self.r_ex  = sc.getfloat('extruder_radius', 0.5)
             #self.d_z_ab = sc.getfloat('height_distance_between_z_ab', 250.0)
         else:
@@ -60,7 +60,7 @@ class CartesianXY3ZSafety:
             self.p_y   = 300.0
             self.d_flex= 2.52
             self.x_out = 255.0
-            self.y_out = 170.0
+            self.y_out = 132.19
             self.r_ex  = 0.5
             #self.d_z_ab = 250.0
         self.z_tot = self.h_tot - self.d_1r - self.d_2p + self.d_flex
@@ -223,6 +223,25 @@ class CartesianXY3ZSafety:
                 return False, "Extruder collision with print bed detected"
     
             # ============================================================================
+            # A/B DISCREPANCY LIMIT WHEN Z IS OFF-CENTRE
+            # ============================================================================
+            # z_mz = z - (a+b)/2; if Z is not at the midpoint of A and B,
+            # the A-B discrepancy (z_ab = b - a) must stay under 15 mm.
+            if abs(z_mz) > 0.1 and abs(z_ab) >= 15:
+                return False, (
+                    "A-B discrepancy too large when Z is off-centre "
+                    "(|A-B|=%.2f >= 15, z_mz=%.2f)" % (abs(z_ab), z_mz))
+
+            # ============================================================================
+            # PRINTING AREA Y RESTRICTION
+            # ============================================================================
+            # When A or B is below 50, Y must stay at or above 50.
+            if (a < 50 or b < 50) and y < 50:
+                return False, (
+                    "Y must be >= 50 when A or B is below 50 "
+                    "(A=%.2f, B=%.2f, Y=%.2f)" % (a, b, y))
+
+            # ============================================================================
             # ALL SAFETY CHECKS PASSED
             # ============================================================================
             return True, ""
@@ -234,6 +253,17 @@ class CartesianXY3ZSafety:
         try:
             if not any(move.axes_d[i] for i in [2, 3, 4]):
                 return True
+            # A/B Discrepancy Check — coupling:
+            # A and B must always move together; one cannot move without the other.
+            a_moving = bool(move.axes_d[3])
+            b_moving = bool(move.axes_d[4])
+            if a_moving != b_moving:
+                error = "A and B must move together (cannot move one without the other)"
+                self.is_safe = False
+                self.last_error = error
+                logging.warning(f"CartesianXY3Z Safety: {error}")
+                self.gcode.respond_info(f"Safety Error: {error}")
+                return False
             is_safe, error = self.check_safety(move.start_pos)
             if not is_safe:
                 self.is_safe = False
