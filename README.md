@@ -47,6 +47,31 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### CartesianXY3Z Safety — Extended Boundary Conditions & Extruder Geometry Parameters (23.02.2026)
+**Status: ✅ COMPLETE** — Extended `cartesianxy3z_safety.py` with new secondary boundary checks and physical geometry parameters for more precise collision prevention.
+
+**New Config Parameters (all configurable in `[CartesianXY3ZSafety]`):**
+
+| Parameter | Key | Default | Description |
+|---|---|---|---|
+| `x_in` | `x_railspace_ab_inwards_neutral` | 50.0 mm | A/B rail inward travel limit at neutral bed position |
+| `z_rail_ab` | `z_rail_ab_height_to_top` | 14.0 mm | Height from A/B rotation centre to top of rail |
+| `y_rail_ab` | `y_rail_ab_innermost` | 43.5 mm | Innermost Y-point of A and B rails |
+| `ex_x_a` | `extruder_width_tip_to_minus_x` | 15.5 mm | Extruder body width from tip in −X direction |
+| `ex_x_b` | `extruder_width_tip_to_plus_x` | 5.5 mm | Extruder body width from tip in +X direction |
+| `ex_y` | `extruder_width_tip_to_y` | 6.5 mm | Extruder body half-width in ±Y direction |
+| `clear` | `safety_z_clearance` | 2.0 mm | Safety Z clearance above rail top |
+
+**New Checks Added:**
+
+- **A-wagon inner rail limit** — `inner_xa = csx/2 − d_x/2 − z_mz·z_ab/csx > x_in` stops the move when the A wagon would travel too far inward along its rail.
+- **B-wagon inner rail limit** — `inner_xb = csx/2 − d_x/2 + z_mz·z_ab/csx > x_in` same check for the B wagon.
+- **Extruder/rail proximity check** (replaces previous hardcoded Y ≥ 50 rule) — blocks moves where A or B is within `z_rail_ab + clear` of the rail top **and** the extruder body overhangs the rail zone in X **and** Y is closer than `y_rail_ab + ex_y` to the inner rail edge. This makes the restriction geometry-aware instead of using fixed constants.
+
+**Bug fix:** The original inner-B check formula mistakenly evaluated `inner_xa` twice; corrected to evaluate `inner_xb` for the B-wagon check.
+
+---
+
 ### CartesianXY3Z Safety Code Organization & Documentation (Current)
 **Status: ✅ COMPLETE** — Reorganized and comprehensively documented the CartesianXY3Z safety module with 8 clearly labeled sections (`PRELIMINARY CALCULATIONS`, `PRIMARY BOUNDARY CONDITIONS [Level 0]`, `SECONDARY PRELIMINARY CALCULATIONS`, `PRIMARY MECHANICAL CONSTRAINTS [Level 1]`, `SECONDARY BOUNDARY CONDITIONS [Level 2]`, `TERTIARY CALCULATIONS`, `TERTIARY BOUNDARY CONDITION [Level 3]`, `ALL SAFETY CHECKS PASSED`) featuring visual dividers, inline comments, and step-by-step documentation. Created 7 documentation files: `CARTESIANXY3Z_SAFETY_QUICK_REFERENCE.md`, `CARTESIANXY3Z_SAFETY_CODE_ORGANIZATION.md`, `CARTESIANXY3Z_SAFETY_VISUAL_MAP.md`, `CARTESIANXY3Z_SAFETY_SECTION_POSTER.md`, `CARTESIANXY3Z_SAFETY_IMPLEMENTATION_SUMMARY.md`, `CARTESIANXY3Z_SAFETY_DOCUMENTATION_INDEX.md`, and `IMPLEMENTATION_COMPLETE.md`. Key features include self-documenting code with visual section headers, performance optimization through strategic check ordering (Position boundaries → Mechanical constraints → Wagon rail limits → 3D collision detection), fast-fail design for safety, production-ready code with no syntax errors, and comprehensive documentation enabling developers to quickly understand safety structure, easily locate and modify specific checks, and debug failures with clear error messages.
 

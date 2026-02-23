@@ -45,22 +45,36 @@ class CartesianXY3ZSafety:
             self.p_x   = sc.getfloat('printing_area_x_length', 600.0)
             self.p_y   = sc.getfloat('printing_area_y_length', 300.0)
             self.d_flex= sc.getfloat('flex_plate_thickness', 2.52)
-            self.x_out = sc.getfloat('x_railspace_ab_outwards_neutral', 255.0)
-            self.y_out = sc.getfloat('y_railspace_z_inwards_neutral', 132.19)
-            self.r_ex  = sc.getfloat('extruder_radius', 0.5)
+            self.x_out    = sc.getfloat('x_railspace_ab_outwards_neutral', 255.0)
+            self.x_in     = sc.getfloat('x_railspace_ab_inwards_neutral', 50.0)
+            self.y_out    = sc.getfloat('y_railspace_z_inwards_neutral', 132.19)
+            self.r_ex     = sc.getfloat('extruder_radius', 0.5)
+            self.z_rail_ab= sc.getfloat('z_rail_ab_height_to_top', 14.0)
+            self.y_rail_ab= sc.getfloat('y_rail_ab_innermost', 43.5)
+            self.ex_x_a   = sc.getfloat('extruder_width_tip_to_minus_x', 15.5)
+            self.ex_x_b   = sc.getfloat('extruder_width_tip_to_plus_x', 5.5)
+            self.ex_y     = sc.getfloat('extruder_width_tip_to_y', 6.5)
+            self.clear    = sc.getfloat('safety_z_clearance', 2.0)
             #self.d_z_ab = sc.getfloat('height_distance_between_z_ab', 250.0)
         else:
-            self.d_x   = 646.0
-            self.d_y   = 302.5
-            self.h_tot = 8.0
-            self.d_1r  = 4.0
-            self.d_2p  = 0.0
-            self.p_x   = 600.0
-            self.p_y   = 300.0
-            self.d_flex= 2.52
-            self.x_out = 255.0
-            self.y_out = 132.19
-            self.r_ex  = 0.5
+            self.d_x      = 646.0
+            self.d_y      = 302.5
+            self.h_tot    = 8.0
+            self.d_1r     = 4.0
+            self.d_2p     = 0.0
+            self.p_x      = 600.0
+            self.p_y      = 300.0
+            self.d_flex   = 2.52
+            self.x_out    = 255.0
+            self.x_in     = 50.0
+            self.y_out    = 132.19
+            self.r_ex     = 0.5
+            self.z_rail_ab= 14.0
+            self.y_rail_ab= 43.5
+            self.ex_x_a   = 15.5
+            self.ex_x_b   = 5.5
+            self.ex_y     = 6.5
+            self.clear    = 2.0
             #self.d_z_ab = 250.0
         self.z_tot = self.h_tot - self.d_1r - self.d_2p + self.d_flex
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
@@ -187,6 +201,18 @@ class CartesianXY3ZSafety:
                 if max_xb > self.x_out:
                     return False, "B wagon approaching rail limit"
 
+            # Check A-rail wagon inner X-position limit
+            if csx > 0:
+                inner_xa = csx / 2 - self.d_x / 2 - z_mz * z_ab / csx
+                if inner_xa > self.x_in:
+                    return False, "A wagon approaching inner rail limit"
+
+            # Check B-rail wagon inner X-position limit
+            if csx > 0:
+                inner_xb = csx / 2 - self.d_x / 2 + z_mz * z_ab / csx
+                if inner_xb > self.x_in:
+                    return False, "B wagon approaching inner rail limit"
+
             # Check Z wagon Y-position limit
             denom_z = 1 - (z_ab**2) / (self.d_x**2)
             if denom_z > 0:
@@ -229,11 +255,17 @@ class CartesianXY3ZSafety:
             # ============================================================================
             # PRINTING AREA Y RESTRICTION
             # ============================================================================
-            # When A or B is below 50, Y must stay at or above 50.
-            if (a < 50 or b < 50) and y < 50:
+            # When A or B is near rail top and extruder overhangs in X,
+            # Y must stay clear of the innermost rail edge.
+            if (a < (self.z_rail_ab + self.clear) or b < (self.z_rail_ab + self.clear)) \
+                    and (x < self.ex_x_a or x > self.p_x - self.ex_x_b) \
+                    and y < (self.y_rail_ab + self.ex_y):
                 return False, (
-                    "Y must be >= 50 when A or B is below 50 "
-                    "(A=%.2f, B=%.2f, Y=%.2f)" % (a, b, y))
+                    "Extruder too close to A/B rail: A=%.2f, B=%.2f, X=%.2f, Y=%.2f "
+                    "(limit: z_rail+clear=%.2f, y_rail+ex_y=%.2f)"
+                    % (a, b, x, y,
+                       self.z_rail_ab + self.clear,
+                       self.y_rail_ab + self.ex_y))
 
             # ============================================================================
             # ALL SAFETY CHECKS PASSED
@@ -371,6 +403,8 @@ class CartesianXY3ZSafety:
             # Rail limit values (same logic as check_safety)
             max_xa = abs(z_mz * z_ab / csx - csx / 2 + self.d_x / 2) if csx > 0 else 0.0
             max_xb = abs(z_mz * z_ab / csx + csx / 2 - self.d_x / 2) if csx > 0 else 0.0
+            inner_xa = (csx / 2 - self.d_x / 2 - z_mz * z_ab / csx) if csx > 0 else 0.0
+            inner_xb = (csx / 2 - self.d_x / 2 + z_mz * z_ab / csx) if csx > 0 else 0.0
             denom_z = 1 - (z_ab**2) / (self.d_x**2)
             max_y = abs(math.sqrt(self.d_y**2 - z_mz**2 / denom_z) - self.d_y) \
                     if denom_z > 0 else float('inf')
@@ -380,10 +414,12 @@ class CartesianXY3ZSafety:
                 f"  z_mz: {z_mz:.3f}, z_ab: {z_ab:.3f}\n"
                 f"  csx: {csx:.3f}\n"
                 f"  i_ab: {i_ab}, x_ab: {x_ab:.3f}\n\n"
-                f"Rail limits (limit = x_out:{self.x_out:.1f}, y_out:{self.y_out:.1f}):\n"
-                f"  max_xa: {max_xa:.3f}\n"
-                f"  max_xb: {max_xb:.3f}\n"
-                f"  max_y:  {max_y:.3f}\n\n"
+                f"Rail limits (x_out:{self.x_out:.1f}, x_in:{self.x_in:.1f}, y_out:{self.y_out:.1f}):\n"
+                f"  max_xa (outer): {max_xa:.3f}\n"
+                f"  max_xb (outer): {max_xb:.3f}\n"
+                f"  inner_xa:       {inner_xa:.3f}\n"
+                f"  inner_xb:       {inner_xb:.3f}\n"
+                f"  max_y:          {max_y:.3f}\n\n"
                 f"Point positions:\n"
                 f"  P_Z: ({points['P_Z'][0]:.3f}, {points['P_Z'][1]:.3f}, {points['P_Z'][2]:.3f})\n"
                 f"  P_A: ({points['P_A'][0]:.3f}, {points['P_A'][1]:.3f}, {points['P_A'][2]:.3f})\n"
