@@ -258,7 +258,6 @@ class CartesianXY3ZSafety:
             # When A or B is near rail top and extruder overhangs in X,
             # Y must stay clear of the innermost rail edge.
             if (a < (self.z_rail_ab + self.clear) or b < (self.z_rail_ab + self.clear)) \
-                    and (x < self.ex_x_a or x > self.p_x - self.ex_x_b) \
                     and y < (self.y_rail_ab + self.ex_y):
                 return False, (
                     "Extruder too close to A/B rail: A=%.2f, B=%.2f, X=%.2f, Y=%.2f "
