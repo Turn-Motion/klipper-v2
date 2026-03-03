@@ -277,6 +277,14 @@ class CartesianXY3ZSafety:
         """Check if a move is safe."""
         try:
             if not any(move.axes_d[i] for i in [2, 3, 4]):
+                # Pure XY move - check Y restriction using current A/B positions
+                is_safe, error = self.check_safety(move.end_pos)
+                if not is_safe:
+                    self.is_safe = False
+                    self.last_error = error
+                    logging.warning(f"CartesianXY3Z Safety: {error} (XY move end position)")
+                    self.gcode.respond_info(f"Safety Error: {error}")
+                    return False
                 return True
             # A/B Discrepancy Check — coupling:
             # A and B must always move together; one cannot move without the other.

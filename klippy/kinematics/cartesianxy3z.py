@@ -438,7 +438,11 @@ class CartesianXY3Z:
         
         # Check if any of Z, A, or B axes are moving
         if not any(move.axes_d[i] for i in [2, 3, 4]):  # z, a, b axes
-            # Normal XY move - use defaults
+            # Pure XY move - still check safety for Y restriction
+            if self.safety_module is not None and not self.is_homing:
+                is_safe = self.safety_module.check_move(move)
+                if not is_safe:
+                    raise move.move_error("Safety check blocked move")
             return
 
         # Move with Z, A, or B - update velocity and accel for slower axes
