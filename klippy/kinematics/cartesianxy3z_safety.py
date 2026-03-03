@@ -53,7 +53,7 @@ class CartesianXY3ZSafety:
             self.y_rail_ab= sc.getfloat('y_rail_ab_innermost', 43.5)
             self.ex_x_a   = sc.getfloat('extruder_width_tip_to_minus_x', 15.5)
             self.ex_x_b   = sc.getfloat('extruder_width_tip_to_plus_x', 5.5)
-            self.ex_y     = sc.getfloat('extruder_width_tip_to_y', 6.5)
+            self.ex_y     = sc.getfloat('extruder_width_tip_to_y', 33.5)
             self.clear    = sc.getfloat('safety_z_clearance', 2.0)
             #self.d_z_ab = sc.getfloat('height_distance_between_z_ab', 250.0)
         else:
