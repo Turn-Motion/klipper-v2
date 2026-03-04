@@ -262,10 +262,10 @@ class LookAheadQueue:
         for i, move in enumerate(queue[:flush_count]):
             if not move._junction_set:
                 # Log when default timing values are being used
-                #gcode.respond_info(
-                #    f"WARNING: Move using default timing values (set_junction never called). "
-                #    f"Move {i+1}/{flush_count}, axes_d={[round(d, 4) for d in move.axes_d]}"
-                #)
+                gcode.respond_info(
+                    f"WARNING: Move using default timing values (set_junction never called). "
+                    f"Move {i+1}/{flush_count}, axes_d={[round(d, 4) for d in move.axes_d]}"
+                )
                 
         # Generate step times for all moves ready to be flushed
         self.toolhead._process_moves(queue[:flush_count])
@@ -447,8 +447,8 @@ class ToolHead:
                                     curtime, est_print_time, self.print_time)
     def _process_moves(self, moves):
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-        #gcode = self.printer.lookup_object('gcode')
-        #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Processing {len(moves)} moves")
+        gcode = self.printer.lookup_object('gcode')
+        gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Processing {len(moves)} moves")
         # #### END DEBUG CODE ####
         
         # Resync print_time if necessary
@@ -633,12 +633,12 @@ class ToolHead:
                 if axes_d[3]: axes_moving.append('A')
                 if axes_d[4]: axes_moving.append('B')
                 axes_str = ','.join(axes_moving)
-                #gcode_logging_debug.respond_info(
-                #    f"TOOLHEAD: Starting kinematic check for axes [{axes_str}] - "
-                #    f"Move from ({self.commanded_pos[0]:.2f}, {self.commanded_pos[1]:.2f}, {self.commanded_pos[2]:.2f}, "
-                #    f"{self.commanded_pos[3]:.2f}, {self.commanded_pos[4]:.2f}) to "
-                #    f"({newpos[0]:.2f}, {newpos[1]:.2f}, {newpos[2]:.2f}, {newpos[3]:.2f}, {newpos[4]:.2f})"
-                #)
+                gcode_logging_debug.respond_info(
+                    f"TOOLHEAD: Starting kinematic check for axes [{axes_str}] - "
+                    f"Move from ({self.commanded_pos[0]:.2f}, {self.commanded_pos[1]:.2f}, {self.commanded_pos[2]:.2f}, "
+                    f"{self.commanded_pos[3]:.2f}, {self.commanded_pos[4]:.2f}) to "
+                    f"({newpos[0]:.2f}, {newpos[1]:.2f}, {newpos[2]:.2f}, {newpos[3]:.2f}, {newpos[4]:.2f})"
+                )
                 logging.info(f"TOOLHEAD: Kinematic check for axes [{axes_str}]")
                 # Eng of log -- chien
                 self.kin.check_move(move)
