@@ -1102,8 +1102,18 @@ class LoadCellProbingMove:
         phoming = self._printer.lookup_object('homing')
         # start collector after tare samples are consumed
         collector = self._start_collector()
-        # do homing move
-        return phoming.probing_move(self, pos, speed), collector
+        # do homing move - bypass safety collision check during probe move
+        # (the load cell stops the bed before it actually collides)
+        kin = toolhead.get_kinematics()
+        set_probing = getattr(kin, 'set_probing', None)
+        if set_probing is not None:
+            set_probing(True)
+        try:
+            epos = phoming.probing_move(self, pos, speed)
+        finally:
+            if set_probing is not None:
+                set_probing(False)
+        return epos, collector
 
     # Wait for the MCU to trigger with no movement
     def probing_test(self, gcmd, timeout):

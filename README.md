@@ -47,6 +47,17 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Probe Move Safety Bypass (06.03.2026)
+**Status: ✅ COMPLETE** — The safety module was blocking probe moves because the probe's travel target (e.g. Z=A=B=−60) looks like a collision to the collision-detection check. The load cell stops the bed well before that point, so the end-position check was a false positive.
+
+**Changes:**
+- `kinematics/cartesianxy3z.py` — Added `is_probing` flag (mirrors the existing `is_homing` flag) and a `set_probing(state)` method. Safety checks in `check_move()` are now skipped when either `is_homing` **or** `is_probing` is `True`.
+- `extras/load_cell_probe.py` — `LoadCellProbingMove.probing_move()` now calls `kin.set_probing(True)` before the homing move and `set_probing(False)` in a `finally` block so the flag is always cleared, even on error. Uses `getattr` so it is safely ignored on non-CartesianXY3Z kinematics.
+
+**Why it is safe:** Safety is only bypassed for the duration of a single probe move. The load cell trigger stops the bed long before it reaches the travel-limit target position. All other safety checks (e.g. rail limits, joint distances) are unaffected outside of probe moves.
+
+---
+
 ### CartesianXY3Z Safety — Extended Boundary Conditions & Extruder Geometry Parameters (23.02.2026)
 **Status: ✅ COMPLETE** — Extended `cartesianxy3z_safety.py` with new secondary boundary checks and physical geometry parameters for more precise collision prevention.
 

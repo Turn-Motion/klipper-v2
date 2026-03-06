@@ -65,6 +65,7 @@ class CartesianXY3Z:
         
         # Initialize safety module directly
         self.is_homing = False
+        self.is_probing = False
         self.safety_module = None
         if cartesianxy3z_safety is not None:
             try:
@@ -331,6 +332,9 @@ class CartesianXY3Z:
             #gcode.respond_info("DEBUG: Will proceed with individual axis homing")
             # Don't raise exception - let individual homing handle recovery
     
+    def set_probing(self, state):
+        self.is_probing = state
+
     def home(self, homing_state):
         self.is_homing = True
         try:
@@ -439,7 +443,8 @@ class CartesianXY3Z:
         # Check if any of Z, A, or B axes are moving
         if not any(move.axes_d[i] for i in [2, 3, 4]):  # z, a, b axes
             # Pure XY move - still check safety for Y restriction
-            if self.safety_module is not None and not self.is_homing:
+            if self.safety_module is not None and not self.is_homing \
+                    and not self.is_probing:
                 is_safe = self.safety_module.check_move(move)
                 if not is_safe:
                     raise move.move_error("Safety check blocked move")
@@ -447,9 +452,11 @@ class CartesianXY3Z:
 
         # Move with Z, A, or B - update velocity and accel for slower axes
         self._check_endstops(move)
-        
-        # Skip safety check during homing - positions are not yet known
-        if self.safety_module is not None and not self.is_homing:
+
+        # Skip safety check during homing or probing - end position is the
+        # probe travel limit, not the actual stop point (load cell triggers early)
+        if self.safety_module is not None and not self.is_homing \
+                and not self.is_probing:
             try:
                 is_safe = self.safety_module.check_move(move)
             except Exception as e:
