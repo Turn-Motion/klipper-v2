@@ -143,8 +143,13 @@ class ProbeCommandHelper:
             probe_num += 1
             # Retract
             pos = toolhead.get_position()
-            liftpos = [None, None, pos[2] + params['sample_retract_dist']]
-            self._move(liftpos, params['lift_speed'])
+            retract_z = pos[2] + params['sample_retract_dist']
+            kin = toolhead.get_kinematics()
+            if hasattr(kin, 'rails') and len(kin.rails) >= 5:
+                self._move([None, None, retract_z, retract_z, retract_z],
+                           params['lift_speed'])
+            else:
+                self._move([None, None, retract_z], params['lift_speed'])
         positions = probe_session.pull_probed_results()
         probe_session.end_probe_session()
         # Calculate maximum, minimum and average values
@@ -455,9 +460,16 @@ class ProbeSessionHelper:
                 positions = []
             # Retract
             if len(positions) < sample_count:
-                toolhead.manual_move(
-                    [None, None, pos[2] + params['sample_retract_dist']],
-                    params['lift_speed'])
+                retract_z = pos[2] + params['sample_retract_dist']
+                kin = toolhead.get_kinematics()
+                if hasattr(kin, 'rails') and len(kin.rails) >= 5:
+                    toolhead.manual_move(
+                        [None, None, retract_z, retract_z, retract_z],
+                        params['lift_speed'])
+                else:
+                    toolhead.manual_move(
+                        [None, None, retract_z],
+                        params['lift_speed'])
         # Calculate result
         epos = calc_probe_z_average(positions, params['samples_result'])
         self.results.append(epos)
