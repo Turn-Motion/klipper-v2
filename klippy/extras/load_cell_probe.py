@@ -1031,6 +1031,8 @@ class LoadCellProbingMove:
         self._mcu = mcu_load_cell_probe.get_mcu()
         self._load_cell = mcu_load_cell_probe.get_load_cell()
         self._z_min_position = probe.lookup_minimum_z(config)
+        self._probe_travel_limit = config.getfloat('probe_travel_limit', -1.5,
+                                                    minval=self._z_min_position)
         self._dispatch = mcu_load_cell_probe.get_dispatch()
         probe.LookupZSteppers(config, self._dispatch.add_stepper)
         # internal state tracking
@@ -1097,7 +1099,7 @@ class LoadCellProbingMove:
         # get params for the homing move
         toolhead = self._printer.lookup_object('toolhead')
         pos = toolhead.get_position()
-        pos[2] = self._z_min_position
+        pos[2] = self._probe_travel_limit
         speed = self._param_helper.get_probe_params(gcmd)['probe_speed']
         phoming = self._printer.lookup_object('homing')
         # start collector after tare samples are consumed

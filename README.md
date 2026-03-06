@@ -47,14 +47,17 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
-### Probe Move Safety Bypass (06.03.2026)
-**Status: ✅ COMPLETE** — The safety module was blocking probe moves because the probe's travel target (e.g. Z=A=B=−60) looks like a collision to the collision-detection check. The load cell stops the bed well before that point, so the end-position check was a false positive.
+### Probe Move Safety Bypass + Travel Limit (06.03.2026)
+**Status: ✅ COMPLETE** — Safety module was blocking probe moves because the travel target (Z=A=B=−60) looked like a collision. The load cell stops the bed well before that point. Two fixes applied:
 
-**Changes:**
-- `kinematics/cartesianxy3z.py` — Added `is_probing` flag (mirrors the existing `is_homing` flag) and a `set_probing(state)` method. Safety checks in `check_move()` are now skipped when either `is_homing` **or** `is_probing` is `True`.
-- `extras/load_cell_probe.py` — `LoadCellProbingMove.probing_move()` now calls `kin.set_probing(True)` before the homing move and `set_probing(False)` in a `finally` block so the flag is always cleared, even on error. Uses `getattr` so it is safely ignored on non-CartesianXY3Z kinematics.
+1. **Safety bypass during probing** — `cartesianxy3z.py` now skips collision checks while a probe move is active (same pattern as the existing homing bypass).
+2. **Configurable travel limit** — probe target is capped by `probe_travel_limit` (default `−1.5`) instead of the full `z_min_position` (−60). Both `probe.py` and `load_cell_probe.py` respect this value.
 
-**Why it is safe:** Safety is only bypassed for the duration of a single probe move. The load cell trigger stops the bed long before it reaches the travel-limit target position. All other safety checks (e.g. rail limits, joint distances) are unaffected outside of probe moves.
+**Config** — add to your `[load_cell_probe]` section in `printer.cfg`:
+```ini
+[load_cell_probe]
+probe_travel_limit: -1.5   # max absolute Z/A/B target during a probe move (default: -1.5)
+```
 
 ---
 

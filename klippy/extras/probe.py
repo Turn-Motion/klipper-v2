@@ -237,6 +237,10 @@ class HomingViaProbeHelper:
         self.param_helper = param_helper
         self.multi_probe_pending = False
         self.z_min_position = lookup_minimum_z(config)
+        # Cap the probe travel target. Must be >= z_min_position.
+        # Set probe_travel_limit in the [probe] / [load_cell_probe] config section.
+        self.probe_travel_limit = config.getfloat('probe_travel_limit', -1.5,
+                                                   minval=self.z_min_position)
         self.results = []
         LookupZSteppers(config, self.mcu_probe.add_stepper)
         # Register z_virtual_endstop pin
@@ -290,8 +294,8 @@ class HomingViaProbeHelper:
         toolhead = self.printer.lookup_object('toolhead')
         gcode = self.printer.lookup_object('gcode')
         pos = toolhead.get_position()
-        pos[2] = self.z_min_position
-        
+        pos[2] = self.probe_travel_limit
+
         # Check for CartesianXY3Z kinematics with 5+ rails (Z/A/B coordination)
         kin = toolhead.get_kinematics()
         if hasattr(kin, 'rails') and len(kin.rails) >= 5:
@@ -300,15 +304,22 @@ class HomingViaProbeHelper:
             while len(pos) < 5:
                 pos.append(0.0)
             # Coordinate A and B axes with Z during probing
-            pos[3] = self.z_min_position  # A axis
-            pos[4] = self.z_min_position  # B axis
-            gcode.respond_info("ProbeSession: Coordinated probe position - Z/A/B all set to %.3f" % self.z_min_position)
+            pos[3] = self.probe_travel_limit  # A axis
+            pos[4] = self.probe_travel_limit  # B axis
+            gcode.respond_info("ProbeSession: Coordinated probe position - Z/A/B all set to %.3f" % self.probe_travel_limit)
         else:
             gcode.respond_info("ProbeSession: Standard kinematics - Z-only probe movement")
         
         speed = self.param_helper.get_probe_params(gcmd)['probe_speed']
         phoming = self.printer.lookup_object('homing')
-        self.results.append(phoming.probing_move(self.mcu_probe, pos, speed))
+        set_probing = getattr(kin, 'set_probing', None)
+        if set_probing is not None:
+            set_probing(True)
+        try:
+            self.results.append(phoming.probing_move(self.mcu_probe, pos, speed))
+        finally:
+            if set_probing is not None:
+                set_probing(False)
     def pull_probed_results(self):
         res = self.results
         self.results = []
