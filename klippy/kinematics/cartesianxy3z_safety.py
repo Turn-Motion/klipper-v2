@@ -297,13 +297,8 @@ class CartesianXY3ZSafety:
                 logging.warning(f"CartesianXY3Z Safety: {error}")
                 self.gcode.respond_info(f"Safety Error: {error}")
                 return False
-            is_safe, error = self.check_safety(move.start_pos)
-            if not is_safe:
-                self.is_safe = False
-                self.last_error = error
-                logging.warning(f"CartesianXY3Z Safety: {error} (start position)")
-                self.gcode.respond_info(f"Safety Error: {error}")
-                return False
+            # Skip start_pos check: the machine is already there (e.g. after a
+            # probe touch), so blocking moves FROM that position is wrong.
             is_safe, error = self.check_safety(move.end_pos)
             if not is_safe:
                 self.is_safe = False
