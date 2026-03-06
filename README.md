@@ -53,9 +53,9 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 1. **Safety bypass during probing** — `cartesianxy3z.py` now skips collision checks while a probe move is active (same pattern as the existing homing bypass).
 2. **Configurable travel limit** — probe target is capped by `probe_travel_limit` (default `−1.5`) instead of the full `z_min_position` (−60). Both `probe.py` and `load_cell_probe.py` respect this value.
 
-**Config** — add to your `[load_cell_probe]` section in `printer.cfg`:
+**Config** — add to your `[probe]` section in `printer.cfg`:
 ```ini
-[load_cell_probe]
+[probe]
 probe_travel_limit: -1.5   # max absolute Z/A/B target during a probe move (default: -1.5)
 ```
 
