@@ -447,8 +447,8 @@ class ToolHead:
                                     curtime, est_print_time, self.print_time)
     def _process_moves(self, moves):
         # #### DEBUG CODE ADDED BY CHIEN - 2025-07-31 ####
-        gcode = self.printer.lookup_object('gcode')
-        gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Processing {len(moves)} moves")
+        #gcode = self.printer.lookup_object('gcode')
+        #gcode.respond_info(f"TOOLHEAD PROCESS_MOVES DEBUG: Processing {len(moves)} moves")
         # #### END DEBUG CODE ####
         
         # Resync print_time if necessary
