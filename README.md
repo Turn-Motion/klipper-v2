@@ -47,6 +47,37 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Safety-Blocked Move Poisons Subsequent G1 Commands (09.03.2026)
+Fixed a bug in `toolhead.py` where a safety-blocked move left `gcode_move.last_position` stale at the blocked destination, causing the next G1 to silently include those phantom axis values.
+
+**Call chain before fix:**
+```
+G1 Z0 A0 B0
+  → gcode_move updates last_position = [x, y, 0, 0, 0]
+  → toolhead.move() → check_move() → safety blocks → raises command_error
+  → toolhead.move() catches it, flushes, returns silently       ← swallowed
+  → gcode_move sees no exception, last_position stays at [x,y,0,0,0] ← stale
+
+G1 Y170
+  → last_position updated to [x, 170, 0, 0, 0]                 ← uses stale Z/A/B
+  → toolhead.move() from commanded_pos(Z=100) → target(Z=0)    ← dangerous!
+```
+
+**Call chain after fix (`raise` instead of `return`):**
+```
+G1 Z0 A0 B0
+  → gcode_move updates last_position = [x, y, 0, 0, 0]
+  → toolhead.move() → check_move() → safety blocks → raises command_error
+  → toolhead.move() catches it, flushes, re-raises             ← propagates
+  → gcode layer fires gcode:command_error → reset_last_position()
+  → last_position = toolhead.get_position() = [x, y, 100, 100, 100] ← correct
+
+G1 Y170
+  → last_position updated to [x, 170, 100, 100, 100]           ← Y only moves ✓
+```
+
+---
+
 ### Probe Move Safety Bypass + Travel Limit (06.03.2026)
 **Status: ✅ COMPLETE** — Safety module was blocking probe moves because the travel target (Z=A=B=−60) looked like a collision. The load cell stops the bed well before that point. Two fixes applied:
 

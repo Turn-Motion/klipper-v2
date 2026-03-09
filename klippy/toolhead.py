@@ -615,10 +615,6 @@ class ToolHead:
             last_move.limit_next_junction_speed(speed)
     def move(self, newpos, speed):
         # Create a move and add it to the move queue
-        gcode_logging_debug = self.printer.lookup_object('gcode')
-        #gcode_logging_debug.respond_info(
-        #    f"TOOLHEAD DEBUG: move() called with newpos={['%.4f' % p for p in newpos]} speed={speed}"
-        #)
         move = Move(self, self.commanded_pos, newpos, speed)
         # Perform kinematic check if any axes move
         axes_d = move.axes_d
@@ -650,13 +646,14 @@ class ToolHead:
                 self.extruder.check_move(move)
         except self.printer.command_error as e:
             # Move check failed: flush queued moves so everything
-            # before this point still executes, then skip this move
-            gcode_logging_debug.respond_info(
-                "TOOLHEAD: Move blocked: %s" % (str(e),))
+            # before this point still executes, then re-raise so the
+            # gcode layer fires gcode:command_error and calls
+            # reset_last_position() — preventing stale axis values
+            # from contaminating subsequent G1 commands.
             logging.warning(
                 "TOOLHEAD: Move blocked by check_move: %s", str(e))
             self._flush_lookahead()
-            return
+            raise
         self.commanded_pos[:] = newpos
         #gcode_logging_debug.respond_info(
         #    f"TOOLHEAD DEBUG: Updated commanded_pos to {['%.4f' % p for p in self.commanded_pos]}, adding move to queue"
