@@ -47,6 +47,13 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Time-Based Mixed-Axis Speed Limiting (09.03.2026)
+Fixed `cartesianxy3z.py` `check_move` where any move touching Z/A/B was forced to crawl at `max_z_velocity` — even for large XY moves. The old code capped `z_ratio` at 1.0, making a 424 mm XY + 5 mm Z move take 84 s instead of 1.4 s.
+
+New approach: compute the minimum time each group (XY, ZAB) needs at its own speed cap, sync to whichever group is slowest. The bottleneck group runs at exactly its cap; the other group finishes with it. Result: XY-dominant moves are up to 60× faster with no change to pure-ZAB move speed.
+
+---
+
 ### Safety-Blocked Move Poisons Subsequent G1 Commands (09.03.2026)
 Fixed a bug in `toolhead.py` where a safety-blocked move left `gcode_move.last_position` stale at the blocked destination, causing the next G1 to silently include those phantom axis values.
 

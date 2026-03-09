@@ -3,7 +3,7 @@
 # Copyright (C) 2016-2024  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
-import logging
+import logging, math
 import stepper
 # Import HomingMove directly
 from extras.homing import HomingMove
@@ -470,18 +470,31 @@ class CartesianXY3Z:
             if not is_safe:
                 raise move.move_error("Safety check blocked move")
         
-        # Calculate the slowest axis ratio for Z, A, B
-        z_ratio = 1.0
-        if move.axes_d[2]:  # Z axis
-            z_ratio = min(z_ratio, move.move_d / abs(move.axes_d[2]))
-        if move.axes_d[3]:  # A axis
-            z_ratio = min(z_ratio, move.move_d / abs(move.axes_d[3]))
-        if move.axes_d[4]:  # B axis
-            z_ratio = min(z_ratio, move.move_d / abs(move.axes_d[4]))
-            
-        # Use the slowest axis settings
-        move.limit_speed(
-            self.max_z_velocity * z_ratio, self.max_z_accel * z_ratio)
+        # Time-based speed limiting: each axis group runs at its own max speed
+        # and all groups finish at the same time (slowest group sets duration).
+        xy_move_d = math.sqrt(move.axes_d[0]**2 + move.axes_d[1]**2)
+
+        # Minimum time each group needs at its own max speed
+        t_xy = xy_move_d / move.toolhead.max_velocity if xy_move_d > 0. else 0.
+        t_zab = max(abs(move.axes_d[i]) / self.max_z_velocity
+                    for i in [2, 3, 4] if move.axes_d[i])
+
+        # Slowest group sets the duration; all axes finish together
+        t_total = max(t_xy, t_zab)
+
+        # Effective cruise speed in "move_d space"
+        effective_v = move.move_d / t_total
+
+        # Effective accel: most constraining axis group wins
+        zab_max_d = max(abs(move.axes_d[i]) for i in [2, 3, 4] if move.axes_d[i])
+        zab_accel_limit = self.max_z_accel * move.move_d / zab_max_d
+        if xy_move_d > 0.:
+            xy_accel_limit = move.toolhead.max_accel * move.move_d / xy_move_d
+            effective_a = min(xy_accel_limit, zab_accel_limit)
+        else:
+            effective_a = zab_accel_limit
+
+        move.limit_speed(effective_v, effective_a)
 
     def get_status(self, eventtime):
         axes = [a for a, (l, h) in zip("xyzab", self.limits) if l <= h]
