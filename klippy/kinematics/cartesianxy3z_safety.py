@@ -291,12 +291,14 @@ class CartesianXY3ZSafety:
             a_moving = abs(move.axes_d[3]) >= 1.0
             b_moving = abs(move.axes_d[4]) >= 1.0
             if a_moving != b_moving:
-                error = "A and B must move together (cannot move one without the other)"
-                self.is_safe = False
-                self.last_error = error
-                logging.warning(f"CartesianXY3Z Safety: {error}")
-                self.gcode.respond_info(f"Safety Error: {error}")
-                return False
+                solo_dist = max(abs(move.axes_d[3]), abs(move.axes_d[4]))
+                if solo_dist > 2.0:
+                    error = "A and B must move together (cannot move one without the other)"
+                    self.is_safe = False
+                    self.last_error = error
+                    logging.warning(f"CartesianXY3Z Safety: {error}")
+                    self.gcode.respond_info(f"Safety Error: {error}")
+                    return False
             # Skip start_pos check: the machine is already there (e.g. after a
             # probe touch), so blocking moves FROM that position is wrong.
             is_safe, error = self.check_safety(move.end_pos)
