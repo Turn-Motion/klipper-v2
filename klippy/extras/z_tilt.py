@@ -141,95 +141,51 @@ class ZAdjustHelper:
         msg = "Making the following Z adjustments:\n%s" % ("\n".join(stepstrs),)
         gcode.respond_info(msg)
         
-        # Log detailed stepper information
+        # Log detailed stepper adjustments
         logging.info("Z_TILT DEBUG: Detailed stepper adjustments:")
         for i, (stepper, adj) in enumerate(zip(self.z_steppers, adjustments)):
-            logging.info("Z_TILT DEBUG:   Stepper %d: %s, adjustment=%.6f", 
-                       i, stepper.get_name(), adj)
-        # Disable Z stepper movements
+            logging.info("Z_TILT DEBUG:   Stepper %d: %s, adjustment=%.6f",
+                         i, stepper.get_name(), adj)
+        # Detach all Z steppers from the motion queue
         toolhead.flush_step_generation()
         for s in self.z_steppers:
             s.set_trapq(None)
-        # Move each z stepper (sorted from lowest to highest) until they match
-        positions = [(-a, s) for a, s in zip(adjustments, self.z_steppers)]
-        positions.sort(key=(lambda k: k[0]))
-        
-        logging.info("Z_TILT DEBUG: Sorted stepper positions for movement:")
-        for i, (offset, stepper) in enumerate(positions):
-            logging.info("Z_TILT DEBUG:   %d: %s, offset=%.6f", 
-                       i, stepper.get_name(), offset)
-        first_stepper_offset, first_stepper = positions[0]
-        z_low = curpos[2] - first_stepper_offset
-        
-        logging.info("Z_TILT DEBUG: Base Z calculation: first_stepper=%s, offset=%.6f, z_low=%.6f", 
-                   first_stepper.get_name(), first_stepper_offset, z_low)
-        
-        # Store original position
+        # For independent Z/A/B axes: move each stepper on its own axis,
+        # one at a time, without the shared-Z "dance" logic.
         orig_pos = list(curpos)
-        
-        for i in range(len(positions)-1):
-            stepper_offset, stepper = positions[i]
-            next_stepper_offset, next_stepper = positions[i+1]
-            
-            logging.info("Z_TILT DEBUG: Processing stepper pair %d: %s (offset=%.6f) -> %s (offset=%.6f)", 
-                       i, stepper.get_name(), stepper_offset, next_stepper.get_name(), next_stepper_offset)
+        final_pos = list(orig_pos)
+        for stepper, adj in zip(self.z_steppers, adjustments):
+            axis_idx = stepper_axis_map.get(stepper, 2)
+            axis_name = "XYZA"[axis_idx - 1] if axis_idx < 5 else "B"
+            target = orig_pos[axis_idx] - adj
+            logging.info("Z_TILT DEBUG: Moving %s on %s axis: %.6f -> %.6f (adj=%.6f)",
+                         stepper.get_name(), axis_name,
+                         orig_pos[axis_idx], target, adj)
             toolhead.flush_step_generation()
             stepper.set_trapq(toolhead.get_trapq())
-            
-            # Get the correct axis index for this stepper
-            axis_idx = stepper_axis_map.get(stepper, 2)  # Default to Z (index 2) if not found
-            
-            # Reset position to original except for our target axis
             curpos = list(orig_pos)
-            curpos[axis_idx] = z_low + next_stepper_offset
-            
-            axis_name = "XYZA"[axis_idx-1] if axis_idx < 5 else "B"
-            logging.info("Z_TILT DEBUG: Setting stepper %s trapq and moving %s axis to %.6f", 
-                       stepper.get_name(), axis_name, curpos[axis_idx])
+            curpos[axis_idx] = target
             try:
-                logging.info("Z_TILT DEBUG: Executing move to %s=%.6f at speed=%.3f", 
-                           axis_name, curpos[axis_idx], speed)
-                
-                # For 5-axis XYZAB system, ensure Z/A/B coordination during stepper adjustment
-                kin = toolhead.get_kinematics()
-                if hasattr(kin, 'rails') and len(kin.rails) >= 5:  # CartesianXY3Z
-                    # Ensure curpos has all 5 axes
-                    while len(curpos) < 5:
-                        curpos.append(orig_pos[len(curpos)] if len(curpos) < len(orig_pos) else 0.0)
-                    
-                    # If moving Z axis, also coordinate A and B
-                    if axis_idx == 2:  # Z axis
-                        curpos[3] = curpos[2]  # A follows Z
-                        curpos[4] = curpos[2]  # B follows Z
-                        logging.info("Z_TILT DEBUG: Coordinating Z/A/B movement: Z=%.6f, A=%.6f, B=%.6f", 
-                                   curpos[2], curpos[3], curpos[4])
-                
                 toolhead.move(curpos, speed)
                 toolhead.set_position(curpos)
-                logging.info("Z_TILT DEBUG: Move completed successfully")
-            except Exception as e:
+                final_pos[axis_idx] = target
+                logging.info("Z_TILT DEBUG: Move completed: %s=%.6f", axis_name, target)
+            except Exception:
                 logging.exception("ZAdjustHelper adjust_steppers")
-                logging.info("Z_TILT DEBUG: Move failed with error: %s", str(e))
                 toolhead.flush_step_generation()
                 for s in self.z_steppers:
                     s.set_trapq(toolhead.get_trapq())
                 raise
-        
-        # Z should now be level - do final cleanup
-        last_stepper_offset, last_stepper = positions[-1]
-        logging.info("Z_TILT DEBUG: Final cleanup - last stepper: %s, offset=%.6f", 
-                   last_stepper.get_name(), last_stepper_offset)
+            toolhead.flush_step_generation()
+            stepper.set_trapq(None)
+        # Re-attach all steppers and commit the fully-updated position
         toolhead.flush_step_generation()
-        last_stepper.set_trapq(toolhead.get_trapq())
-        
-        # Update final position - use the correct axis for the last stepper
-        axis_idx = stepper_axis_map.get(last_stepper, 2)  # Default to Z (index 2) if not found
-        curpos = list(orig_pos)
-        curpos[axis_idx] += first_stepper_offset
-        
-        axis_name = "XYZA"[axis_idx-1] if axis_idx < 5 else "B"
-        logging.info("Z_TILT DEBUG: Final position set to %s=%.6f", axis_name, curpos[axis_idx])
-        toolhead.set_position(curpos)
+        for s in self.z_steppers:
+            s.set_trapq(toolhead.get_trapq())
+        toolhead.set_position(final_pos)
+        logging.info("Z_TILT DEBUG: All steppers re-attached. Final position: Z=%.6f A=%.6f B=%.6f",
+                     final_pos[2], final_pos[3] if len(final_pos) > 3 else 0.,
+                     final_pos[4] if len(final_pos) > 4 else 0.)
 
 class ZAdjustStatus:
     def __init__(self, printer):
