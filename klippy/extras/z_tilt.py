@@ -178,14 +178,36 @@ class ZAdjustHelper:
                 raise
             toolhead.flush_step_generation()
             stepper.set_trapq(None)
-        # Re-attach all steppers and commit the fully-updated position
+        # Re-attach all steppers and commit the physical positions
         toolhead.flush_step_generation()
         for s in self.z_steppers:
             s.set_trapq(toolhead.get_trapq())
         toolhead.set_position(final_pos)
-        logging.info("Z_TILT DEBUG: All steppers re-attached. Final position: Z=%.6f A=%.6f B=%.6f",
-                     final_pos[2], final_pos[3] if len(final_pos) > 3 else 0.,
-                     final_pos[4] if len(final_pos) > 4 else 0.)
+        # Apply session-only gcode offsets so Z, A, B all report the same
+        # coordinate (z_ref) despite being at different physical positions.
+        # This is equivalent to SET_GCODE_OFFSET A=da B=db and means future
+        # G1 Z5 A5 B5 transparently applies the tilt correction every move.
+        # Resets on next G28. Nothing saved to config.
+        z_ref = final_pos[2]
+        gcode_move = self.printer.lookup_object('gcode_move')
+        # gcode_move arrays use XYZABE order (0-5), which matches our axis_idx
+        for stepper, axis_idx in stepper_axis_map.items():
+            desired_offset = final_pos[axis_idx] - z_ref
+            delta = desired_offset - gcode_move.homing_position[axis_idx]
+            gcode_move.base_position[axis_idx] += delta
+            gcode_move.homing_position[axis_idx] = desired_offset
+        gcode_move.reset_last_position()
+        logging.info(
+            "Z_TILT DEBUG: Physical: Z=%.6f A=%.6f B=%.6f | "
+            "Gcode offsets applied: Z=%.6f A=%.6f B=%.6f | "
+            "All axes now report as: %.6f",
+            final_pos[2],
+            final_pos[3] if len(final_pos) > 3 else 0.,
+            final_pos[4] if len(final_pos) > 4 else 0.,
+            gcode_move.homing_position[2],
+            gcode_move.homing_position[3] if len(final_pos) > 3 else 0.,
+            gcode_move.homing_position[4] if len(final_pos) > 4 else 0.,
+            z_ref)
 
 class ZAdjustStatus:
     def __init__(self, printer):
