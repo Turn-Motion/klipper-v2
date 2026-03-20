@@ -131,7 +131,7 @@ class ZAdjustHelper:
         
         logging.info("Z_TILT DEBUG: Stepper axis mapping:")
         for stepper, axis_idx in stepper_axis_map.items():
-            axis_name = "XYZA"[axis_idx-1] if axis_idx < 5 else "B"
+            axis_name = "XYZAB"[axis_idx] if axis_idx < 5 else "?"
             logging.info("Z_TILT DEBUG:   %s -> %s axis (index %d)", 
                        stepper.get_name(), axis_name, axis_idx)
         
@@ -146,43 +146,24 @@ class ZAdjustHelper:
         for i, (stepper, adj) in enumerate(zip(self.z_steppers, adjustments)):
             logging.info("Z_TILT DEBUG:   Stepper %d: %s, adjustment=%.6f",
                          i, stepper.get_name(), adj)
-        # Detach all Z steppers from the motion queue
-        toolhead.flush_step_generation()
-        for s in self.z_steppers:
-            s.set_trapq(None)
-        # For independent Z/A/B axes: move each stepper on its own axis,
-        # one at a time, without the shared-Z "dance" logic.
-        orig_pos = list(curpos)
-        final_pos = list(orig_pos)
+        # All three Z/A/B axes are mechanically independent screws — no coupling.
+        # Move them all simultaneously in one coordinated multi-axis move.
+        final_pos = list(curpos)
         for stepper, adj in zip(self.z_steppers, adjustments):
             axis_idx = stepper_axis_map.get(stepper, 2)
-            axis_name = "XYZA"[axis_idx - 1] if axis_idx < 5 else "B"
-            target = orig_pos[axis_idx] - adj
-            logging.info("Z_TILT DEBUG: Moving %s on %s axis: %.6f -> %.6f (adj=%.6f)",
-                         stepper.get_name(), axis_name,
-                         orig_pos[axis_idx], target, adj)
-            toolhead.flush_step_generation()
-            stepper.set_trapq(toolhead.get_trapq())
-            curpos = list(orig_pos)
-            curpos[axis_idx] = target
-            try:
-                toolhead.move(curpos, speed)
-                toolhead.set_position(curpos)
-                final_pos[axis_idx] = target
-                logging.info("Z_TILT DEBUG: Move completed: %s=%.6f", axis_name, target)
-            except Exception:
-                logging.exception("ZAdjustHelper adjust_steppers")
-                toolhead.flush_step_generation()
-                for s in self.z_steppers:
-                    s.set_trapq(toolhead.get_trapq())
-                raise
-            toolhead.flush_step_generation()
-            stepper.set_trapq(None)
-        # Re-attach all steppers and commit the physical positions
-        toolhead.flush_step_generation()
-        for s in self.z_steppers:
-            s.set_trapq(toolhead.get_trapq())
-        toolhead.set_position(final_pos)
+            axis_name = "XYZAB"[axis_idx] if axis_idx < 5 else "?"
+            target = curpos[axis_idx] - adj
+            final_pos[axis_idx] = target
+            logging.info("Z_TILT DEBUG: %s axis target: %.6f -> %.6f (adj=%.6f)",
+                         axis_name, curpos[axis_idx], target, adj)
+        logging.info("Z_TILT DEBUG: Coordinated move to Z=%.6f A=%.6f B=%.6f",
+                     final_pos[2], final_pos[3], final_pos[4])
+        try:
+            toolhead.move(final_pos, speed)
+            toolhead.set_position(final_pos)
+        except Exception:
+            logging.exception("ZAdjustHelper adjust_steppers")
+            raise
         # Apply session-only gcode offsets so Z, A, B all report the same
         # coordinate (z_ref) despite being at different physical positions.
         # This is equivalent to SET_GCODE_OFFSET A=da B=db and means future
@@ -360,9 +341,18 @@ class ZTilt:
         logging.info("Z_TILT DEBUG: Using offsets[0]=%.6f, offsets[1]=%.6f, z_offset=%.6f", 
                    offsets[0], offsets[1], z_offset)
         
-        # Calculate per-position adjustments
-        adjustments = [x*x_adjust + y*y_adjust + z_adjust for x, y in self.z_positions]
+        # Compute the fitted plane height at each stepper's XY position.
+        adjustments_raw = [x*x_adjust + y*y_adjust + z_adjust
+                           for x, y in self.z_positions]
+        # Subtract the mean so that the corrections are PURELY relative
+        # (sum-to-zero).
+        mean_adj = sum(adjustments_raw) / len(adjustments_raw)
+        adjustments = [a - mean_adj for a in adjustments_raw]
         
+        logging.info(
+            "Z_TILT DEBUG: Raw adjustments=%s, mean=%.6f, relative adjustments=%s",
+            adjustments_raw, mean_adj, adjustments)
+
         # Display per-position adjustments to user
         adj_msg = ["Z-Tilt: Per-position adjustments:"]
         for i, (pos, adj) in enumerate(zip(self.z_positions, adjustments)):
