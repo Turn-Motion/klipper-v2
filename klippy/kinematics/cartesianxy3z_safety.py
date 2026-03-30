@@ -35,8 +35,12 @@ class CartesianXY3ZSafety:
         self.last_error = ""
         # Read parameters from [CartesianXY3ZSafety] section if defined in
         # printer.cfg; otherwise every parameter keeps its hardcoded default.
+        self.disable_safety_checks = False
         if config.has_section('CartesianXY3ZSafety'):
             sc = config.getsection('CartesianXY3ZSafety')
+            self.disable_safety_checks = sc.getboolean('disable_safety_checks', False)
+            if self.disable_safety_checks:
+                logging.warning("CartesianXY3ZSafety: Safety checks are DISABLED via config")
             self.d_x   = sc.getfloat('x_distance_between_joints_ab', 646.0)
             self.d_y   = sc.getfloat('y_distance_between_ab_center_and_z', 302.5)
             self.h_tot = sc.getfloat('total_measured_height', 8.0)
@@ -275,6 +279,8 @@ class CartesianXY3ZSafety:
 
     def check_move(self, move):
         """Check if a move is safe."""
+        if self.disable_safety_checks:
+            return True
         try:
             if not any(move.axes_d[i] for i in [2, 3, 4]):
                 # Pure XY move - check Y restriction using current A/B positions
