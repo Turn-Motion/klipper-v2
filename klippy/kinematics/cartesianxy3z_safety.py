@@ -41,14 +41,13 @@ class CartesianXY3ZSafety:
             self.disable_safety_checks = sc.getboolean('disable_safety_checks', False)
             if self.disable_safety_checks:
                 logging.warning("CartesianXY3ZSafety: Safety checks are DISABLED via config")
-            self.d_x   = sc.getfloat('x_distance_between_joints_ab', 646.0)
-            self.d_y   = sc.getfloat('y_distance_between_ab_center_and_z', 302.5)
-            self.h_tot = sc.getfloat('total_measured_height', 8.0)
-            self.d_1r  = sc.getfloat('offset_measure_point_1_to_rotation_center', 4.0)
-            self.d_2p  = sc.getfloat('offset_measure_point_2_to_plate_surface', 0.0)
-            self.p_x   = sc.getfloat('printing_area_x_length', 600.0)
-            self.p_y   = sc.getfloat('printing_area_y_length', 300.0)
-            self.d_flex= sc.getfloat('flex_plate_thickness', 2.52)
+            self.d_x       = sc.getfloat('x_distance_between_joints_ab', 646.0)
+            self.d_y       = sc.getfloat('y_distance_between_ab_center_and_z', 304.6)
+            self.h_A       = sc.getfloat('a_joint_probe_object_height', 28.0)
+            self.z_probe_A = sc.getfloat('a_joint_probe_value', 7.38125)
+            self.z_probe_P = sc.getfloat('bed_probe_value', -0.35625)
+            self.p_x       = sc.getfloat('printing_area_x_length', 600.0)
+            self.p_y       = sc.getfloat('printing_area_y_length', 300.0)
             self.x_out    = sc.getfloat('x_railspace_ab_outwards_neutral', 255.0)
             self.x_in     = sc.getfloat('x_railspace_ab_inwards_neutral', 50.0)
             self.y_out    = sc.getfloat('y_railspace_z_inwards_neutral', 132.19)
@@ -61,14 +60,13 @@ class CartesianXY3ZSafety:
             self.clear    = sc.getfloat('safety_z_clearance', 2.0)
             #self.d_z_ab = sc.getfloat('height_distance_between_z_ab', 250.0)
         else:
-            self.d_x      = 646.0
-            self.d_y      = 302.5
-            self.h_tot    = 8.0
-            self.d_1r     = 4.0
-            self.d_2p     = 0.0
-            self.p_x      = 600.0
-            self.p_y      = 300.0
-            self.d_flex   = 2.52
+            self.d_x       = 646.0
+            self.d_y       = 304.6
+            self.h_A       = 28.0
+            self.z_probe_A = 7.38125
+            self.z_probe_P = -0.35625
+            self.p_x       = 600.0
+            self.p_y       = 300.0
             self.x_out    = 255.0
             self.x_in     = 50.0
             self.y_out    = 132.19
@@ -80,7 +78,7 @@ class CartesianXY3ZSafety:
             self.ex_y     = 6.5
             self.clear    = 2.0
             #self.d_z_ab = 250.0
-        self.z_tot = self.h_tot - self.d_1r - self.d_2p + self.d_flex
+        self.z_tot = self.h_A / 2 - (self.z_probe_A - self.z_probe_P)
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
         self.gcode.register_command('CHECK_CARTESIANXY3Z_SAFETY',
             self.cmd_CHECK_CARTESIANXY3Z_SAFETY,
