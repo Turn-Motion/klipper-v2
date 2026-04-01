@@ -30,6 +30,11 @@ class VirtualSD:
         self.must_pause_work = self.cmd_from_sd = False
         self.next_file_position = 0
         self.work_timer = None
+        # Last flushed-to-step-generator line tracking (crash recovery).
+        # Updated via lookahead callback
+        self.last_flushed_line_num = 0
+        self.last_flushed_line = ""
+        self._sd_line_counter = 0
         # Error handling
         gcode_macro = self.printer.load_object(config, 'gcode_macro')
         self.on_error_gcode = gcode_macro.load_template(
@@ -46,9 +51,22 @@ class VirtualSD:
         self.gcode.register_command(
             "SDCARD_PRINT_FILE", self.cmd_SDCARD_PRINT_FILE,
             desc=self.cmd_SDCARD_PRINT_FILE_help)
+    def _on_line_flushed(self, print_time, line_num, line_text):
+        # Fires in _process_moves when this line's moves enter the step
+        # generator.
+        if line_num > self.last_flushed_line_num:
+            self.last_flushed_line_num = line_num
+            self.last_flushed_line = line_text
     def handle_shutdown(self):
         if self.work_timer is not None:
             self.must_pause_work = True
+            if self.last_flushed_line_num:
+                logging.info(
+                    "CRASH RECOVERY: Last step-gen-flushed SD gcode line %d"
+                    " (byte pos %d): %s",
+                    self.last_flushed_line_num,
+                    self.file_position,
+                    self.last_flushed_line)
             try:
                 readpos = max(self.file_position - 1024, 0)
                 readcount = self.file_position - readpos
@@ -135,6 +153,9 @@ class VirtualSD:
             self.current_file.close()
             self.current_file = None
         self.file_position = self.file_size = 0
+        self.last_flushed_line_num = 0
+        self.last_flushed_line = ""
+        self._sd_line_counter = 0
         self.print_stats.reset()
         self.printer.send_event("virtual_sdcard:reset_file")
     cmd_SDCARD_RESET_FILE_help = "Clears a loaded SD File. Stops the print "\
@@ -225,6 +246,7 @@ class VirtualSD:
     def work_handler(self, eventtime):
         logging.info("Starting SD card print (position %d)", self.file_position)
         self.reactor.unregister_timer(self.work_timer)
+        toolhead = self.printer.lookup_object('toolhead')
         try:
             self.current_file.seek(self.file_position)
         except:
@@ -269,6 +291,8 @@ class VirtualSD:
             else:
                 next_file_position = self.file_position + len(line) + 1
             self.next_file_position = next_file_position
+            self._sd_line_counter += 1
+            line_num = self._sd_line_counter
             try:
                 self.gcode.run_script(line)
             except self.gcode.error as e:
@@ -281,6 +305,13 @@ class VirtualSD:
             except:
                 logging.exception("virtual_sdcard dispatch")
                 break
+            # Register a callback capturing line_num/line at dispatch time.
+            # Fires in move order when moves enter the step generator.
+            # Non-motion lines (temp, fan, comments) have no new move so
+            # register_lookahead_callback fires them immediately, keeping
+            # last_flushed_* as up-to-date as possible for those lines too.
+            toolhead.register_lookahead_callback(
+                lambda pt, n=line_num, l=line: self._on_line_flushed(pt, n, l))
             self.cmd_from_sd = False
             self.file_position = self.next_file_position
             # Do we need to skip around?
