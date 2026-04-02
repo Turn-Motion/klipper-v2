@@ -62,6 +62,14 @@ class CartesianXY3Z:
         # Get the post-homing Z movement distance (default 62.8mm)
         self.post_homing_z_lift = config.getfloat('post_homing_z_lift', -60)
         self.limits = [(1.0, -1.0)] * 5  # For x, y, z, a, b axes
+        # Dynamic Z accel scaling based on vertical distance between Z/A/B axes.
+        # Read from [CartesianXY3ZSafety] section if present, otherwise use defaults.
+        self.max_z_dist = 250.
+        self.p_z_acc = 0.8
+        if config.has_section('CartesianXY3ZSafety'):
+            sc = config.getsection('CartesianXY3ZSafety')
+            self.max_z_dist = sc.getfloat('max_z_dist', 250., above=0.)
+            self.p_z_acc    = sc.getfloat('p_z_acc', 0.8, minval=0., maxval=1.)
         
         # Initialize safety module directly
         self.is_homing = False
@@ -485,9 +493,24 @@ class CartesianXY3Z:
         # Effective cruise speed in "move_d space"
         effective_v = move.move_d / t_total
 
+        # Dynamic Z accel: reduce when bed is tilted (Z/A/B are at different heights).
+        # vertical_distance = max pairwise difference between Z/A/B start positions.
+        # Scaling is active during normal moves (printing). It is skipped only when
+        # axes are not yet homed (positions would be meaningless) or during the
+        # homing sequence itself.
+        z_axes_homed = all(self.limits[i][0] <= self.limits[i][1]
+                           for i in [2, 3, 4])
+        if z_axes_homed and not self.is_homing:
+            sz, sa, sb = (move.start_pos[i] for i in [2, 3, 4])
+            vertical_distance = max(abs(sz - sa), abs(sz - sb), abs(sa - sb))
+            ratio = min(vertical_distance / self.max_z_dist, 1.0)
+            z_accel_scale = 1.0 - ratio * (1.0 - self.p_z_acc)
+        else:
+            z_accel_scale = 1.0
+
         # Effective accel: most constraining axis group wins
         zab_max_d = max(abs(move.axes_d[i]) for i in [2, 3, 4] if move.axes_d[i])
-        zab_accel_limit = self.max_z_accel * move.move_d / zab_max_d
+        zab_accel_limit = (self.max_z_accel * z_accel_scale) * move.move_d / zab_max_d
         if xy_move_d > 0.:
             xy_accel_limit = move.toolhead.max_accel * move.move_d / xy_move_d
             effective_a = min(xy_accel_limit, zab_accel_limit)
