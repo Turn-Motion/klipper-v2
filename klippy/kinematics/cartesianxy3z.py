@@ -49,13 +49,11 @@ class CartesianXY3Z:
             toolhead.register_step_generator(s.generate_steps)
         # Setup boundary checks — Z limits are owned by the toolhead
         _, max_accel = toolhead.get_max_velocity()
-        self.max_z_velocity = toolhead.max_z_velocity
-        self.max_z_accel = toolhead.max_z_accel
         # Log loaded velocity/accel limits to klippy.log
         logging.info(
             "CartesianXY3Z limits — max_accel: %.1f | "
             "max_z_velocity: %.1f, max_z_accel: %.1f",
-            max_accel, self.max_z_velocity, self.max_z_accel)
+            max_accel, toolhead.max_z_velocity, toolhead.max_z_accel)
         # Also send to Mainsail console once printer is ready
         self.printer.register_event_handler(
             "klippy:ready", self._handle_ready_log_limits)
@@ -116,10 +114,11 @@ class CartesianXY3Z:
 
     def _handle_ready_log_limits(self):
         gcode = self.printer.lookup_object('gcode')
+        toolhead = self.printer.lookup_object('toolhead')
         gcode.respond_info(
             "CartesianXY3Z axis limits loaded from config:\n"
             "  max_z_velocity: %.1f  max_z_accel: %.1f"
-            % (self.max_z_velocity, self.max_z_accel))
+            % (toolhead.max_z_velocity, toolhead.max_z_accel))
 
     def get_steppers(self):
         return [s for rail in self.rails for s in rail.get_steppers()]
@@ -476,7 +475,7 @@ class CartesianXY3Z:
 
         # Minimum time each group needs at its own max speed
         t_xy = xy_move_d / move.toolhead.max_velocity if xy_move_d > 0. else 0.
-        t_zab = max(abs(move.axes_d[i]) / self.max_z_velocity
+        t_zab = max(abs(move.axes_d[i]) / move.toolhead.max_z_velocity
                     for i in [2, 3, 4] if move.axes_d[i])
 
         # Slowest group sets the duration; all axes finish together
@@ -487,7 +486,7 @@ class CartesianXY3Z:
 
         # Effective accel: most constraining axis group wins
         zab_max_d = max(abs(move.axes_d[i]) for i in [2, 3, 4] if move.axes_d[i])
-        zab_accel_limit = self.max_z_accel * move.move_d / zab_max_d
+        zab_accel_limit = move.toolhead.max_z_accel * move.move_d / zab_max_d
         if xy_move_d > 0.:
             xy_accel_limit = move.toolhead.max_accel * move.move_d / xy_move_d
             effective_a = min(xy_accel_limit, zab_accel_limit)
