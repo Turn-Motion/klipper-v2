@@ -47,21 +47,6 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
-### Dynamic Z Acceleration Scaling Based on Bed Tilt (02.04.2026)
-Z/A/B acceleration is now automatically reduced when the bed is tilted (Z, A, B axes at different heights) to prevent step loss at high tilt angles. Scaling is active during normal printing moves and skipped during homing or before axes are homed.
-
-**How it works:** `vertical_distance = max(|Z−A|, |Z−B|, |A−B|)` is computed from `move.start_pos` each move. This maps linearly from `0` (flat, full accel) to `max_z_dist` (max tilt, accel multiplied by `p_z_acc`).
-
-**Config** — add to `[CartesianXY3ZSafety]` in `printer.cfg`:
-```ini
-[CartesianXY3ZSafety]
-max_z_dist: 250    # vertical distance (mm) at which p_z_acc is fully applied (default: 250)
-p_z_acc: 0.8       # Z accel multiplier at maximum tilt, 0.0–1.0 (default: 0.8)
-```
-Both parameters are optional — omitting them keeps the previous behaviour (no scaling).
-
----
-
 ### Time-Based Mixed-Axis Speed Limiting (09.03.2026)
 Fixed `cartesianxy3z.py` `check_move` where any move touching Z/A/B was forced to crawl at `max_z_velocity` — even for large XY moves. The old code capped `z_ratio` at 1.0, making a 424 mm XY + 5 mm Z move take 84 s instead of 1.4 s.
 
