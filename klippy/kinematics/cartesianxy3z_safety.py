@@ -323,14 +323,20 @@ class CartesianXY3ZSafety:
                 self.gcode.respond_info(f"Safety Error: {error}")
                 return False
             if move.move_d > 1.0:
-                midpos = [(move.start_pos[i] + move.end_pos[i]) / 2 for i in range(len(move.start_pos))]
-                is_safe, error = self.check_safety(midpos)
-                if not is_safe:
-                    self.is_safe = False
-                    self.last_error = error
-                    logging.warning(f"CartesianXY3Z Safety: {error} (intermediate position)")
-                    self.gcode.respond_info(f"Safety Error: {error}")
-                    return False
+                # Only check midpoint if start_pos is itself valid; if start is
+                # a calibration-offset artifact (e.g. after ztilt/zoffset), the
+                # interpolated midpoint is meaningless and will produce false
+                # bed-collision failures.
+                start_safe, _ = self.check_safety(move.start_pos)
+                if start_safe:
+                    midpos = [(move.start_pos[i] + move.end_pos[i]) / 2 for i in range(len(move.start_pos))]
+                    is_safe, error = self.check_safety(midpos)
+                    if not is_safe:
+                        self.is_safe = False
+                        self.last_error = error
+                        logging.warning(f"CartesianXY3Z Safety: {error} (intermediate position)")
+                        self.gcode.respond_info(f"Safety Error: {error}")
+                        return False
             self.is_safe = True
             self.last_error = ""
             return True
