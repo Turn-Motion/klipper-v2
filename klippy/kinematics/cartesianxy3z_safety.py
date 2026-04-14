@@ -343,7 +343,7 @@ class CartesianXY3ZSafety:
                 return False
             if move.move_d > 1.0:
                 midpos = [(move.start_pos[i] + move.end_pos[i]) / 2 for i in range(len(move.start_pos))]
-                is_safe, error = self.check_safety(self._gcode_pos(midpos))
+                is_safe, error = self.check_safety(midpos)
                 if not is_safe:
                     self.is_safe = False
                     self.last_error = error
