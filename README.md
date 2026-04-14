@@ -47,6 +47,27 @@ This is being slowly shipped to klipper's mainline branch. It's a very large cha
 
 ## Feature Updates
 
+### Safety Module — G-Code Offset Decoupling (14.04.2026)
+Fixed `cartesianxy3z_safety.py` `check_move` incorrectly blocking moves at the start of a print when a negative Z motor position was produced by the combined gcode offsets (probe `z_offset`, z_tilt adjustment, manual `SET_GCODE_OFFSET`).
+
+**Root cause:** `check_move` receives `move.end_pos` in *motor-space* coordinates, which is `gcode_z + base_position[z]`. All safety thresholds (`z_tot`, `z_probe_A`, `z_probe_P`, rail limits) are calibrated in *gcode-space* (the Z values displayed during probing/homing). When a large negative offset pushes the motor position below zero for a normal first-layer command like `G1 Z0.2`, the collision check sees a negative A/B value and fires falsely.
+
+**Fix:** Added a `_gcode_pos(pos)` helper that subtracts `homing_origin` (fetched from `gcode_move`) from the motor position before any safety arithmetic. This is purely a coordinate-space translation inside the safety module — the actual `toolhead.move()` call and all firmware motion are completely unchanged.
+
+```python
+def _gcode_pos(self, pos):
+    origin = self.gcode_move.get_status()['homing_origin']
+    adjusted = list(pos)
+    adjusted[2] -= origin.z   # z_offset + z_tilt + SET_GCODE_OFFSET
+    adjusted[3] -= origin.a
+    adjusted[4] -= origin.b
+    return adjusted
+```
+
+Applied at all 5 call sites: both branches of `check_move` (pure-XY, end-pos, midpoint), `CHECK_CARTESIANXY3Z_SAFETY`, and `PREVIEW_MOVE`.
+
+---
+
 ### Time-Based Mixed-Axis Speed Limiting (09.03.2026)
 Fixed `cartesianxy3z.py` `check_move` where any move touching Z/A/B was forced to crawl at `max_z_velocity` — even for large XY moves. The old code capped `z_ratio` at 1.0, making a 424 mm XY + 5 mm Z move take 84 s instead of 1.4 s.
 

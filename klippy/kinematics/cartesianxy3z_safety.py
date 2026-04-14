@@ -91,6 +91,25 @@ class CartesianXY3ZSafety:
 
     def handle_connect(self):
         self.toolhead = self.printer.lookup_object('toolhead')
+        self.gcode_move = self.printer.lookup_object('gcode_move', None)
+
+    def _gcode_pos(self, pos):
+        """Convert motor-space position back to gcode-space by stripping
+        all accumulated gcode offsets (probe z_offset, z_tilt, SET_GCODE_OFFSET).
+        Safety thresholds are calibrated in gcode-coordinate space, so this
+        must be applied before any check_safety() call.
+        The actual move sent to the firmware is NOT touched.
+        """
+        if self.gcode_move is None:
+            return list(pos)
+        origin = self.gcode_move.get_status()['homing_origin']
+        adjusted = list(pos)
+        adjusted[0] -= origin.x
+        adjusted[1] -= origin.y
+        adjusted[2] -= origin.z
+        adjusted[3] -= origin.a
+        adjusted[4] -= origin.b
+        return adjusted
 
     def calc_intermediate_values(self, pos):
         # ============================================================================
@@ -284,7 +303,7 @@ class CartesianXY3ZSafety:
         try:
             if not any(move.axes_d[i] for i in [2, 3, 4]):
                 # Pure XY move - check Y restriction using current A/B positions
-                is_safe, error = self.check_safety(move.end_pos)
+                is_safe, error = self.check_safety(self._gcode_pos(move.end_pos))
                 if not is_safe:
                     self.is_safe = False
                     self.last_error = error
@@ -315,7 +334,7 @@ class CartesianXY3ZSafety:
                     return False
             # Skip start_pos check: the machine is already there (e.g. after a
             # probe touch), so blocking moves FROM that position is wrong.
-            is_safe, error = self.check_safety(move.end_pos)
+            is_safe, error = self.check_safety(self._gcode_pos(move.end_pos))
             if not is_safe:
                 self.is_safe = False
                 self.last_error = error
@@ -323,20 +342,14 @@ class CartesianXY3ZSafety:
                 self.gcode.respond_info(f"Safety Error: {error}")
                 return False
             if move.move_d > 1.0:
-                # Only check midpoint if start_pos is itself valid; if start is
-                # a calibration-offset artifact (e.g. after ztilt/zoffset), the
-                # interpolated midpoint is meaningless and will produce false
-                # bed-collision failures.
-                start_safe, _ = self.check_safety(move.start_pos)
-                if start_safe:
-                    midpos = [(move.start_pos[i] + move.end_pos[i]) / 2 for i in range(len(move.start_pos))]
-                    is_safe, error = self.check_safety(midpos)
-                    if not is_safe:
-                        self.is_safe = False
-                        self.last_error = error
-                        logging.warning(f"CartesianXY3Z Safety: {error} (intermediate position)")
-                        self.gcode.respond_info(f"Safety Error: {error}")
-                        return False
+                midpos = [(move.start_pos[i] + move.end_pos[i]) / 2 for i in range(len(move.start_pos))]
+                is_safe, error = self.check_safety(midpos)
+                if not is_safe:
+                    self.is_safe = False
+                    self.last_error = error
+                    logging.warning(f"CartesianXY3Z Safety: {error} (intermediate position)")
+                    self.gcode.respond_info(f"Safety Error: {error}")
+                    return False
             self.is_safe = True
             self.last_error = ""
             return True
@@ -351,7 +364,8 @@ class CartesianXY3ZSafety:
     def cmd_CHECK_CARTESIANXY3Z_SAFETY(self, gcmd):
         """Manual safety check command"""
         pos = self.toolhead.get_position()
-        is_safe, error = self.check_safety(pos)
+        gpos = self._gcode_pos(pos)
+        is_safe, error = self.check_safety(gpos)
         if is_safe:
             self.is_safe = True
             self.last_error = ""
@@ -360,8 +374,8 @@ class CartesianXY3ZSafety:
             self.is_safe = False
             self.last_error = error
             gcmd.respond_info(f"Safety check FAILED: {error}")
-        z_mz, z_ab, csx, i_ab, x_ab = self.calc_intermediate_values(pos)
-        points = self.calc_point_positions(pos)
+        z_mz, z_ab, csx, i_ab, x_ab = self.calc_intermediate_values(gpos)
+        points = self.calc_point_positions(gpos)
         x_now, y_now, z_now, z_norm = self.calc_vectors(points)
         gcmd.respond_info(
             f"Intermediate values:\n"
@@ -412,7 +426,8 @@ class CartesianXY3ZSafety:
             )
             
             # Check safety at target position
-            is_safe, error = self.check_safety(target_pos)
+            gpos = self._gcode_pos(target_pos)
+            is_safe, error = self.check_safety(gpos)
             
             if is_safe:
                 gcmd.respond_info("✓ Move is SAFE - would be allowed")
@@ -420,8 +435,8 @@ class CartesianXY3ZSafety:
                 gcmd.respond_info(f"✗ Move is BLOCKED: {error}")
             
             # Show detailed analysis
-            z_mz, z_ab, csx, i_ab, x_ab = self.calc_intermediate_values(target_pos)
-            points = self.calc_point_positions(target_pos)
+            z_mz, z_ab, csx, i_ab, x_ab = self.calc_intermediate_values(gpos)
+            points = self.calc_point_positions(gpos)
             x_now, y_now, z_now, z_norm = self.calc_vectors(points)
 
             # Rail limit values (same logic as check_safety)
