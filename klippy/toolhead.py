@@ -757,6 +757,8 @@ class ToolHead:
                      'position': self.Coord(*self.commanded_pos),
                      'max_velocity': self.max_velocity,
                      'max_accel': self.max_accel,
+                     'max_z_velocity': self.max_z_velocity,
+                     'max_z_accel': self.max_z_accel,
                      'minimum_cruise_ratio': self.min_cruise_ratio,
                      'square_corner_velocity': self.square_corner_velocity})
         return res
