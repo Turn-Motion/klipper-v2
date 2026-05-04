@@ -757,6 +757,8 @@ class ToolHead:
                      'position': self.Coord(*self.commanded_pos),
                      'max_velocity': self.max_velocity,
                      'max_accel': self.max_accel,
+                     'max_z_velocity': self.max_z_velocity,
+                     'max_z_accel': self.max_z_accel,
                      'minimum_cruise_ratio': self.min_cruise_ratio,
                      'square_corner_velocity': self.square_corner_velocity})
         return res
@@ -807,6 +809,8 @@ class ToolHead:
     def cmd_SET_VELOCITY_LIMIT(self, gcmd):
         max_velocity = gcmd.get_float('VELOCITY', None, above=0.)
         max_accel = gcmd.get_float('ACCEL', None, above=0.)
+        max_z_velocity = gcmd.get_float('Z_VELOCITY', None, above=0.)
+        max_z_accel = gcmd.get_float('Z_ACCEL', None, above=0.)
         square_corner_velocity = gcmd.get_float(
             'SQUARE_CORNER_VELOCITY', None, minval=0.)
         min_cruise_ratio = gcmd.get_float(
@@ -823,6 +827,10 @@ class ToolHead:
             self.max_velocity = max_velocity
         if max_accel is not None:
             self.max_accel = max_accel
+        if max_z_velocity is not None:
+            self.max_z_velocity = max_z_velocity
+        if max_z_accel is not None:
+            self.max_z_accel = max_z_accel
         if square_corner_velocity is not None:
             self.square_corner_velocity = square_corner_velocity
         if min_cruise_ratio is not None:
@@ -830,12 +838,16 @@ class ToolHead:
         self._calc_junction_deviation()
         msg = ("max_velocity: %.6f\n"
                "max_accel: %.6f\n"
+               "max_z_velocity: %.6f\n"
+               "max_z_accel: %.6f\n"
                "minimum_cruise_ratio: %.6f\n"
                "square_corner_velocity: %.6f" % (
                    self.max_velocity, self.max_accel,
+                   self.max_z_velocity, self.max_z_accel,
                    self.min_cruise_ratio, self.square_corner_velocity))
         self.printer.set_rollover_info("toolhead", "toolhead: %s" % (msg,))
         if (max_velocity is None and max_accel is None
+            and max_z_velocity is None and max_z_accel is None
             and square_corner_velocity is None and min_cruise_ratio is None):
             gcmd.respond_info(msg, log=False)
     def cmd_M204(self, gcmd):
