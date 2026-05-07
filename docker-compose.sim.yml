@@ -1,0 +1,39 @@
+services:
+  klipper-sim:
+    build:
+      context: .
+      dockerfile: Dockerfile.sim
+    volumes:
+      # Source mounted live — just restart after `git checkout <branch>`
+      - type: bind
+        source: .
+        target: /klipper
+      # Sim printer config (separate from real printer.cfg)
+      - ./sim/printer.sim.cfg:/config/printer.sim.cfg:ro
+      # Drop .gcode files here from the host for estimation
+      - ./gcode:/gcode
+      # Named volume for the klippy Unix socket (shared with future moonraker)
+      - klippy-socket:/tmp
+    environment:
+      KLIPPER_CFG: /config/printer.sim.cfg
+    # Expose klippy socket as TCP so Windows host can connect directly
+    # Your visualizer connects to localhost:7126 (plain JSON+\x03 protocol)
+    ports:
+      - "7126:7126"
+    restart: "no"
+
+  # ── Phase 2: Moonraker REST/WebSocket API ───────────────────────────────────
+  # Uncomment when you're ready to add a vis/calibration frontend.
+  #
+  # moonraker:
+  #   image: mkuf/moonraker:nightly
+  #   volumes:
+  #     - ./moonraker.conf:/opt/moonraker/moonraker.conf:ro
+  #     - klippy-socket:/tmp
+  #   ports:
+  #     - "7125:7125"
+  #   depends_on:
+  #     - klipper-sim
+
+volumes:
+  klippy-socket:
