@@ -1,0 +1,6 @@
+# Minimal line-ending policy for Linux-container scripts.
+# Keep this narrow to avoid large vendor-file normalization commits.
+
+/scripts/*.sh text eol=lf
+/sim/*.sh text eol=lf
+/Makefile text eol=lf
