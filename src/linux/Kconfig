@@ -20,4 +20,12 @@ config CLOCK_FREQ
     int
     default 50000000
 
+config STEPPER_PAST_THRESHOLD_US
+    int
+    default 500000
+
+config SCHED_TIMER_PAST_THRESHOLD_US
+    int
+    default 500000
+
 endif

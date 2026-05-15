@@ -114,6 +114,8 @@ class VirtualSD:
             'is_active': self.is_active(),
             'file_position': self.file_position,
             'file_size': self.file_size,
+            'last_flushed_line_num': self.last_flushed_line_num,
+            'last_flushed_line': self.last_flushed_line,
         }
     def file_path(self):
         if self.current_file:
@@ -229,6 +231,23 @@ class VirtualSD:
             raise gcmd.error("SD busy")
         pos = gcmd.get_int('S', minval=0)
         self.file_position = pos
+        # Debug: show the line that will execute when print resumes
+        if self.current_file is not None:
+            try:
+                self.current_file.seek(pos)
+                preview = self.current_file.readline().rstrip('\n')
+                self.current_file.seek(pos)
+                msg = "M26: seek to byte %d -- next line to execute: %s" \
+                      % (pos, preview if preview else "<empty/EOF>")
+                gcmd.respond_info(msg)
+                logging.info(msg)
+                print(msg)
+            except Exception as e:
+                msg = "M26: seek to byte %d (preview failed: %s)" \
+                      % (pos, str(e))
+                gcmd.respond_info(msg)
+                logging.info(msg)
+                print(msg)
     def cmd_M27(self, gcmd):
         # Report SD print status
         if self.current_file is None:
@@ -248,7 +267,23 @@ class VirtualSD:
         self.reactor.unregister_timer(self.work_timer)
         toolhead = self.printer.lookup_object('toolhead')
         try:
+            # Recalibrate line counter to match actual file position.
+            # _sd_line_counter may be stale if the print was paused and
+            # resumed without going through _reset_file().  Count newlines
+            # in the file up to file_position so last_flushed_line_num always
+            # represents the true 1-based line number.
+            with io.open(self.current_file.name, 'rb') as bf:
+                prefix = bf.read(self.file_position)
+                self._sd_line_counter = prefix.count(b'\n')
             self.current_file.seek(self.file_position)
+            preview = self.current_file.readline().rstrip('\n')
+            self.current_file.seek(self.file_position)
+            msg = "SD resume at byte %d (line %d) -- first line: %s" \
+                  % (self.file_position, self._sd_line_counter + 1,
+                     preview if preview else "<empty/EOF>")
+            self.gcode.respond_info(msg)
+            logging.info(msg)
+            print(msg)
         except:
             logging.exception("virtual_sdcard seek")
             self.work_timer = None

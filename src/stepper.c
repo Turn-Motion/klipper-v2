@@ -173,7 +173,7 @@ stepper_event_full(struct timer *t)
         return ret;
     // Next step event is too close to the last unstep
     int32_t diff = s->time.waketime - min_next_time;
-    if (diff < (int32_t)-timer_from_us(1000))
+    if (diff < (int32_t)-timer_from_us(CONFIG_STEPPER_PAST_THRESHOLD_US))
         shutdown("Stepper too far in past");
 reschedule_min:
     s->time.waketime = min_next_time;
