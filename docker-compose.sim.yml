@@ -1,0 +1,36 @@
+services:
+  klipper-sim:
+    build:
+      context: .
+      dockerfile: Dockerfile.sim
+    volumes:
+      - type: bind
+        source: .
+        target: /klipper
+      - ./sim/printer.sim.cfg:/config/printer.sim.cfg:ro
+      - ./gcode:/opt/printer_data/gcodes
+      - klippy-socket:/tmp
+    environment:
+      KLIPPER_CFG: /config/printer.sim.cfg
+    ports:
+      - "7126:7126"
+    restart: "no"
+
+  # Moonraker REST/WebSocket API for Mainsail.
+  # Host port 7127 avoids collision with an existing local Moonraker on 7125.
+  moonraker:
+    image: mkuf/moonraker:latest
+    volumes:
+      - ./sim/moonraker.conf:/opt/printer_data/config/moonraker.conf:ro
+      - ./gcode:/opt/printer_data/gcodes
+      - moonraker-data:/opt/moonraker/data
+      - klippy-socket:/tmp
+    ports:
+      - "7127:7125"
+    depends_on:
+      - klipper-sim
+    restart: "no"
+
+volumes:
+  klippy-socket:
+  moonraker-data:

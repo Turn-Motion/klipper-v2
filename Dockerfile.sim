@@ -1,0 +1,24 @@
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y \
+    gcc git make libffi-dev pkg-config socat \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /klipper
+
+# Install Python deps first (cached layer)
+RUN pip install --no-cache-dir \
+    cffi pyserial greenlet jinja2 \
+    numpy matplotlib requests \
+    python-can lmdb msgspec
+
+# Source is mounted at runtime (not copied) so branch switches work
+# without rebuilding the image. Only chelper needs building.
+# We build it at container start via entrypoint.
+
+COPY sim/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 7125
+
+ENTRYPOINT ["/entrypoint.sh"]
