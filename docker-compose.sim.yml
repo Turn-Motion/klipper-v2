@@ -23,6 +23,7 @@ services:
     volumes:
       - ./sim/moonraker.conf:/opt/printer_data/config/moonraker.conf:ro
       - ./gcode:/opt/printer_data/gcodes
+      - ./sim/logs:/opt/printer_data/logs
       - moonraker-data:/opt/moonraker/data
       - klippy-socket:/tmp
     ports:
