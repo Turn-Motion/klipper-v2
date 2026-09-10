@@ -28,6 +28,11 @@ class VirtualSD:
         self.must_pause_work = self.cmd_from_sd = False
         self.next_file_position = 0
         self.work_timer = None
+        # Crash recovery: track the last SD line whose moves have entered
+        # the step generator (updated via lookahead callbacks)
+        self.last_flushed_line_num = 0
+        self.last_flushed_line = ""
+        self._sd_line_counter = 0
         # Error handling
         gcode_macro = self.printer.load_object(config, 'gcode_macro')
         aio = self.printer.load_object(config, 'aio_executor')
@@ -50,12 +55,22 @@ class VirtualSD:
                                             self._handle_analyze_shutdown)
         self.printer.register_event_handler("gcode:debuginput_exit",
                                             self._handle_debuginput_exit)
+    def _on_line_flushed(self, print_time, line_num, line_text):
+        # Fires when this line's moves have entered the step generator
+        if line_num > self.last_flushed_line_num:
+            self.last_flushed_line_num = line_num
+            self.last_flushed_line = line_text
     def _handle_analyze_shutdown(self, msg, details):
         if self.work_timer is None:
             return
         file_position = self.file_position
         current_file = self.current_file
         self.must_pause_work = True
+        if self.last_flushed_line_num:
+            logging.info("CRASH RECOVERY: Last step-gen-flushed SD gcode"
+                         " line %d (byte pos %d): %s",
+                         self.last_flushed_line_num, file_position,
+                         self.last_flushed_line)
         def log_debug_data(eventtime):
             try:
                 readpos = max(file_position - 1024, 0)
@@ -108,6 +123,8 @@ class VirtualSD:
             'is_active': self.is_active(),
             'file_position': self.file_position,
             'file_size': self.file_size,
+            'last_flushed_line_num': self.last_flushed_line_num,
+            'last_flushed_line': self.last_flushed_line,
         }
     def file_path(self):
         if self.current_file:
@@ -147,6 +164,9 @@ class VirtualSD:
             self.current_file.close()
             self.current_file = None
         self.file_position = self.file_size = 0
+        self.last_flushed_line_num = 0
+        self.last_flushed_line = ""
+        self._sd_line_counter = 0
         self.print_stats.reset()
         self.printer.send_event("virtual_sdcard:reset_file")
     cmd_SDCARD_RESET_FILE_help = "Clears a loaded SD File. Stops the print "\
@@ -223,6 +243,19 @@ class VirtualSD:
             raise gcmd.error("SD busy")
         pos = gcmd.get_int('S', minval=0)
         self.file_position = pos
+        # Show the line that will execute when the print resumes
+        if self.current_file is not None:
+            try:
+                self.current_file.seek(pos)
+                preview = self.current_file.readline().rstrip('\n')
+                self.current_file.seek(pos)
+                msg = "M26: seek to byte %d -- next line to execute: %s" % (
+                    pos, preview if preview else "<empty/EOF>")
+            except Exception as e:
+                msg = "M26: seek to byte %d (preview failed: %s)" % (
+                    pos, str(e))
+            gcmd.respond_info(msg)
+            logging.info(msg)
     def cmd_M27(self, gcmd):
         # Report SD print status
         if self.current_file is None:
@@ -240,8 +273,22 @@ class VirtualSD:
     def work_handler(self, eventtime):
         logging.info("Starting SD card print (position %d)", self.file_position)
         self.reactor.unregister_timer(self.work_timer)
+        toolhead = self.printer.lookup_object('toolhead')
         try:
+            # Recalibrate the line counter to the actual file position so
+            # that last_flushed_line_num is always a true 1-based line
+            # number, even after a pause/resume or an M26 seek.
+            with io.open(self.current_file.name, 'rb') as bf:
+                prefix = bf.read(self.file_position)
+                self._sd_line_counter = prefix.count(b'\n')
             self.current_file.seek(self.file_position)
+            preview = self.current_file.readline().rstrip('\n')
+            self.current_file.seek(self.file_position)
+            msg = "SD resume at byte %d (line %d) -- first line: %s" % (
+                self.file_position, self._sd_line_counter + 1,
+                preview if preview else "<empty/EOF>")
+            self.gcode.respond_info(msg)
+            logging.info(msg)
         except:
             logging.exception("virtual_sdcard seek")
             self.work_timer = None
@@ -284,6 +331,8 @@ class VirtualSD:
             else:
                 next_file_position = self.file_position + len(line) + 1
             self.next_file_position = next_file_position
+            self._sd_line_counter += 1
+            line_num = self._sd_line_counter
             try:
                 self.gcode.run_script(line)
             except self.gcode.error as e:
@@ -296,6 +345,11 @@ class VirtualSD:
             except:
                 logging.exception("virtual_sdcard dispatch")
                 break
+            # Note when this line's moves reach the step generator.  Lines
+            # without motion have no pending move, so the callback fires
+            # immediately and the tracking stays current for them too.
+            toolhead.register_lookahead_callback(
+                lambda pt, n=line_num, l=line: self._on_line_flushed(pt, n, l))
             self.cmd_from_sd = False
             self.file_position = self.next_file_position
             # Do we need to skip around?
