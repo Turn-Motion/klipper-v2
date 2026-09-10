@@ -104,7 +104,8 @@ stepper_load_next(struct stepper *s)
         if (was_active && timer_is_before(s->next_step_time, min_next_time)) {
             // Actively stepping and next step event close to the last unstep
             int32_t diff = s->next_step_time - min_next_time;
-            if (diff < (int32_t)-timer_from_us(1000))
+            uint32_t max_past = timer_from_us(CONFIG_STEPPER_PAST_THRESHOLD_US);
+            if (diff < (int32_t)-max_past)
                 shutdown("Stepper too far in past");
             s->time.waketime = min_next_time;
         }

@@ -323,6 +323,22 @@ config INITIAL_PINS
         pins will be set to output high - preface a pin with a '!'
         character to set that pin to output low.
 
+# How far in the past (in microseconds) a stepper next_step_time may be
+# before the firmware shuts down with "Stepper too far in past".
+# Real bare-metal MCUs use 1000 us (hardware timers can't be preempted).
+# A platform Kconfig may override this for higher-latency targets.
+config STEPPER_PAST_THRESHOLD_US
+    int
+    default 1000
+
+# How far in the past (in microseconds) a newly scheduled timer's waketime
+# may be before sched_add_timer() shuts down with "Timer too close".
+# Real bare-metal MCUs use 0 (any past waketime is an error).
+# A platform Kconfig may override this for targets with scheduling jitter.
+config SCHED_TIMER_PAST_THRESHOLD_US
+    int
+    default 0
+
 # The HAVE_x options allow boards to disable support for some commands
 # if the hardware does not support the feature.
 config HAVE_GPIO
