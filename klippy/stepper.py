@@ -9,6 +9,13 @@ import chelper
 class error(Exception):
     pass
 
+# Return the five kinematic coordinates (x, y, z, a, b) of a position,
+# padding with zeros if fewer were given
+def pad_coord(coord):
+    if len(coord) >= 5:
+        return coord[0], coord[1], coord[2], coord[3], coord[4]
+    return tuple(coord[:5]) + (0.,) * (5 - len(coord))
+
 
 ######################################################################
 # Steppers
@@ -153,13 +160,15 @@ class MCU_stepper:
         self._mcu.get_printer().send_event("stepper:set_dir_inverted", self)
     def calc_position_from_coord(self, coord):
         ffi_main, ffi_lib = chelper.get_ffi()
+        x, y, z, a, b = pad_coord(coord)
         return ffi_lib.itersolve_calc_position_from_coord(
-            self._stepper_kinematics, coord[0], coord[1], coord[2])
+            self._stepper_kinematics, x, y, z, a, b)
     def set_position(self, coord):
         mcu_pos = self.get_mcu_position()
         sk = self._stepper_kinematics
         ffi_main, ffi_lib = chelper.get_ffi()
-        ffi_lib.itersolve_set_position(sk, coord[0], coord[1], coord[2])
+        x, y, z, a, b = pad_coord(coord)
+        ffi_lib.itersolve_set_position(sk, x, y, z, a, b)
         self._set_mcu_position(mcu_pos)
     def get_commanded_position(self):
         ffi_main, ffi_lib = chelper.get_ffi()
