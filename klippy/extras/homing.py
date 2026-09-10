@@ -287,6 +287,10 @@ class Homing:
                                homing_info.second_homing_speed)
         probe_session.end_probe_session()
     def home_rails(self, rails, forcepos, movepos):
+        # Kinematics may describe only the first few axes - pad to the
+        # five kinematic axes (x, y, z, a, b)
+        forcepos = list(forcepos) + [None] * (5 - len(forcepos))
+        movepos = list(movepos) + [None] * (5 - len(movepos))
         # Check if this is actually a Z home via probe request
         endstops = [es for rail in rails for es in rail.get_endstops()]
         probe_endstops = [hasattr(e[0], "get_position_endstop")
