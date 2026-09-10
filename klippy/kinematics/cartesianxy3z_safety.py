@@ -38,17 +38,22 @@ class CartesianXY3ZSafety:
         self.disable_safety_checks = False
         if config.has_section('CartesianXY3ZSafety'):
             sc = config.getsection('CartesianXY3ZSafety')
-            self.disable_safety_checks = sc.getboolean('disable_safety_checks', False)
+            self.disable_safety_checks = sc.getboolean(
+                'disable_safety_checks', False)
             if self.disable_safety_checks:
-                logging.warning("CartesianXY3ZSafety: Safety checks are DISABLED via config")
-            self.d_y       = sc.getfloat('y_distance_between_ab_center_and_z', 304.6)
+                logging.warning("CartesianXY3ZSafety: Safety checks are"
+                                " DISABLED via config")
+            self.d_y       = sc.getfloat(
+                'y_distance_between_ab_center_and_z', 304.6)
             self.h_A       = sc.getfloat('a_joint_probe_object_height', 28.0)
             self.z_probe_A = sc.getfloat('a_joint_probe_value', 7.38125)
             self.z_probe_P = sc.getfloat('bed_probe_value', -0.35625)
             self.p_x       = sc.getfloat('printing_area_x_length', 600.0)
             self.p_y       = sc.getfloat('printing_area_y_length', 300.0)
-            self.j_out     = sc.getfloat('joint_plate_horizontal_distance', 23.0)
-            self.x_out    = sc.getfloat('x_railspace_ab_outwards_neutral', 255.0)
+            self.j_out     = sc.getfloat(
+                'joint_plate_horizontal_distance', 23.0)
+            self.x_out    = sc.getfloat(
+                'x_railspace_ab_outwards_neutral', 255.0)
             self.x_in     = sc.getfloat('x_railspace_ab_inwards_neutral', 50.0)
             self.y_out    = sc.getfloat('y_railspace_z_inwards_neutral', 132.19)
             self.r_ex     = sc.getfloat('extruder_radius', 0.5)
@@ -81,7 +86,8 @@ class CartesianXY3ZSafety:
         self.d_x      = self.p_x + 2 * self.j_out
         self.z_tot    = self.h_A / 2 - (self.z_probe_A - self.z_probe_P)
         self.y_overAB = self.d_y - (self.p_y + self.j_out)
-        self.printer.register_event_handler("klippy:connect", self.handle_connect)
+        self.printer.register_event_handler("klippy:connect",
+                                            self.handle_connect)
         self.gcode.register_command('CHECK_CARTESIANXY3Z_SAFETY',
             self.cmd_CHECK_CARTESIANXY3Z_SAFETY,
             desc=self.cmd_CHECK_CARTESIANXY3Z_SAFETY_help)
@@ -95,7 +101,8 @@ class CartesianXY3ZSafety:
 
     def _gcode_pos(self, pos):
         """Convert motor-space position back to gcode-space by stripping
-        all accumulated gcode offsets (probe z_offset, z_tilt, SET_GCODE_OFFSET).
+        all accumulated gcode offsets (probe z_offset, z_tilt,
+        SET_GCODE_OFFSET).
         Safety thresholds are calibrated in gcode-coordinate space, so this
         must be applied before any check_safety() call.
         The actual move sent to the firmware is NOT touched.
@@ -112,9 +119,9 @@ class CartesianXY3ZSafety:
         return adjusted
 
     def calc_intermediate_values(self, pos):
-        # ============================================================================
+        # ======================================================================
         # Real-time CALCULATIONS
-        # ============================================================================
+        # ======================================================================
         # Extract position coordinates
         x, y = pos[0], pos[1]
         z, a, b = pos[2], pos[3], pos[4]
@@ -180,9 +187,9 @@ class CartesianXY3ZSafety:
     def check_safety(self, pos):
         """Check all safety conditions for the given position."""
         try:
-            # ============================================================================
+            # ==================================================================
             # PRELIMINARY CALCULATIONS
-            # ============================================================================
+            # ==================================================================
             # Extract position coordinates
             x, y = pos[0], pos[1]
             z, a, b = pos[2], pos[3], pos[4]
@@ -191,15 +198,15 @@ class CartesianXY3ZSafety:
             # in cartesianxy3z.py using printer.cfg axis limits.
             # This module only checks Z/A/B mechanical constraints.
 
-            # ============================================================================
+            # ==================================================================
             # PRELIMINARY CALCULATIONS
-            # ============================================================================
+            # ==================================================================
             # Calculate intermediate values needed for remaining checks
             z_mz, z_ab, csx, i_ab, x_ab = self.calc_intermediate_values(pos)
 
-            # ============================================================================
+            # ==================================================================
             # PRIMARY MECHANICAL CONSTRAINTS
-            # ============================================================================
+            # ==================================================================
             # Level 1: Primary boundary conditions - mechanical joint distances
             if abs(z - a) > math.sqrt(self.d_y**2 + self.d_x**2 / 4):
                 return False, "Z-A distance exceeded"
@@ -208,9 +215,9 @@ class CartesianXY3ZSafety:
             if abs(z - a) > math.sqrt(self.d_y**2 + self.d_x**2 / 4):
                 return False, "Z-A distance exceeded"
 
-            # ============================================================================
+            # ==================================================================
             # SECONDARY BOUNDARY CONDITIONS - GOING OFF RAILS
-            # ============================================================================
+            # ==================================================================
             # Level 2: Wagon rail limit checks
             # Check A wagon X-position limit
             if csx > 0:
@@ -239,23 +246,24 @@ class CartesianXY3ZSafety:
             # Check Z wagon Y-position limit
             denom_z = 1 - (z_ab**2) / (self.d_x**2)
             if denom_z > 0:
-                max_y = abs(math.sqrt(self.d_y**2 - z_mz**2 / denom_z) - self.d_y)
+                max_y = abs(math.sqrt(self.d_y**2 - z_mz**2 / denom_z)
+                            - self.d_y)
             else:
                 max_y = float('inf')
             if max_y > self.y_out:
                 return False, "Z wagon approaching rail limit"
 
-            # ============================================================================
+            # ==================================================================
             # TERTIARY CALCULATIONS - COLLISION DETECTION SETUP
-            # ============================================================================
+            # ==================================================================
             # Calculate point positions (P_Z, P_A, P_B, P_E)
             points = self.calc_point_positions(pos)
             # Calculate orientation vectors of the tilted bed plane
             _, _, _, z_norm = self.calc_vectors(points)
 
-            # ============================================================================
+            # ==================================================================
             # TERTIARY BOUNDARY CONDITION: COLLISION OF EXTRUDER TIP WITH BED
-            # ============================================================================
+            # ==================================================================
             # Level 3: Extruder tip collision detection with tilting print bed
             P_E = points['P_E']
             P_A = points['P_A']
@@ -265,9 +273,9 @@ class CartesianXY3ZSafety:
                     - self.r_ex * math.sin(math.acos(z_norm[2])))
             if dist < 0:
                 return False, "Extruder collision with print bed detected"
-            # ============================================================================
+            # ==================================================================
             # A/B DISCREPANCY LIMIT WHEN Z IS OFF-CENTRE
-            # ============================================================================
+            # ==================================================================
             # z_mz = z - (a+b)/2; if Z is not at the midpoint of A and B,
             # the A-B discrepancy (z_ab = b - a) must stay under 15 mm.
             if abs(z_mz) > 0.1 and abs(z_ab) >= 15:
@@ -275,23 +283,25 @@ class CartesianXY3ZSafety:
                     "A-B discrepancy too large when Z is off-centre "
                     "(|A-B|=%.2f >= 15, z_mz=%.2f)" % (abs(z_ab), z_mz))
 
-            # ============================================================================
+            # ==================================================================
             # PRINTING AREA Y RESTRICTION
-            # ============================================================================
+            # ==================================================================
             # When A or B is near rail top and extruder overhangs in X,
             # Y must stay clear of the innermost rail edge.
-            if (a < (self.z_rail_ab + self.clear) or b < (self.z_rail_ab + self.clear)) \
+            rail_limit = self.z_rail_ab + self.clear
+            if (a < rail_limit or b < rail_limit) \
                     and y < (self.y_rail_ab + self.ex_y):
                 return False, (
-                    "Extruder too close to A/B rail: A=%.2f, B=%.2f, X=%.2f, Y=%.2f "
+                    "Extruder too close to A/B rail:"
+                    " A=%.2f, B=%.2f, X=%.2f, Y=%.2f "
                     "(limit: z_rail+clear=%.2f, y_rail+ex_y=%.2f)"
                     % (a, b, x, y,
                        self.z_rail_ab + self.clear,
                        self.y_rail_ab + self.ex_y))
 
-            # ============================================================================
+            # ==================================================================
             # ALL SAFETY CHECKS PASSED
-            # ============================================================================
+            # ==================================================================
             return True, ""
         except Exception as e:
             return False, f"Safety check error: {str(e)}"
@@ -303,22 +313,26 @@ class CartesianXY3ZSafety:
         try:
             if not any(move.axes_d[i] for i in [2, 3, 4]):
                 # Pure XY move - check Y restriction using current A/B positions
-                is_safe, error = self.check_safety(self._gcode_pos(move.end_pos))
+                is_safe, error = self.check_safety(
+                    self._gcode_pos(move.end_pos))
                 if not is_safe:
                     self.is_safe = False
                     self.last_error = error
-                    logging.warning(f"CartesianXY3Z Safety: {error} (XY move end position)")
+                    logging.warning("CartesianXY3Z Safety: %s"
+                                    " (XY move end position)", error)
                     self.gcode.respond_info(f"Safety Error: {error}")
                     return False
                 return True
             # A/B Discrepancy Check — coupling:
-            # A and B must always move together; one cannot move without the other.
+            # A and B must always move together; one cannot move without
+            # the other.
             a_moving = abs(move.axes_d[3]) >= 1.0
             b_moving = abs(move.axes_d[4]) >= 1.0
             if a_moving != b_moving:
                 solo_dist = max(abs(move.axes_d[3]), abs(move.axes_d[4]))
                 if solo_dist > 2.0:
-                    error = "A and B must move together (cannot move one without the other)"
+                    error = ("A and B must move together"
+                             " (cannot move one without the other)")
                     self.is_safe = False
                     self.last_error = error
                     logging.warning(f"CartesianXY3Z Safety: {error}")
@@ -326,7 +340,8 @@ class CartesianXY3ZSafety:
                     return False
                 ab_gap = abs(move.end_pos[3] - move.end_pos[4])
                 if ab_gap > 4.0:
-                    error = f"A/B gap after solo move would be {ab_gap:.2f}mm (max 4mm)"
+                    error = ("A/B gap after solo move would be %.2fmm"
+                             " (max 4mm)" % (ab_gap,))
                     self.is_safe = False
                     self.last_error = error
                     logging.warning(f"CartesianXY3Z Safety: {error}")
@@ -342,12 +357,14 @@ class CartesianXY3ZSafety:
                 self.gcode.respond_info(f"Safety Error: {error}")
                 return False
             if move.move_d > 1.0:
-                midpos = [(move.start_pos[i] + move.end_pos[i]) / 2 for i in range(len(move.start_pos))]
+                midpos = [(sp + ep) / 2
+                          for sp, ep in zip(move.start_pos, move.end_pos)]
                 is_safe, error = self.check_safety(midpos)
                 if not is_safe:
                     self.is_safe = False
                     self.last_error = error
-                    logging.warning(f"CartesianXY3Z Safety: {error} (intermediate position)")
+                    logging.warning("CartesianXY3Z Safety: %s"
+                                    " (intermediate position)", error)
                     self.gcode.respond_info(f"Safety Error: {error}")
                     return False
             self.is_safe = True
@@ -360,7 +377,8 @@ class CartesianXY3ZSafety:
             self.gcode.respond_info(f"Safety System Error: {str(e)}")
             return False
 
-    cmd_CHECK_CARTESIANXY3Z_SAFETY_help = "Check if current position meets safety constraints"
+    cmd_CHECK_CARTESIANXY3Z_SAFETY_help = ("Check if current position meets"
+                                           " safety constraints")
     def cmd_CHECK_CARTESIANXY3Z_SAFETY(self, gcmd):
         """Manual safety check command"""
         pos = self.toolhead.get_position()
@@ -383,10 +401,14 @@ class CartesianXY3ZSafety:
             f"  csx: {csx:.3f}\n"
             f"  i_ab: {i_ab}, x_ab: {x_ab:.3f}\n\n"
             f"Point positions:\n"
-            f"  P_Z: ({points['P_Z'][0]:.3f}, {points['P_Z'][1]:.3f}, {points['P_Z'][2]:.3f})\n"
-            f"  P_A: ({points['P_A'][0]:.3f}, {points['P_A'][1]:.3f}, {points['P_A'][2]:.3f})\n"
-            f"  P_B: ({points['P_B'][0]:.3f}, {points['P_B'][1]:.3f}, {points['P_B'][2]:.3f})\n"
-            f"  P_E: ({points['P_E'][0]:.3f}, {points['P_E'][1]:.3f}, {points['P_E'][2]:.3f})\n\n"
+            f"  P_Z: ({points['P_Z'][0]:.3f}, {points['P_Z'][1]:.3f}, "
+            f"{points['P_Z'][2]:.3f})\n"
+            f"  P_A: ({points['P_A'][0]:.3f}, {points['P_A'][1]:.3f}, "
+            f"{points['P_A'][2]:.3f})\n"
+            f"  P_B: ({points['P_B'][0]:.3f}, {points['P_B'][1]:.3f}, "
+            f"{points['P_B'][2]:.3f})\n"
+            f"  P_E: ({points['P_E'][0]:.3f}, {points['P_E'][1]:.3f}, "
+            f"{points['P_E'][2]:.3f})\n\n"
             f"Vectors:\n"
             f"  x_now: ({x_now[0]:.3f}, {x_now[1]:.3f}, {x_now[2]:.3f})\n"
             f"  y_now: ({y_now[0]:.3f}, {y_now[1]:.3f}, {y_now[2]:.3f})\n"
@@ -394,7 +416,8 @@ class CartesianXY3ZSafety:
             f"  z_norm: ({z_norm[0]:.3f}, {z_norm[1]:.3f}, {z_norm[2]:.3f})"
         )
 
-    cmd_PREVIEW_MOVE_help = "Preview a move without executing - check safety only"
+    cmd_PREVIEW_MOVE_help = ("Preview a move without executing"
+                             " - check safety only")
     def cmd_PREVIEW_MOVE(self, gcmd):
         """Preview a move and check safety without sending to firmware"""
         try:
@@ -402,8 +425,9 @@ class CartesianXY3ZSafety:
             current_pos = list(self.toolhead.get_position())
 
             gcmd.respond_info(
-                f"Current position: X={current_pos[0]:.2f} Y={current_pos[1]:.2f} "
-                f"Z={current_pos[2]:.2f} A={current_pos[3]:.2f} B={current_pos[4]:.2f}"
+                f"Current position: X={current_pos[0]:.2f} "
+                f"Y={current_pos[1]:.2f} Z={current_pos[2]:.2f} "
+                f"A={current_pos[3]:.2f} B={current_pos[4]:.2f}"
             )
 
             # Parse parameters (PREVIEW_MOVE X=10 Y=20 Z=5 A=3 B=3)
@@ -421,8 +445,9 @@ class CartesianXY3ZSafety:
                 target_pos[4] = gcmd.get_float('B')
 
             gcmd.respond_info(
-                f"Target position:  X={target_pos[0]:.2f} Y={target_pos[1]:.2f} "
-                f"Z={target_pos[2]:.2f} A={target_pos[3]:.2f} B={target_pos[4]:.2f}"
+                f"Target position:  X={target_pos[0]:.2f} "
+                f"Y={target_pos[1]:.2f} Z={target_pos[2]:.2f} "
+                f"A={target_pos[3]:.2f} B={target_pos[4]:.2f}"
             )
 
             # Check safety at target position
@@ -440,10 +465,12 @@ class CartesianXY3ZSafety:
             x_now, y_now, z_now, z_norm = self.calc_vectors(points)
 
             # Rail limit values (same logic as check_safety)
-            max_xa = abs(z_mz * z_ab / csx - csx / 2 + self.d_x / 2) if csx > 0 else 0.0
-            max_xb = abs(z_mz * z_ab / csx + csx / 2 - self.d_x / 2) if csx > 0 else 0.0
-            inner_xa = (csx / 2 - self.d_x / 2 - z_mz * z_ab / csx) if csx > 0 else 0.0
-            inner_xb = (csx / 2 - self.d_x / 2 + z_mz * z_ab / csx) if csx > 0 else 0.0
+            max_xa = max_xb = inner_xa = inner_xb = 0.0
+            if csx > 0:
+                max_xa = abs(z_mz * z_ab / csx - csx / 2 + self.d_x / 2)
+                max_xb = abs(z_mz * z_ab / csx + csx / 2 - self.d_x / 2)
+                inner_xa = csx / 2 - self.d_x / 2 - z_mz * z_ab / csx
+                inner_xb = csx / 2 - self.d_x / 2 + z_mz * z_ab / csx
             denom_z = 1 - (z_ab**2) / (self.d_x**2)
             max_y = abs(math.sqrt(self.d_y**2 - z_mz**2 / denom_z) - self.d_y) \
                     if denom_z > 0 else float('inf')
@@ -453,17 +480,22 @@ class CartesianXY3ZSafety:
                 f"  z_mz: {z_mz:.3f}, z_ab: {z_ab:.3f}\n"
                 f"  csx: {csx:.3f}\n"
                 f"  i_ab: {i_ab}, x_ab: {x_ab:.3f}\n\n"
-                f"Rail limits (x_out:{self.x_out:.1f}, x_in:{self.x_in:.1f}, y_out:{self.y_out:.1f}):\n"
+                f"Rail limits (x_out:{self.x_out:.1f}, x_in:{self.x_in:.1f},"
+                f" y_out:{self.y_out:.1f}):\n"
                 f"  max_xa (outer): {max_xa:.3f}\n"
                 f"  max_xb (outer): {max_xb:.3f}\n"
                 f"  inner_xa:       {inner_xa:.3f}\n"
                 f"  inner_xb:       {inner_xb:.3f}\n"
                 f"  max_y:          {max_y:.3f}\n\n"
                 f"Point positions:\n"
-                f"  P_Z: ({points['P_Z'][0]:.3f}, {points['P_Z'][1]:.3f}, {points['P_Z'][2]:.3f})\n"
-                f"  P_A: ({points['P_A'][0]:.3f}, {points['P_A'][1]:.3f}, {points['P_A'][2]:.3f})\n"
-                f"  P_B: ({points['P_B'][0]:.3f}, {points['P_B'][1]:.3f}, {points['P_B'][2]:.3f})\n"
-                f"  P_E: ({points['P_E'][0]:.3f}, {points['P_E'][1]:.3f}, {points['P_E'][2]:.3f})\n\n"
+                f"  P_Z: ({points['P_Z'][0]:.3f}, {points['P_Z'][1]:.3f}, "
+                f"{points['P_Z'][2]:.3f})\n"
+                f"  P_A: ({points['P_A'][0]:.3f}, {points['P_A'][1]:.3f}, "
+                f"{points['P_A'][2]:.3f})\n"
+                f"  P_B: ({points['P_B'][0]:.3f}, {points['P_B'][1]:.3f}, "
+                f"{points['P_B'][2]:.3f})\n"
+                f"  P_E: ({points['P_E'][0]:.3f}, {points['P_E'][1]:.3f}, "
+                f"{points['P_E'][2]:.3f})\n\n"
                 f"Bed orientation:\n"
                 f"  z_norm: ({z_norm[0]:.3f}, {z_norm[1]:.3f}, {z_norm[2]:.3f})"
             )
