@@ -401,6 +401,9 @@ class ToolHead:
     def get_position(self):
         return list(self.commanded_pos)
     def set_position(self, newpos, homing_axes=""):
+        if len(newpos) < 5:
+            # Callers may only describe the first few kinematic axes
+            newpos = list(newpos) + self.commanded_pos[len(newpos):5]
         self.flush_step_generation()
         ffi_main, ffi_lib = chelper.get_ffi()
         ffi_lib.trapq_set_position(self.trapq, self.print_time,

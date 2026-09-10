@@ -71,7 +71,8 @@ class HomingMove:
             sname = stepper.get_name()
             kin_spos[sname] += offsets.get(sname, 0) * stepper.get_step_dist()
         thpos = self.toolhead.get_position()
-        cpos = kin.calc_position(kin_spos)
+        cpos = list(kin.calc_position(kin_spos))
+        cpos += [None] * (5 - len(cpos))
         return [cp if cp is not None else tp
                 for cp, tp in zip(cpos, thpos[:5])] + thpos[5:]
     def homing_move(self, movepos, speed, probe_pos=False,
@@ -239,7 +240,8 @@ class Homing:
             kin_spos = {s.get_name(): (s.get_commanded_position()
                                        + self.adjust_pos.get(s.get_name(), 0.))
                         for s in kin.get_steppers()}
-            newpos = kin.calc_position(kin_spos)
+            newpos = list(kin.calc_position(kin_spos))
+            newpos += [None] * (5 - len(newpos))
             for axis in range(5):
                 if forcepos[axis] is not None:
                     if newpos[axis] is None:
