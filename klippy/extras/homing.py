@@ -353,16 +353,17 @@ class PrinterHoming:
                 "Probe triggered prior to movement")
         return epos
     def cmd_G28(self, gcmd):
-        # Move to origin
+        # Move to origin (only the axes the kinematics actually has)
+        kin = self.printer.lookup_object('toolhead').get_kinematics()
+        kin_axes = getattr(kin, 'axis_names', 'xyz')
         axes = []
-        for pos, axis in enumerate('XYZAB'):
+        for pos, axis in enumerate('XYZAB'[:len(kin_axes)]):
             if gcmd.get(axis, None) is not None:
                 axes.append(pos)
         if not axes:
-            axes = [0, 1, 2, 3, 4]
+            axes = list(range(len(kin_axes)))
         homing_state = Homing(self.printer)
         homing_state.set_axes(axes)
-        kin = self.printer.lookup_object('toolhead').get_kinematics()
         try:
             kin.home(homing_state)
         except self.printer.command_error:

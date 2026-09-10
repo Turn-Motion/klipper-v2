@@ -21,6 +21,7 @@ COORDINATED_HOME_RETRACT = 2.0
 class CartesianXY3Z:
     def __init__(self, toolhead, config):
         self.printer = config.get_printer()
+        self.axis_names = AXES
         # Setup axis rails
         self.dual_carriage_axis = None
         self.rails = [stepper.LookupMultiRail(config.getsection('stepper_' + n))
