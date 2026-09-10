@@ -24,6 +24,7 @@
 ; ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ; ── Start heaters (non-blocking) ────────────────────────────────────────
+M83 ; relative extrusion (E values below are per-move amounts)
 M140 S60
 M104 T0 S210
 M104 T1 S210

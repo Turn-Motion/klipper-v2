@@ -26,9 +26,7 @@ class GCodeMove:
                                desc=self.cmd_GET_POSITION_help)
         self.Coord = gcode.Coord
         # G-Code coordinate manipulation
-        self.absolute_coord = True
-        # Extrusion is relative by default (M82 enables absolute E)
-        self.allow_absolute_extrude = False
+        self.absolute_coord = self.allow_absolute_extrude = True
         self.base_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.last_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.homing_position = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
