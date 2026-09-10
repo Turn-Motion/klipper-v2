@@ -184,6 +184,8 @@ class BedMesh:
             # No mesh calibrated, so send toolhead position
             self.last_position[:] = self.toolhead.get_position()
             self.last_position[2] -= self.fade_target
+            self.last_position[3] -= self.fade_target
+            self.last_position[4] -= self.fade_target
         else:
             # return current position minus the current z-adjustment
             cur_pos = self.toolhead.get_position()
@@ -203,7 +205,11 @@ class BedMesh:
                           (self.fade_dist - z_adj))
                 factor = constrain(factor, 0., 1.)
             final_z_adj = factor * z_adj + self.fade_target
-            self.last_position[:] = [x, y, z - final_z_adj] + cur_pos[3:]
+            # The A and B bed motors carry the same adjustment as Z
+            self.last_position[:] = ([x, y, z - final_z_adj,
+                                      cur_pos[3] - final_z_adj,
+                                      cur_pos[4] - final_z_adj]
+                                     + cur_pos[5:])
         return list(self.last_position)
     def move(self, newpos, speed):
         factor = self.get_z_factor(newpos[2])
@@ -215,7 +221,10 @@ class BedMesh:
                 logging.info(
                     "bed_mesh fade complete: Current Z: %.4f fade_target: %.4f "
                     % (z, self.fade_target))
-            self.toolhead.move([x, y, z + self.fade_target] + newpos[3:], speed)
+            self.toolhead.move([x, y, z + self.fade_target,
+                                newpos[3] + self.fade_target,
+                                newpos[4] + self.fade_target] + newpos[5:],
+                               speed)
         else:
             self.splitter.build_move(self.last_position, newpos, factor)
             while not self.splitter.traverse_complete:
@@ -1304,6 +1313,8 @@ class MoveSplitter:
                         self.z_offset = next_z
                         newpos = list(self.current_pos)
                         newpos[2] += self.z_offset
+                        newpos[3] += self.z_offset
+                        newpos[4] += self.z_offset
                         return newpos
             # end of move reached
             self.current_pos[:] = self.next_pos
@@ -1311,6 +1322,8 @@ class MoveSplitter:
             # Its okay to add Z-Offset to the final move, since it will not be
             # used again.
             self.current_pos[2] += self.z_offset
+            self.current_pos[3] += self.z_offset
+            self.current_pos[4] += self.z_offset
             self.traverse_complete = True
             return self.current_pos
         else:

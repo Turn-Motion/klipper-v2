@@ -15,6 +15,10 @@ class BedTilt:
         self.x_adjust = config.getfloat('x_adjust', 0.)
         self.y_adjust = config.getfloat('y_adjust', 0.)
         self.z_adjust = config.getfloat('z_adjust', 0.)
+        # The A and B bed motors move with Z and carry the same tilt
+        # correction plus their own offsets
+        self.a_adjust = config.getfloat('a_adjust', self.z_adjust)
+        self.b_adjust = config.getfloat('b_adjust', self.z_adjust)
         if config.get('points', None) is not None:
             BedTiltCalibrate(config, self)
         self.toolhead = None
@@ -25,23 +29,35 @@ class BedTilt:
         self.toolhead = self.printer.lookup_object('toolhead')
     def get_position(self):
         pos = self.toolhead.get_position()
-        x, y, z = pos[:3]
-        z -= x*self.x_adjust + y*self.y_adjust + self.z_adjust
-        return [x, y, z] + pos[3:]
+        x, y, z, a, b = pos[:5]
+        tilt = x*self.x_adjust + y*self.y_adjust
+        return [x, y, z - tilt - self.z_adjust, a - tilt - self.a_adjust,
+                b - tilt - self.b_adjust] + pos[5:]
     def move(self, newpos, speed):
-        x, y, z = newpos[:3]
-        z += x*self.x_adjust + y*self.y_adjust + self.z_adjust
-        self.toolhead.move([x, y, z] + newpos[3:], speed)
-    def update_adjust(self, x_adjust, y_adjust, z_adjust):
+        x, y, z, a, b = newpos[:5]
+        tilt = x*self.x_adjust + y*self.y_adjust
+        self.toolhead.move([x, y, z + tilt + self.z_adjust,
+                            a + tilt + self.a_adjust,
+                            b + tilt + self.b_adjust] + newpos[5:], speed)
+    def update_adjust(self, x_adjust, y_adjust, z_adjust,
+                      a_adjust=None, b_adjust=None):
+        if a_adjust is None:
+            a_adjust = z_adjust
+        if b_adjust is None:
+            b_adjust = z_adjust
         self.x_adjust = x_adjust
         self.y_adjust = y_adjust
         self.z_adjust = z_adjust
+        self.a_adjust = a_adjust
+        self.b_adjust = b_adjust
         gcode_move = self.printer.lookup_object('gcode_move')
         gcode_move.reset_last_position()
         configfile = self.printer.lookup_object('configfile')
         configfile.set('bed_tilt', 'x_adjust', "%.6f" % (x_adjust,))
         configfile.set('bed_tilt', 'y_adjust', "%.6f" % (y_adjust,))
         configfile.set('bed_tilt', 'z_adjust', "%.6f" % (z_adjust,))
+        configfile.set('bed_tilt', 'a_adjust', "%.6f" % (a_adjust,))
+        configfile.set('bed_tilt', 'b_adjust', "%.6f" % (b_adjust,))
 
 # Helper script to calibrate the bed tilt
 class BedTiltCalibrate:
@@ -75,8 +91,9 @@ class BedTiltCalibrate:
         # Update current bed_tilt calculations
         self.bedtilt.update_adjust(x_adjust, y_adjust, z_adjust)
         # Log and report results
-        msg = "x_adjust: %.6f y_adjust: %.6f z_adjust: %.6f" % (
-            x_adjust, y_adjust, z_adjust)
+        msg = ("x_adjust: %.6f y_adjust: %.6f z_adjust: %.6f"
+               " (a_adjust and b_adjust set to z_adjust)" % (
+                   x_adjust, y_adjust, z_adjust))
         self.printer.set_rollover_info("bed_tilt", "bed_tilt: %s" % (msg,))
         self.gcode.respond_info(
             "%s\nThe above parameters have been applied to the current\n"

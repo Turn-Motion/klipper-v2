@@ -36,6 +36,29 @@ def calc_probe_z_average(positions, method='average'):
 ######################################################################
 
 # Helper to implement common probing commands
+# The bed is carried by the Z, A, and B motors together.  These helpers
+# build coordinates that move Z to a target height and carry A and B
+# along by the same amount, so any tilt correction between the three
+# motors is preserved.
+def bed_lift_coord(toolhead, z):
+    pos = toolhead.get_position()
+    dz = z - pos[2]
+    return [None, None, z, pos[3] + dz, pos[4] + dz]
+def bed_descend_position(toolhead, z):
+    pos = toolhead.get_position()
+    dz = z - pos[2]
+    pos[2] = z
+    pos[3] += dz
+    pos[4] += dz
+    return pos
+# The probe descends no further than this (relative to the toolhead Z
+# coordinate) unless the printer's minimum Z is higher.
+DEFAULT_PROBE_TRAVEL_LIMIT = -1.5
+def lookup_probe_travel_limit(config, z_min_position):
+    default = max(DEFAULT_PROBE_TRAVEL_LIMIT, z_min_position)
+    return config.getfloat('probe_travel_limit', default,
+                           minval=z_min_position)
+
 class ProbeCommandHelper:
     def __init__(self, config, probe, query_endstop=None,
                  can_set_z_offset=True):
@@ -112,6 +135,8 @@ class ProbeCommandHelper:
         # Move away from the bed
         curpos = self.printer.lookup_object('toolhead').get_position()
         curpos[2] += 5.
+        curpos[3] += 5.
+        curpos[4] += 5.
         self._move(curpos, params['lift_speed'])
         # Move the nozzle over the probe point
         curpos[0] = ppos.bed_x
@@ -147,7 +172,8 @@ class ProbeCommandHelper:
             probe_num += 1
             # Retract
             lift_z = toolhead.get_position()[2] + params['sample_retract_dist']
-            liftpos = [start_pos[0], start_pos[1], lift_z]
+            liftpos = ([start_pos[0], start_pos[1]]
+                       + bed_lift_coord(toolhead, lift_z)[2:])
             self._move(liftpos, params['lift_speed'])
         positions = probe_session.pull_probed_results()
         probe_session.end_probe_session()
@@ -192,7 +218,7 @@ def lookup_minimum_z(config):
     pconfig = config.getsection('printer')
     return pconfig.getfloat('minimum_z_position', 0., note_valid=False)
 
-# Helper to lookup all the Z axis steppers
+# Helper to lookup all the Z axis steppers (Z, A, and B all carry the bed)
 class LookupZSteppers:
     def __init__(self, config, add_stepper_cb):
         self.printer = config.get_printer()
@@ -202,7 +228,8 @@ class LookupZSteppers:
     def _handle_mcu_identify(self):
         kin = self.printer.lookup_object('toolhead').get_kinematics()
         for stepper in kin.get_steppers():
-            if stepper.is_active_axis('z'):
+            if (stepper.is_active_axis('z') or stepper.is_active_axis('a')
+                or stepper.is_active_axis('b')):
                 self.add_stepper_cb(stepper)
 
 # Support homing via probe using the probe:z_virtual_endstop pseudo-pin
@@ -252,12 +279,13 @@ class DescendToEndstopHelper:
         self.param_helper = param_helper
         self.always_check_movement = always_check_movement
         self.z_min_position = lookup_minimum_z(config)
+        self.probe_travel_limit = lookup_probe_travel_limit(
+            config, self.z_min_position)
         self.results = []
         LookupZSteppers(config, self.mcu_probe.add_stepper)
     def descend_until_trigger(self, gcmd):
         toolhead = self.printer.lookup_object('toolhead')
-        pos = toolhead.get_position()
-        pos[2] = self.z_min_position
+        pos = bed_descend_position(toolhead, self.probe_travel_limit)
         speed = self.param_helper.get_probe_params(gcmd)['probe_speed']
         phoming = self.printer.lookup_object('homing')
         check_movement = (self.always_check_movement
@@ -395,8 +423,9 @@ class SampleAveragingHelper:
             # Retract
             if len(positions) < sample_count:
                 cur_z = toolhead.get_position()[2]
+                lift_z = cur_z + params['sample_retract_dist']
                 toolhead.manual_move(
-                    probexy + [cur_z + params['sample_retract_dist']],
+                    probexy + bed_lift_coord(toolhead, lift_z)[2:],
                     params['lift_speed'])
         # Calculate result
         epos = calc_probe_z_average(positions, params['samples_result'])
@@ -459,7 +488,8 @@ class ProbePointsHelper:
         if is_first:
             # Use full speed to first probe position
             speed = self.speed
-        self._move([None, None, self.horizontal_move_z], speed)
+        toolhead = self.printer.lookup_object('toolhead')
+        self._move(bed_lift_coord(toolhead, self.horizontal_move_z), speed)
     def _invoke_callback(self, results):
         # Flush lookahead queue
         toolhead = self.printer.lookup_object('toolhead')
@@ -565,14 +595,14 @@ class ProbeEndstopWrapper:
         toolhead = self.printer.lookup_object('toolhead')
         start_pos = toolhead.get_position()
         self.deactivate_gcode.run_gcode_from_command()
-        if toolhead.get_position()[:3] != start_pos[:3]:
+        if toolhead.get_position()[:5] != start_pos[:5]:
             raise self.printer.command_error(
                 "Toolhead moved during probe deactivate_gcode script")
     def _lower_probe(self):
         toolhead = self.printer.lookup_object('toolhead')
         start_pos = toolhead.get_position()
         self.activate_gcode.run_gcode_from_command()
-        if toolhead.get_position()[:3] != start_pos[:3]:
+        if toolhead.get_position()[:5] != start_pos[:5]:
             raise self.printer.command_error(
                 "Toolhead moved during probe activate_gcode script")
     def start_probe_session(self, gcmd):

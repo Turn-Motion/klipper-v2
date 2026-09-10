@@ -317,6 +317,8 @@ class LoadCellProbingMove:
         self._config_helper = config_helper
         self._mcu = mcu_trigger_analog.get_mcu()
         self._z_min_position = probe.lookup_minimum_z(config)
+        self._probe_travel_limit = probe.lookup_probe_travel_limit(
+            config, self._z_min_position)
         dispatch = mcu_trigger_analog.get_dispatch()
         probe.LookupZSteppers(config, dispatch.add_stepper)
         # internal state tracking
@@ -365,8 +367,7 @@ class LoadCellProbingMove:
         self._pause_and_tare(gcmd)
         # get params for the homing move
         toolhead = self._printer.lookup_object('toolhead')
-        pos = toolhead.get_position()
-        pos[2] = self._z_min_position
+        pos = probe.bed_descend_position(toolhead, self._probe_travel_limit)
         speed = self._param_helper.get_probe_params(gcmd)['probe_speed']
         phoming = self._printer.lookup_object('homing')
         # start collector after tare samples are consumed
@@ -417,7 +418,10 @@ class TappingMove:
         phoming = self._printer.lookup_object('homing')
         if phoming.check_probe_first_home(gcmd):
             curpos = toolhead.get_position()
+            # The Z, A, and B motors carry the bed together
             curpos[2] -= epos[2]
+            curpos[3] -= epos[2]
+            curpos[4] -= epos[2]
             toolhead.set_position(curpos)
 
         # Lift the toolhead while collecting the samples we will use for
@@ -432,6 +436,8 @@ class TappingMove:
         lift_dist = params['load_cell_retract_dist']
         lift_pos = toolhead.get_position()
         lift_pos[2] += lift_dist
+        lift_pos[3] += lift_dist
+        lift_pos[4] += lift_dist
         toolhead.manual_move(lift_pos, params['lift_speed'])
 
         # Collect samples until the end of the ascent

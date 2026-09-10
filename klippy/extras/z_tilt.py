@@ -17,7 +17,10 @@ class ZAdjustHelper:
                                             self.handle_connect)
     def handle_connect(self):
         kin = self.printer.lookup_object('toolhead').get_kinematics()
-        z_steppers = [s for s in kin.get_steppers() if s.is_active_axis('z')]
+        # The Z, A, and B axes all carry the bed
+        z_steppers = [s for s in kin.get_steppers()
+                      if s.is_active_axis('z') or s.is_active_axis('a')
+                      or s.is_active_axis('b')]
         if len(z_steppers) != self.z_count:
             raise self.printer.config_error(
                 "%s z_positions needs exactly %d items" % (
@@ -26,6 +29,11 @@ class ZAdjustHelper:
             raise self.printer.config_error(
                 "%s requires multiple z steppers" % (self.name,))
         self.z_steppers = z_steppers
+    def _stepper_axis(self, stepper):
+        for axis, name in ((2, 'z'), (3, 'a'), (4, 'b')):
+            if stepper.is_active_axis(name):
+                return axis
+        return 2
     def adjust_steppers(self, adjustments, speed):
         toolhead = self.printer.lookup_object('toolhead')
         gcode = self.printer.lookup_object('gcode')
@@ -35,6 +43,10 @@ class ZAdjustHelper:
                     for s, a in zip(self.z_steppers, adjustments)]
         msg = "Making the following Z adjustments:\n%s" % ("\n".join(stepstrs),)
         gcode.respond_info(msg)
+        stepper_axes = [self._stepper_axis(s) for s in self.z_steppers]
+        if len(set(stepper_axes)) > 1:
+            self._adjust_axes(stepper_axes, adjustments, speed)
+            return
         # Disable Z stepper movements
         toolhead.flush_step_generation()
         for s in self.z_steppers:
@@ -65,6 +77,38 @@ class ZAdjustHelper:
         last_stepper.set_trapq(toolhead.get_trapq())
         curpos[2] += first_stepper_offset
         toolhead.set_position(curpos)
+    def _adjust_axes(self, stepper_axes, adjustments, speed):
+        # Each bed motor is its own kinematic axis (Z, A, B), so all of
+        # them can be corrected in one coordinated move.  Only the
+        # differences between the motors matter - remove the mean so the
+        # bed height itself is unchanged.
+        toolhead = self.printer.lookup_object('toolhead')
+        mean_adj = sum(adjustments) / len(adjustments)
+        curpos = toolhead.get_position()
+        final_pos = list(curpos)
+        for axis, adj in zip(stepper_axes, adjustments):
+            final_pos[axis] = curpos[axis] - (adj - mean_adj)
+        toolhead.move(final_pos, speed)
+        toolhead.set_position(final_pos)
+        # Apply session gcode offsets so that Z, A, and B all report the
+        # same coordinate despite being at different physical positions.
+        # Equivalent to SET_GCODE_OFFSET A=.. B=.. - future moves then
+        # carry the tilt correction transparently.  Nothing is saved to
+        # the config file.
+        z_ref = final_pos[2]
+        gcode_move = self.printer.lookup_object('gcode_move')
+        for axis in set(stepper_axes):
+            desired_offset = final_pos[axis] - z_ref
+            delta = desired_offset - gcode_move.homing_position[axis]
+            gcode_move.base_position[axis] += delta
+            gcode_move.homing_position[axis] = desired_offset
+        gcode_move.reset_last_position()
+        logging.info("z_tilt: physical Z=%.6f A=%.6f B=%.6f,"
+                     " gcode offsets Z=%.6f A=%.6f B=%.6f",
+                     final_pos[2], final_pos[3], final_pos[4],
+                     gcode_move.homing_position[2],
+                     gcode_move.homing_position[3],
+                     gcode_move.homing_position[4])
 
 class ZAdjustStatus:
     def __init__(self, printer):
