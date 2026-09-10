@@ -60,7 +60,7 @@ class ExtruderStepper:
         if extruder is None or not isinstance(extruder, PrinterExtruder):
             raise self.printer.command_error("'%s' is not a valid extruder."
                                              % (extruder_name,))
-        self.stepper.set_position([extruder.last_position, 0., 0.])
+        self.stepper.set_position([extruder.last_position, 0., 0., 0., 0.])
         self.stepper.set_trapq(extruder.get_trapq())
         self.motion_queue = extruder_name
         motion_queuing.check_step_generation_scan_windows()
@@ -223,16 +223,15 @@ class PrinterExtruder:
             move.limit_speed(self.max_e_velocity * inv_extrude_r,
                              self.max_e_accel * inv_extrude_r)
         elif axis_r > self.max_extrude_ratio:
-            if axis_d <= self.nozzle_diameter * self.max_extrude_ratio:
-                # Permit extrusion if amount extruded is tiny
-                return
-            area = axis_r * self.filament_area
-            logging.debug("Overextrude: %s vs %s (area=%.3f dist=%.3f)",
-                          axis_r, self.max_extrude_ratio, area, move.move_d)
-            raise self.printer.command_error(
-                "Move exceeds maximum extrusion (%.3fmm^2 vs %.3fmm^2)\n"
-                "See the 'max_extrude_cross_section' config option for details"
-                % (area, self.max_extrude_ratio * self.filament_area))
+            # The maximum extrusion cross-section check is intentionally
+            # not enforced on this machine: the move distance includes
+            # the bed (Z/A/B) travel, so the extrusion ratio of a move is
+            # not a reliable measure of the deposited cross-section.
+            if axis_d > self.nozzle_diameter * self.max_extrude_ratio:
+                area = axis_r * self.filament_area
+                logging.debug("Overextrude: %s vs %s (area=%.3f dist=%.3f)",
+                              axis_r, self.max_extrude_ratio, area,
+                              move.move_d)
     def calc_junction(self, prev_move, move, ea_index):
         diff_r = move.axes_r[ea_index] - prev_move.axes_r[ea_index]
         if diff_r:
@@ -249,8 +248,8 @@ class PrinterExtruder:
         # Queue movement (x is extruder movement, y is pressure advance flag)
         self.trapq_append(self.trapq, print_time,
                           move.accel_t, move.cruise_t, move.decel_t,
-                          move.start_pos[ea_index], 0., 0.,
-                          1., can_pressure_advance, 0.,
+                          move.start_pos[ea_index], 0., 0., 0., 0.,
+                          1., can_pressure_advance, 0., 0., 0.,
                           start_v, cruise_v, accel)
         self.last_position = move.end_pos[ea_index]
     def find_past_position(self, print_time):

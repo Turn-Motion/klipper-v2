@@ -55,7 +55,7 @@ class HomingMove:
     def _calc_endstop_rate(self, mcu_endstop, movepos, speed):
         startpos = self.toolhead.get_position()
         axes_d = [mp - sp for mp, sp in zip(movepos, startpos)]
-        move_d = math.sqrt(sum([d*d for d in axes_d[:3]]))
+        move_d = math.sqrt(sum([d*d for d in axes_d[:5]]))
         move_t = move_d / speed
         max_steps = max([(abs(s.calc_position_from_coord(startpos)
                               - s.calc_position_from_coord(movepos))
@@ -73,7 +73,7 @@ class HomingMove:
         thpos = self.toolhead.get_position()
         cpos = kin.calc_position(kin_spos)
         return [cp if cp is not None else tp
-                for cp, tp in zip(cpos, thpos[:3])] + thpos[3:]
+                for cp, tp in zip(cpos, thpos[:5])] + thpos[5:]
     def homing_move(self, movepos, speed, probe_pos=False,
                     triggered=True, check_triggered=True):
         # Notify start of homing/probing move
@@ -186,7 +186,7 @@ class Homing:
     def set_homed_position(self, pos):
         self.toolhead.set_position(self._fill_coord(pos))
     def _set_start_position(self, forcepos):
-        homing_axes = "".join(["xyz"[axis] for axis in range(3)
+        homing_axes = "".join(["xyzab"[axis] for axis in range(5)
                                if forcepos[axis] is not None])
         startpos = self._fill_coord(forcepos)
         self.toolhead.set_position(startpos, homing_axes=homing_axes)
@@ -195,7 +195,7 @@ class Homing:
         startpos = self._fill_coord(forcepos)
         homepos = self._fill_coord(movepos)
         axes_d = [hp - sp for hp, sp in zip(homepos, startpos)]
-        move_d = math.sqrt(sum([d*d for d in axes_d[:3]]))
+        move_d = math.sqrt(sum([d*d for d in axes_d[:5]]))
         retract_r = min(1., homing_info.retract_dist / move_d)
         retractpos = [hp - ad * retract_r
                       for hp, ad in zip(homepos, axes_d)]
@@ -240,12 +240,12 @@ class Homing:
                                        + self.adjust_pos.get(s.get_name(), 0.))
                         for s in kin.get_steppers()}
             newpos = kin.calc_position(kin_spos)
-            for axis in range(3):
+            for axis in range(5):
                 if forcepos[axis] is not None:
                     if newpos[axis] is None:
                         raise self.printer.command_error(
                             "Cannot determine position of toolhead on "
-                            "axis %s after homing" % "xyz"[axis])
+                            "axis %s after homing" % "xyzab"[axis])
                     homepos[axis] = newpos[axis]
             self.toolhead.set_position(homepos)
     def _create_probe_gcmd(self, attempt_num, probe_speed):
@@ -260,7 +260,10 @@ class Homing:
         ppos = probe_session.pull_probed_results()[0]
         # Update toolhead position
         curpos = self.toolhead.get_position()
+        # The Z, A, and B motors carry the bed together
         curpos[2] -= ppos.bed_z
+        curpos[3] -= ppos.bed_z
+        curpos[4] -= ppos.bed_z
         self.toolhead.set_position(curpos)
     def _do_home_z_via_probe(self, rails, forcepos, movepos):
         if movepos[0] is not None or movepos[1] is not None:
@@ -323,6 +326,12 @@ class PrinterHoming:
     def probing_move(self, mcu_probe, pos, speed, check_movement=True):
         endstops = [(mcu_probe, "probe")]
         hmove = HomingMove(self.printer, endstops)
+        # Let the kinematics know a probing move is in progress (the
+        # requested end position is a travel limit, not a real target)
+        kin = self.printer.lookup_object('toolhead').get_kinematics()
+        set_probing = getattr(kin, 'set_probing', None)
+        if set_probing is not None:
+            set_probing(True)
         try:
             epos = hmove.homing_move(pos, speed, probe_pos=True)
         except self.printer.command_error:
@@ -330,6 +339,9 @@ class PrinterHoming:
                 raise self.printer.command_error(
                     "Probing failed due to printer shutdown")
             raise
+        finally:
+            if set_probing is not None:
+                set_probing(False)
         if check_movement and hmove.check_no_movement() is not None:
             raise self.printer.command_error(
                 "Probe triggered prior to movement")
@@ -337,11 +349,11 @@ class PrinterHoming:
     def cmd_G28(self, gcmd):
         # Move to origin
         axes = []
-        for pos, axis in enumerate('XYZ'):
+        for pos, axis in enumerate('XYZAB'):
             if gcmd.get(axis, None) is not None:
                 axes.append(pos)
         if not axes:
-            axes = [0, 1, 2]
+            axes = [0, 1, 2, 3, 4]
         homing_state = Homing(self.printer)
         homing_state.set_axes(axes)
         kin = self.printer.lookup_object('toolhead').get_kinematics()

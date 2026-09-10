@@ -21,7 +21,9 @@ ARC_PLANE_Y_Z = 2
 X_AXIS = 0
 Y_AXIS = 1
 Z_AXIS = 2
-E_AXIS = 3
+A_AXIS = 3
+B_AXIS = 4
+E_AXIS = 5
 
 
 class ArcSupport:
@@ -67,7 +69,9 @@ class ArcSupport:
         # Parse parameters
         asTarget = [gcmd.get_float("X", currentPos[0]),
                     gcmd.get_float("Y", currentPos[1]),
-                    gcmd.get_float("Z", currentPos[2])]
+                    gcmd.get_float("Z", currentPos[2]),
+                    gcmd.get_float("A", currentPos[3]),
+                    gcmd.get_float("B", currentPos[4])]
 
         if gcmd.get_float("R", None) is not None:
             raise gcmd.error("G2/G3 does not support R moves")
@@ -149,8 +153,11 @@ class ArcSupport:
         e_per_move = e_base = 0.
         if asE is not None:
             if absolut_extrude:
-                e_base = currentPos[3]
+                e_base = currentPos[E_AXIS]
             e_per_move = (asE - e_base) / segments
+        # The A and B bed axes travel linearly along the arc
+        a_per_segment = (targetPos[A_AXIS] - currentPos[A_AXIS]) / segments
+        b_per_segment = (targetPos[B_AXIS] - currentPos[B_AXIS]) / segments
 
         for i in range(1, int(segments) + 1):
             dist_Helical = i * linear_per_segment
@@ -160,16 +167,19 @@ class ArcSupport:
             r_P = -offset[0] * cos_Ti + offset[1] * sin_Ti
             r_Q = -offset[0] * sin_Ti - offset[1] * cos_Ti
 
-            c = [None, None, None]
+            c = [None, None, None, None, None]
             c[alpha_axis] = center_P + r_P
             c[beta_axis] = center_Q + r_Q
             c[helical_axis] = currentPos[helical_axis] + dist_Helical
+            c[A_AXIS] = currentPos[A_AXIS] + i * a_per_segment
+            c[B_AXIS] = currentPos[B_AXIS] + i * b_per_segment
 
 
             if i == segments:
                 c = targetPos
             # Convert coords into G1 commands
-            g1_params = {'X': c[0], 'Y': c[1], 'Z': c[2]}
+            g1_params = {'X': c[0], 'Y': c[1], 'Z': c[2],
+                         'A': c[3], 'B': c[4]}
             if e_per_move:
                 g1_params['E'] = e_base + e_per_move
                 if absolut_extrude:

@@ -77,11 +77,12 @@ class ForceMove:
         toolhead.flush_step_generation()
         prev_sk = stepper.set_stepper_kinematics(self.stepper_kinematics)
         prev_trapq = stepper.set_trapq(self.trapq)
-        stepper.set_position((0., 0., 0.))
+        stepper.set_position((0., 0., 0., 0., 0.))
         axis_r, accel_t, cruise_t, cruise_v = calc_move_time(dist, speed, accel)
         print_time = toolhead.get_last_move_time()
         self.trapq_append(self.trapq, print_time, accel_t, cruise_t, accel_t,
-                          0., 0., 0., axis_r, 0., 0., 0., cruise_v, accel)
+                          0., 0., 0., 0., 0., axis_r, 0., 0., 0., 0.,
+                          0., cruise_v, accel)
         print_time = print_time + accel_t + cruise_t + accel_t
         self.motion_queuing.note_mcu_movequeue_activity(print_time)
         toolhead.dwell(accel_t + cruise_t + accel_t)
@@ -122,18 +123,20 @@ class ForceMove:
         x = gcmd.get_float('X', curpos[0])
         y = gcmd.get_float('Y', curpos[1])
         z = gcmd.get_float('Z', curpos[2])
-        set_homed = gcmd.get('SET_HOMED', 'xyz').lower()
-        set_homed_axes = "".join([a for a in "xyz" if a in set_homed])
+        a = gcmd.get_float('A', curpos[3])
+        b = gcmd.get_float('B', curpos[4])
+        set_homed = gcmd.get('SET_HOMED', 'xyzab').lower()
+        set_homed_axes = "".join([ax for ax in "xyzab" if ax in set_homed])
         if gcmd.get('CLEAR_HOMED', None) is None:
             # "CLEAR" is an alias for "CLEAR_HOMED"; should deprecate
             clear_homed = gcmd.get('CLEAR', '').lower()
         else:
             clear_homed = gcmd.get('CLEAR_HOMED', '').lower()
-        clear_homed_axes = "".join([a for a in "xyz" if a in clear_homed])
-        logging.info("SET_KINEMATIC_POSITION pos=%.3f,%.3f,%.3f"
+        clear_homed_axes = "".join([ax for ax in "xyzab" if ax in clear_homed])
+        logging.info("SET_KINEMATIC_POSITION pos=%.3f,%.3f,%.3f,%.3f,%.3f"
                      " set_homed=%s clear_homed=%s",
-                     x, y, z, set_homed_axes, clear_homed_axes)
-        toolhead.set_position([x, y, z], homing_axes=set_homed_axes)
+                     x, y, z, a, b, set_homed_axes, clear_homed_axes)
+        toolhead.set_position([x, y, z, a, b], homing_axes=set_homed_axes)
         toolhead.get_kinematics().clear_homing_state(clear_homed_axes)
 
 def load_config(config):

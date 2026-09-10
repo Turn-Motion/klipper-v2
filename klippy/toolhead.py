@@ -10,6 +10,11 @@ import mcu, chelper, kinematics.extruder
 #   mm/second), _v2 is velocity squared (mm^2/s^2), _t is time (in
 #   seconds), _r is ratio (scalar between 0.0 and 1.0)
 
+# Axis layout: positions are [x, y, z, a, b, e, ...].  The first five
+# entries are the kinematic axes (A and B are the two additional bed
+# joint motors), the extruder is index 5, and any further "extra axes"
+# follow it.
+
 # Class to track each move request
 class Move:
     def __init__(self, toolhead, start_pos, end_pos, speed):
@@ -22,13 +27,17 @@ class Move:
         velocity = min(speed, toolhead.max_velocity)
         self.is_kinematic_move = True
         self.axes_d = axes_d = [ep - sp for sp, ep in zip(start_pos, end_pos)]
-        self.move_d = move_d = math.sqrt(sum([d*d for d in axes_d[:3]]))
+        # The move distance is the largest of the XY distance and the
+        # individual Z, A, and B distances - the slowest axis group
+        # determines the time available for the move.
+        xy_move_d = math.sqrt(axes_d[0]**2 + axes_d[1]**2)
+        self.move_d = move_d = max(xy_move_d, abs(axes_d[2]),
+                                   abs(axes_d[3]), abs(axes_d[4]))
         if move_d < .000000001:
             # Extrude only move
-            self.end_pos = ((start_pos[0], start_pos[1], start_pos[2])
-                            + self.end_pos[3:])
-            axes_d[0] = axes_d[1] = axes_d[2] = 0.
-            self.move_d = move_d = max([abs(ad) for ad in axes_d[3:]])
+            self.end_pos = tuple(start_pos[:5]) + self.end_pos[5:]
+            axes_d[0] = axes_d[1] = axes_d[2] = axes_d[3] = axes_d[4] = 0.
+            self.move_d = move_d = max([abs(ad) for ad in axes_d[5:]])
             inv_move_d = 0.
             if move_d:
                 inv_move_d = 1. / move_d
@@ -61,13 +70,14 @@ class Move:
         self.next_junction_v2 = min(self.next_junction_v2, speed**2)
     def move_error(self, msg="Move out of range"):
         ep = self.end_pos
-        m = "%s: %.3f %.3f %.3f [%.3f]" % (msg, ep[0], ep[1], ep[2], ep[3])
+        m = "%s: %.3f %.3f %.3f %.3f %.3f [%.3f]" % (
+            msg, ep[0], ep[1], ep[2], ep[3], ep[4], ep[5])
         return self.toolhead.printer.command_error(m)
     def calc_junction(self, prev_move):
         if not self.is_kinematic_move or not prev_move.is_kinematic_move:
             return
         # Allow extra axes to calculate maximum junction
-        ea_v2 = [ea.calc_junction(prev_move, self, e_index+3)
+        ea_v2 = [ea.calc_junction(prev_move, self, e_index+5)
                  for e_index, ea in enumerate(self.toolhead.extra_axes)]
         max_start_v2 = min([self.max_cruise_v2,
                             prev_move.max_cruise_v2, prev_move.next_junction_v2,
@@ -78,7 +88,9 @@ class Move:
         prev_axes_r = prev_move.axes_r
         junction_cos_theta = -(axes_r[0] * prev_axes_r[0]
                                + axes_r[1] * prev_axes_r[1]
-                               + axes_r[2] * prev_axes_r[2])
+                               + axes_r[2] * prev_axes_r[2]
+                               + axes_r[3] * prev_axes_r[3]
+                               + axes_r[4] * prev_axes_r[4])
         sin_theta_d2 = math.sqrt(max(0.5*(1.0-junction_cos_theta), 0.))
         cos_theta_d2 = math.sqrt(max(0.5*(1.0+junction_cos_theta), 0.))
         one_minus_sin_theta_d2 = 1. - sin_theta_d2
@@ -204,10 +216,16 @@ class ToolHead:
         self.mcu = self.printer.lookup_object('mcu')
         self.lookahead = LookAheadQueue()
         self.lookahead.set_flush_time(BUFFER_TIME_HIGH)
-        self.commanded_pos = [0., 0., 0., 0.]
+        self.commanded_pos = [0., 0., 0., 0., 0., 0.]
         # Velocity and acceleration control
         self.max_velocity = config.getfloat('max_velocity', above=0.)
         self.max_accel = config.getfloat('max_accel', above=0.)
+        # Limits shared by the vertical Z, A, and B axes
+        self.max_z_velocity = config.getfloat(
+            'max_z_velocity', self.max_velocity,
+            above=0., maxval=self.max_velocity)
+        self.max_z_accel = config.getfloat(
+            'max_z_accel', self.max_accel, above=0., maxval=self.max_accel)
         self.min_cruise_ratio = config.getfloat('minimum_cruise_ratio',
                                                 0.5, below=1., minval=0.)
         self.square_corner_velocity = config.getfloat(
@@ -285,11 +303,13 @@ class ToolHead:
                         self.trapq, next_move_time,
                         move.accel_t, move.cruise_t, move.decel_t,
                         move.start_pos[0], move.start_pos[1], move.start_pos[2],
+                        move.start_pos[3], move.start_pos[4],
                         move.axes_r[0], move.axes_r[1], move.axes_r[2],
+                        move.axes_r[3], move.axes_r[4],
                         move.start_v, move.cruise_v, move.accel)
                 for e_index, ea in enumerate(self.extra_axes):
-                    if move.axes_d[e_index + 3]:
-                        ea.process_move(next_move_time, move, e_index + 3)
+                    if move.axes_d[e_index + 5]:
+                        ea.process_move(next_move_time, move, e_index + 5)
                 next_move_time = (next_move_time + move.accel_t
                                   + move.cruise_t + move.decel_t)
                 for cb in move.timing_callbacks:
@@ -384,8 +404,9 @@ class ToolHead:
         self.flush_step_generation()
         ffi_main, ffi_lib = chelper.get_ffi()
         ffi_lib.trapq_set_position(self.trapq, self.print_time,
-                                   newpos[0], newpos[1], newpos[2])
-        self.commanded_pos[:3] = newpos[:3]
+                                   newpos[0], newpos[1], newpos[2],
+                                   newpos[3], newpos[4])
+        self.commanded_pos[:5] = newpos[:5]
         self.kin.set_position(newpos, homing_axes)
         self.printer.send_event("toolhead:set_position")
     def limit_next_junction_speed(self, speed):
@@ -396,11 +417,18 @@ class ToolHead:
         move = Move(self, self.commanded_pos, newpos, speed)
         if not move.move_d:
             return
-        if move.is_kinematic_move:
-            self.kin.check_move(move)
-        for e_index, ea in enumerate(self.extra_axes):
-            if move.axes_d[e_index + 3]:
-                ea.check_move(move, e_index + 3)
+        try:
+            if move.is_kinematic_move:
+                self.kin.check_move(move)
+            for e_index, ea in enumerate(self.extra_axes):
+                if move.axes_d[e_index + 5]:
+                    ea.check_move(move, e_index + 5)
+        except self.printer.command_error:
+            # The move was rejected - flush the moves queued before it
+            # so they still execute, then let the g-code layer report
+            # the error (which also resets the g-code position).
+            self._flush_lookahead()
+            raise
         self.commanded_pos[:] = move.end_pos
         want_flush = self.lookahead.add_move(move)
         if want_flush:
@@ -429,12 +457,12 @@ class ToolHead:
             eventtime = self.reactor.pause(eventtime + 0.100)
     def _build_extra_axes_status(self):
         enames = [ea.get_name() for ea in self.extra_axes]
-        self.extra_axes_status = {n: e_index + 3
+        self.extra_axes_status = {n: e_index + 5
                                   for e_index, n in enumerate(enames) if n}
     def set_extruder(self, extruder, extrude_pos):
         # XXX - should use add_extra_axis
         self.extra_axes[0] = extruder
-        self.commanded_pos[3] = extrude_pos
+        self.commanded_pos[5] = extrude_pos
         self._build_extra_axes_status()
     def get_extruder(self):
         return self.extra_axes[0]
@@ -448,13 +476,13 @@ class ToolHead:
         self._flush_lookahead()
         if ea not in self.extra_axes:
             return
-        ea_index = self.extra_axes.index(ea) + 3
+        ea_index = self.extra_axes.index(ea) + 5
         self.commanded_pos.pop(ea_index)
-        self.extra_axes.pop(ea_index - 3)
+        self.extra_axes.pop(ea_index - 5)
         self._build_extra_axes_status()
         self.printer.send_event("toolhead:update_extra_axes")
     def get_extra_axes(self):
-        return [None, None, None] + self.extra_axes
+        return [None, None, None, None, None] + self.extra_axes
     # Homing "drip move" handling
     def _drip_load_trapq(self, submit_move):
         # Queue move into trapezoid motion queue (trapq)
@@ -469,14 +497,16 @@ class ToolHead:
                 self.trapq, end_time,
                 move.accel_t, move.cruise_t, move.decel_t,
                 move.start_pos[0], move.start_pos[1], move.start_pos[2],
+                move.start_pos[3], move.start_pos[4],
                 move.axes_r[0], move.axes_r[1], move.axes_r[2],
+                move.axes_r[3], move.axes_r[4],
                 move.start_v, move.cruise_v, move.accel)
             end_time = end_time + move.accel_t + move.cruise_t + move.decel_t
         self.lookahead.reset()
         return start_time, end_time
     def drip_move(self, newpos, speed, drip_completion):
         # Create and verify move is valid
-        newpos = newpos[:3] + self.commanded_pos[3:]
+        newpos = list(newpos[:5]) + self.commanded_pos[5:]
         move = Move(self, self.commanded_pos, newpos, speed)
         if move.move_d:
             self.kin.check_move(move)
@@ -512,6 +542,8 @@ class ToolHead:
                      'position': self.Coord(self.commanded_pos),
                      'max_velocity': self.max_velocity,
                      'max_accel': self.max_accel,
+                     'max_z_velocity': self.max_z_velocity,
+                     'max_z_accel': self.max_z_accel,
                      'minimum_cruise_ratio': self.min_cruise_ratio,
                      'square_corner_velocity': self.square_corner_velocity,
                      'extra_axes': self.extra_axes_status})
@@ -531,16 +563,23 @@ class ToolHead:
         last_move.timing_callbacks.append(callback)
     def get_max_velocity(self):
         return self.max_velocity, self.max_accel
+    def get_max_z_velocity(self):
+        return self.max_z_velocity, self.max_z_accel
     def _calc_junction_deviation(self):
         scv2 = self.square_corner_velocity**2
         self.junction_deviation = scv2 * (math.sqrt(2.) - 1.) / self.max_accel
         self.mcr_pseudo_accel = self.max_accel * (1. - self.min_cruise_ratio)
     def set_max_velocities(self, max_velocity, max_accel,
-                           square_corner_velocity, min_cruise_ratio):
+                           square_corner_velocity, min_cruise_ratio,
+                           max_z_velocity=None, max_z_accel=None):
         if max_velocity is not None:
             self.max_velocity = max_velocity
         if max_accel is not None:
             self.max_accel = max_accel
+        if max_z_velocity is not None:
+            self.max_z_velocity = max_z_velocity
+        if max_z_accel is not None:
+            self.max_z_accel = max_z_accel
         if square_corner_velocity is not None:
             self.square_corner_velocity = square_corner_velocity
         if min_cruise_ratio is not None:
@@ -573,18 +612,25 @@ class ToolHeadCommandHelper:
     def cmd_SET_VELOCITY_LIMIT(self, gcmd):
         max_velocity = gcmd.get_float('VELOCITY', None, above=0.)
         max_accel = gcmd.get_float('ACCEL', None, above=0.)
+        max_z_velocity = gcmd.get_float('Z_VELOCITY', None, above=0.)
+        max_z_accel = gcmd.get_float('Z_ACCEL', None, above=0.)
         square_corner_velocity = gcmd.get_float(
             'SQUARE_CORNER_VELOCITY', None, minval=0.)
         min_cruise_ratio = gcmd.get_float(
             'MINIMUM_CRUISE_RATIO', None, minval=0., below=1.)
         mv, ma, scv, mcr = self.toolhead.set_max_velocities(
-            max_velocity, max_accel, square_corner_velocity, min_cruise_ratio)
+            max_velocity, max_accel, square_corner_velocity, min_cruise_ratio,
+            max_z_velocity, max_z_accel)
+        mzv, mza = self.toolhead.get_max_z_velocity()
         msg = ("max_velocity: %.6f\n"
                "max_accel: %.6f\n"
+               "max_z_velocity: %.6f\n"
+               "max_z_accel: %.6f\n"
                "minimum_cruise_ratio: %.6f\n"
-               "square_corner_velocity: %.6f" % (mv, ma, mcr, scv))
+               "square_corner_velocity: %.6f" % (mv, ma, mzv, mza, mcr, scv))
         self.printer.set_rollover_info("toolhead", "toolhead: %s" % (msg,))
         if (max_velocity is None and max_accel is None
+            and max_z_velocity is None and max_z_accel is None
             and square_corner_velocity is None and min_cruise_ratio is None):
             gcmd.respond_info(msg, log=False)
     def cmd_M204(self, gcmd):

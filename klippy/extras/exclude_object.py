@@ -18,8 +18,8 @@ class ExcludeObject:
         self.printer.register_event_handler("virtual_sdcard:reset_file",
                                             self._reset_file)
         self.next_transform = None
-        self.last_position_extruded = [0., 0., 0., 0.]
-        self.last_position_excluded = [0., 0., 0., 0.]
+        self.last_position_extruded = [0., 0., 0., 0., 0., 0.]
+        self.last_position_excluded = [0., 0., 0., 0., 0., 0.]
 
         self._reset_state()
         self.gcode.register_command(
@@ -50,7 +50,7 @@ class ExcludeObject:
             self.max_position_excluded = 0
             self.extruder_adj = 0
             self.initial_extrusion_moves = 5
-            self.last_position = [0., 0., 0., 0.]
+            self.last_position = [0., 0., 0., 0., 0., 0.]
 
             self.get_position()
             self.last_position_extruded[:] = self.last_position
@@ -103,7 +103,7 @@ class ExcludeObject:
         offset = self._get_extrusion_offsets(len(newpos))
 
         if self.initial_extrusion_moves > 0 and \
-            self.last_position[3] != newpos[3]:
+            self.last_position[5] != newpos[5]:
             # Since the transform is not loaded until there is a request to
             # exclude an object, the transform needs to track a few extrusions
             # to get the state of the extruder
@@ -111,7 +111,7 @@ class ExcludeObject:
 
         self.last_position[:] = newpos
         self.last_position_extruded[:] = self.last_position
-        self.max_position_extruded = max(self.max_position_extruded, newpos[3])
+        self.max_position_extruded = max(self.max_position_extruded, newpos[5])
 
         # These next few conditionals handle the moves immediately after leaving
         # and excluded object.  The toolhead is at the end of the last printed
@@ -124,17 +124,18 @@ class ExcludeObject:
             (newpos[0] != self.last_position_excluded[0] or \
             newpos[1] != self.last_position_excluded[1]):
             for i in range(len(newpos)):
-                if i != 3:
+                if i != 5:
                     offset[i] = 0
-            offset[3] += self.extruder_adj
+            offset[5] += self.extruder_adj
             self.extruder_adj = 0
 
-        if offset[2] != 0 and newpos[2] != self.last_position_excluded[2]:
-            offset[2] = 0
+        for i in (2, 3, 4):
+            if offset[i] != 0 and newpos[i] != self.last_position_excluded[i]:
+                offset[i] = 0
 
         if self.extruder_adj != 0 and \
-            newpos[3] != self.last_position_excluded[3]:
-            offset[3] += self.extruder_adj
+            newpos[5] != self.last_position_excluded[5]:
+            offset[5] += self.extruder_adj
             self.extruder_adj = 0
 
         tx_pos = newpos[:]
@@ -145,12 +146,12 @@ class ExcludeObject:
     def _ignore_move(self, newpos, speed):
         offset = self._get_extrusion_offsets(len(newpos))
         for i in range(len(newpos)):
-            if i != 3:
+            if i != 5:
                 offset[i] = newpos[i] - self.last_position_extruded[i]
-        offset[3] = offset[3] + newpos[3] - self.last_position[3]
+        offset[5] = offset[5] + newpos[5] - self.last_position[5]
         self.last_position[:] = newpos
         self.last_position_excluded[:] = self.last_position
-        self.max_position_excluded = max(self.max_position_excluded, newpos[3])
+        self.max_position_excluded = max(self.max_position_excluded, newpos[5])
 
     def _move_into_excluded_region(self, newpos, speed):
         self.in_excluded_region = True
@@ -162,8 +163,8 @@ class ExcludeObject:
         # This adjustment value is used to compensate for any retraction
         # differences between the last object printed and excluded one.
         self.extruder_adj = self.max_position_excluded \
-            - self.last_position_excluded[3] \
-            - (self.max_position_extruded - self.last_position_extruded[3])
+            - self.last_position_excluded[5] \
+            - (self.max_position_extruded - self.last_position_extruded[5])
         self._normal_move(newpos, speed)
 
     def _test_in_excluded_region(self):

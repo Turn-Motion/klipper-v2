@@ -8,17 +8,20 @@ import os, re, logging, collections, shlex, operator
 class CommandError(Exception):
     pass
 
-# Custom "tuple" class for coordinates - add easy access to x, y, z components
+# Custom "tuple" class for coordinates - add easy access to the
+# x, y, z, a, b, and e components
 class Coord(tuple):
     __slots__ = ()
     def __new__(cls, t):
-        if len(t) < 4:
-            t = tuple(t) + (0,) * (4 - len(t))
+        if len(t) < 6:
+            t = tuple(t) + (0,) * (6 - len(t))
         return tuple.__new__(cls, t)
     x = property(operator.itemgetter(0))
     y = property(operator.itemgetter(1))
     z = property(operator.itemgetter(2))
-    e = property(operator.itemgetter(3))
+    a = property(operator.itemgetter(3))
+    b = property(operator.itemgetter(4))
+    e = property(operator.itemgetter(5))
 
 # Class for handling gcode command parameters (gcmd)
 class GCodeCommand:

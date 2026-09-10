@@ -104,9 +104,11 @@ class DumpTrapQ:
         out = ["Dumping trapq '%s' %d moves:" % (self.name, len(data))]
         for i, m in enumerate(data):
             out.append("move %d: pt=%.6f mt=%.6f sv=%.6f a=%.6f"
-                       " sp=(%.6f,%.6f,%.6f) ar=(%.6f,%.6f,%.6f)"
+                       " sp=(%.6f,%.6f,%.6f,%.6f,%.6f)"
+                       " ar=(%.6f,%.6f,%.6f,%.6f,%.6f)"
                        % (i, m.print_time, m.move_t, m.start_v, m.accel,
-                          m.start_x, m.start_y, m.start_z, m.x_r, m.y_r, m.z_r))
+                          m.start_x, m.start_y, m.start_z, m.start_a, m.start_b,
+                          m.x_r, m.y_r, m.z_r, m.a_r, m.b_r))
         logging.info('\n'.join(out))
     def get_trapq_position(self, print_time):
         ffi_main, ffi_lib = chelper.get_ffi()
@@ -118,14 +120,16 @@ class DumpTrapQ:
         move_time = max(0., min(move.move_t, print_time - move.print_time))
         dist = (move.start_v + .5 * move.accel * move_time) * move_time;
         pos = (move.start_x + move.x_r * dist, move.start_y + move.y_r * dist,
-               move.start_z + move.z_r * dist)
+               move.start_z + move.z_r * dist, move.start_a + move.a_r * dist,
+               move.start_b + move.b_r * dist)
         velocity = move.start_v + move.accel * move_time
         return pos, velocity
     def _process_batch(self, eventtime):
         qtime = self.last_batch_msg[0] + min(self.last_batch_msg[1], 0.100)
         data, cdata = self.extract_trapq(qtime, NEVER_TIME)
         d = [(m.print_time, m.move_t, m.start_v, m.accel,
-              (m.start_x, m.start_y, m.start_z), (m.x_r, m.y_r, m.z_r))
+              (m.start_x, m.start_y, m.start_z, m.start_a, m.start_b),
+              (m.x_r, m.y_r, m.z_r, m.a_r, m.b_r))
              for m in data]
         if d:
             start_drip_time = self.motion_queuing.check_drip_timing()
@@ -242,7 +246,7 @@ class PrinterMotionReport:
         print_time = mcu.estimated_print_time(eventtime)
         pos, velocity = self.dtrapqs['toolhead'].get_trapq_position(print_time)
         if pos is not None:
-            live_pos[:3] = pos[:3]
+            live_pos[:5] = pos[:5]
             xyzvelocity = velocity
         # Calculate requested position of extra axes
         for ea_index, ea in enumerate(extra_axes):
@@ -254,7 +258,7 @@ class PrinterMotionReport:
                 pos, velocity = ehandler.get_trapq_position(print_time)
                 if pos is not None:
                     live_pos[ea_index] = pos[0]
-                    if ea_index == 3:
+                    if ea_index == 5:
                         evelocity = velocity
         # Report status
         self.last_status = dict(self.last_status)
