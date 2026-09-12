@@ -18,9 +18,7 @@ class ZAdjustHelper:
     def handle_connect(self):
         kin = self.printer.lookup_object('toolhead').get_kinematics()
         # The Z, A, and B axes all carry the bed
-        z_steppers = [s for s in kin.get_steppers()
-                      if s.is_active_axis('z') or s.is_active_axis('a')
-                      or s.is_active_axis('b')]
+        z_steppers = probe.lookup_bed_steppers(kin)
         if len(z_steppers) != self.z_count:
             raise self.printer.config_error(
                 "%s z_positions needs exactly %d items" % (

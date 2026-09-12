@@ -7,7 +7,7 @@ cd ${SRCDIR}
 
 # Run whitespace tool on all source files
 WS_DIRS="config/ docs/ klippy/ scripts/ src/ test/"
-WS_EXCLUDE="-path scripts/kconfig -prune"
+WS_EXCLUDE="-path scripts/kconfig -prune -o -path test/reference -prune"
 WS_FILES="-o -iname '*.[csh]' -o -name '*.py' -o -name '*.sh'"
 WS_FILES="$WS_FILES -o -name '*.md' -o -name '*.cfg' -o -name '*.txt'"
 WS_FILES="$WS_FILES -o -name '*.html' -o -name '*.css'"

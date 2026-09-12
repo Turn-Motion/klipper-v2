@@ -22,7 +22,7 @@ SOURCE_FILES = [
     'kin_cartesian.c', 'kin_corexy.c', 'kin_corexz.c', 'kin_delta.c',
     'kin_deltesian.c', 'kin_polar.c', 'kin_rotary_delta.c', 'kin_winch.c',
     'kin_extruder.c', 'kin_shaper.c', 'kin_idex.c', 'kin_generic.c',
-    'kin_cartesianxy3z.c',
+    'kin_cartesianxy3z.c', 'kin_cartesianxy3z2h.c',
 ]
 DEST_LIB = "c_helper.so"
 OTHER_FILES = [
@@ -121,6 +121,10 @@ defs_kin_cartesian = """
 """
 defs_kin_cartesianxy3z = """
     struct stepper_kinematics *cartesianxy3z_stepper_alloc(char axis);
+"""
+defs_kin_cartesianxy3z2h = """
+    struct stepper_kinematics *cartesianxy3z2h_h_stepper_alloc(
+        double a_home_x, double b_home_x, double side);
 """
 defs_kin_generic_cartesian = """
     struct stepper_kinematics *generic_cartesian_stepper_alloc(double a_x
@@ -247,6 +251,7 @@ defs_all = [
     defs_kin_deltesian, defs_kin_polar, defs_kin_rotary_delta, defs_kin_winch,
     defs_kin_extruder, defs_kin_shaper, defs_kin_idex,
     defs_kin_generic_cartesian, defs_kin_cartesianxy3z,
+    defs_kin_cartesianxy3z2h,
 ]
 
 # Update filenames to an absolute path

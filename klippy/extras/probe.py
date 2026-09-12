@@ -218,6 +218,17 @@ def lookup_minimum_z(config):
     pconfig = config.getsection('printer')
     return pconfig.getfloat('minimum_z_position', 0., note_valid=False)
 
+# Return the steppers that carry the bed (Z, A, and B).  Steppers whose
+# position is merely derived from the bed pose (the horizontal bed-joint
+# carriages of cartesianxy3z2h) are active on those axes too, but they are
+# not bed actuators and are excluded.
+def lookup_bed_steppers(kin):
+    derived = getattr(kin, 'get_derived_steppers', lambda: [])()
+    return [s for s in kin.get_steppers()
+            if s not in derived
+            and (s.is_active_axis('z') or s.is_active_axis('a')
+                 or s.is_active_axis('b'))]
+
 # Helper to lookup all the Z axis steppers (Z, A, and B all carry the bed)
 class LookupZSteppers:
     def __init__(self, config, add_stepper_cb):
@@ -227,10 +238,8 @@ class LookupZSteppers:
                                             self._handle_mcu_identify)
     def _handle_mcu_identify(self):
         kin = self.printer.lookup_object('toolhead').get_kinematics()
-        for stepper in kin.get_steppers():
-            if (stepper.is_active_axis('z') or stepper.is_active_axis('a')
-                or stepper.is_active_axis('b')):
-                self.add_stepper_cb(stepper)
+        for stepper in lookup_bed_steppers(kin):
+            self.add_stepper_cb(stepper)
 
 # Support homing via probe using the probe:z_virtual_endstop pseudo-pin
 class HomingViaProbeHelper:

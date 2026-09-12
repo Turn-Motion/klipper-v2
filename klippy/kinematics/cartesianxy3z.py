@@ -184,14 +184,12 @@ class CartesianXY3Z:
                     raise move.move_error("Must home axis first")
                 raise move.move_error()
     def _check_safety(self, move):
-        if self.is_homing or self.is_probing:
+        if self.safety_module is None or self.is_homing or self.is_probing:
             # The end position of a homing/probing move is a travel
             # limit, not the point the bed will actually stop at
             return
         try:
             is_safe = self.safety_module.check_move(move)
-        except self.printer.command_error:
-            raise
         except Exception as e:
             logging.exception("CartesianXY3Z safety check")
             raise move.move_error("Safety system error: %s" % (str(e),))
