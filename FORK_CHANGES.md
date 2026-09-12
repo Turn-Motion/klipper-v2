@@ -123,6 +123,18 @@ thing to preserve; the exact lines may move as upstream evolves.
 | `klippy/kinematics/cartesianxy3z_safety.py` | Bed joint geometry checks (`[CartesianXY3ZSafety]` section, `CHECK_CARTESIANXY3Z_SAFETY`, `PREVIEW_MOVE`). Pure fork code; no upstream dependency beyond `Move` attributes and `gcode_move` status. |
 | `config/example-Turn-V2.cfg`, `config/example-cartesianxy3z-full.cfg`, `printer.cfg` | machine configs |
 
+### 4.3b Derived horizontal carriages (`kinematics: cartesianxy3z2h`)
+
+| File | Purpose |
+|------|---------|
+| `klippy/kinematics/cartesianxy3z2h.py` | Subclass of `CartesianXY3Z`. Adds `[stepper_u]`/`[stepper_v]`: steppers whose position is **derived** from (Z, A, B) by plate rigidity, not G-code axes (the position tuple is unchanged). Reads `[cartesianxy3z2h]` (`a_joint_home_x`, `b_joint_home_x`, `max_h_velocity`, `max_h_accel`, `enable_horizontal_carriages`). `check_move` samples U/V along the move (`UV_SAMPLE_MM`, `UV_MAX_SAMPLES`), rejects moves that take a carriage past its required `position_min`/`position_max`, and caps speed/accel from the peak carriage rate. `home()` detaches U/V from the trapq (homing start positions are physically impossible poses) and re-derives them afterwards. `get_derived_steppers()` tells probe/z_tilt to ignore them. |
+| `klippy/chelper/kin_cartesianxy3z2h.c` | `cartesianxy3z2h_h_stepper_alloc(a_home_x, b_home_x, side)`: the closed-form slide position; active on `AF_Z\|AF_A\|AF_B`. |
+| `klippy/extras/probe.py` `lookup_bed_steppers()` | Z/A/B-active steppers minus `kin.get_derived_steppers()`; used by `LookupZSteppers` and `z_tilt.ZAdjustHelper`. |
+| `test/test_uv_derived.py` | C solver (and its Python transcription) vs the vendored reference solver `test/reference/printerkin` (byte-identical copy of the main application's kinematics; excluded from the whitespace check). |
+| `test/test_uv_motion.py` | `check_move` behaviour with the C bindings stubbed: limiter, range rejection, interior extremum, homing bypass. Pure Python, runs on any machine. |
+| `sim/printer.sim.uvderived.cfg`, `gcode/bed_pose_smoke.gcode`, `sim/verify-axes.sh` | simulator profile, smoke g-code (X Y Z A B only, runs on both profiles), and the container-side gate that builds, runs both unit tests with the real C solver and batch-runs both profiles. `sim/printer.sim.cfg` carries a `[z_tilt]` section as a runtime assertion that the derived steppers stay out of the bed-stepper set. |
+| `config/example-cartesianxy3z2h.cfg` | example fragment |
+
 ### 4.4 Probing and bed levelling
 
 | File | Change | Why |
@@ -184,7 +196,8 @@ that swallowed errors, and all debug logging.
 3. Check the private APIs the fork hooks: `LookAheadQueue.flush`
    (move_capture), `toolhead.register_lookahead_callback`
    (virtual_sdcard), `gcode_move.base_position/homing_position` (z_tilt),
-   `kin.set_probing` (homing), `probe.LookupZSteppers`.
+   `kin.set_probing` (homing), `probe.LookupZSteppers`,
+   `MCU_stepper.set_trapq(None)` (cartesianxy3z2h homing detach).
 4. Run `./scripts/check_whitespace.sh`.
 5. Run section 7.
 
@@ -202,6 +215,12 @@ docker run --rm -v "$PWD:/klipper:ro" -v "$PWD/../klipper-verify:/out" python:3.
 builds the AVR and Linux MCU dictionaries, builds the C helper, and runs
 every upstream regression test whose dictionary is available (34 tests).
 Expected result: `All 34 test cases passed`.
+
+For the derived carriages additionally run `python test/test_uv_motion.py`
+(anywhere) and, inside the simulator container,
+`docker compose -f docker-compose.sim.yml run --rm --entrypoint /klipper/sim/verify-axes.sh klipper-sim`
+which also exercises the compiled C solver and batch-runs both simulator
+profiles on `gcode/bed_pose_smoke.gcode`.
 
 For a motion-level comparison against a previous version, run both
 trees in batch mode against the same g-code with `[move_capture]`
