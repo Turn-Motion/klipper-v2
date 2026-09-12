@@ -46,6 +46,9 @@ UV_MAX_SAMPLES = 16
 
 class CartesianXY3Z2H(cartesianxy3z.CartesianXY3Z):
     def __init__(self, toolhead, config):
+        # The derived carriages: [(name, mcu_stepper, min, max)].  Set up
+        # first because the base constructor already calls get_steppers().
+        self.h_steppers = []
         cartesianxy3z.CartesianXY3Z.__init__(self, toolhead, config)
         # Geometry: the world X of each ball joint with the bed level.  d_x
         # and the midpoint follow from these.
@@ -66,8 +69,6 @@ class CartesianXY3Z2H(cartesianxy3z.CartesianXY3Z):
                                              above=0.)
         self._max_h_accel = hcfg.getfloat('max_h_accel', max_z_accel,
                                           above=0.)
-        # The derived carriages: [(name, mcu_stepper, min, max)]
-        self.h_steppers = []
         if self.enable_uv:
             for name, side in (('stepper_u', -1.0), ('stepper_v', 1.0)):
                 if not config.has_section(name):
