@@ -11,7 +11,10 @@ services:
       - ./gcode:/opt/printer_data/gcodes
       - klippy-socket:/tmp
     environment:
-      KLIPPER_CFG: /config/printer.sim.cfg
+      # Override to pick a profile, e.g.
+      #   KLIPPER_CFG=/klipper/sim/printer.sim.uvderived.cfg docker compose ... up
+      # The repo is bind-mounted at /klipper, so any sim config is reachable.
+      KLIPPER_CFG: ${KLIPPER_CFG:-/config/printer.sim.cfg}
     ports:
       - "7126:7126"
     restart: "no"

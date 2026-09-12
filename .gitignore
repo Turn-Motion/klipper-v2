@@ -6,3 +6,5 @@ out
 klippy/.version
 .vs/
 .vscode/
+# Runtime output from the simulation containers
+sim/logs/
