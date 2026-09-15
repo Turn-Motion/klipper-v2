@@ -27,11 +27,10 @@ dual_carriage_calc_position(struct stepper_kinematics *sk, struct move *m
     struct dual_carriage_stepper *dc = container_of(
             sk, struct dual_carriage_stepper, sk);
     struct coord pos = move_get_coord(m, move_time);
+    // Every axis is carried through; x and y take the carriage transform
+    dc->m.start_pos = pos;
     dc->m.start_pos.x = pos.x * dc->x_scale + dc->x_offs;
     dc->m.start_pos.y = pos.y * dc->y_scale + dc->y_offs;
-    dc->m.start_pos.z = pos.z;
-    dc->m.start_pos.a = pos.a;
-    dc->m.start_pos.b = pos.b;
     return dc->orig_sk->calc_position_cb(dc->orig_sk, &dc->m, DUMMY_T);
 }
 

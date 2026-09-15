@@ -22,7 +22,7 @@ SOURCE_FILES = [
     'kin_cartesian.c', 'kin_corexy.c', 'kin_corexz.c', 'kin_delta.c',
     'kin_deltesian.c', 'kin_polar.c', 'kin_rotary_delta.c', 'kin_winch.c',
     'kin_extruder.c', 'kin_shaper.c', 'kin_idex.c', 'kin_generic.c',
-    'kin_cartesianxy3z.c',
+    'kin_axis.c', 'kin_bedjoint.c',
 ]
 DEST_LIB = "c_helper.so"
 OTHER_FILES = [
@@ -77,41 +77,43 @@ defs_steppersync = """
 defs_itersolve = """
     double itersolve_check_active(struct stepper_kinematics *sk
         , double flush_time);
-    int32_t itersolve_is_active_axis(struct stepper_kinematics *sk, char axis);
+    int32_t itersolve_is_active_axis(struct stepper_kinematics *sk, int axis);
     void itersolve_set_trapq(struct stepper_kinematics *sk, struct trapq *tq
         , double step_dist);
     struct trapq *itersolve_get_trapq(struct stepper_kinematics *sk);
     double itersolve_calc_position_from_coord(struct stepper_kinematics *sk
-        , double x, double y, double z, double a, double b);
+        , int naxes, double coord[]);
     void itersolve_set_position(struct stepper_kinematics *sk
-        , double x, double y, double z, double a, double b);
+        , int naxes, double coord[]);
     double itersolve_get_commanded_pos(struct stepper_kinematics *sk);
     double itersolve_get_gen_steps_pre_active(struct stepper_kinematics *sk);
     double itersolve_get_gen_steps_post_active(struct stepper_kinematics *sk);
 """
 
+# KIN_AXES in chelper/trapq.h - the compiled maximum number of kinematic
+# axes.  The struct layout below must match it; TRAPQ_KIN_AXES is checked
+# against the compiled value at startup (see get_ffi).
+TRAPQ_KIN_AXES = 8
+
 defs_trapq = """
     struct pull_move {
         double print_time, move_t;
         double start_v, accel;
-        double start_x, start_y, start_z, start_a, start_b;
-        double x_r, y_r, z_r, a_r, b_r;
+        double start_pos[8];
+        double axes_r[8];
     };
 
+    int trapq_get_kin_axes(void);
     struct trapq *trapq_alloc(void);
     void trapq_free(struct trapq *tq);
     void trapq_append(struct trapq *tq, double print_time
         , double accel_t, double cruise_t, double decel_t
-        , double start_pos_x, double start_pos_y, double start_pos_z
-        , double start_pos_a, double start_pos_b
-        , double axes_r_x, double axes_r_y, double axes_r_z
-        , double axes_r_a, double axes_r_b
+        , int naxes, double start_pos[], double axes_r[]
         , double start_v, double cruise_v, double accel);
     void trapq_finalize_moves(struct trapq *tq, double print_time
         , double clear_history_time);
     void trapq_set_position(struct trapq *tq, double print_time
-        , double pos_x, double pos_y, double pos_z
-        , double pos_a, double pos_b);
+        , int naxes, double pos[]);
     int trapq_extract_old(struct trapq *tq, struct pull_move *p, int max
         , double start_time, double end_time);
 """
@@ -119,8 +121,13 @@ defs_trapq = """
 defs_kin_cartesian = """
     struct stepper_kinematics *cartesian_stepper_alloc(char axis);
 """
-defs_kin_cartesianxy3z = """
-    struct stepper_kinematics *cartesianxy3z_stepper_alloc(char axis);
+defs_kin_axis = """
+    struct stepper_kinematics *axis_stepper_alloc(int axis);
+"""
+defs_kin_bedjoint = """
+    struct stepper_kinematics *bedjoint_stepper_alloc(double a_home_x
+        , double b_home_x, double side
+        , int z_axis, int a_axis, int b_axis);
 """
 defs_kin_generic_cartesian = """
     struct stepper_kinematics *generic_cartesian_stepper_alloc(double a_x
@@ -246,7 +253,7 @@ defs_all = [
     defs_kin_cartesian, defs_kin_corexy, defs_kin_corexz, defs_kin_delta,
     defs_kin_deltesian, defs_kin_polar, defs_kin_rotary_delta, defs_kin_winch,
     defs_kin_extruder, defs_kin_shaper, defs_kin_idex,
-    defs_kin_generic_cartesian, defs_kin_cartesianxy3z,
+    defs_kin_generic_cartesian, defs_kin_axis, defs_kin_bedjoint,
 ]
 
 # Update filenames to an absolute path
@@ -330,6 +337,13 @@ def get_ffi():
         pyhelper_logging_callback = FFI_main.callback("void func(const char *)",
                                                       logging_callback)
         FFI_lib.set_python_logging_callback(pyhelper_logging_callback)
+        # The pull_move struct above hard-codes the axis array size, so
+        # a mismatch with the compiled KIN_AXES would silently corrupt
+        # every motion report.
+        compiled_axes = FFI_lib.trapq_get_kin_axes()
+        if compiled_axes != TRAPQ_KIN_AXES:
+            raise Exception("chelper built with KIN_AXES=%d, but this file"
+                            " declares %d" % (compiled_axes, TRAPQ_KIN_AXES))
     return FFI_main, FFI_lib
 
 
