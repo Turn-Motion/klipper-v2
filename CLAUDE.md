@@ -10,7 +10,8 @@ Before changing motion, homing, probing or g-code handling code, read:
 
 - `docs/Turn_Kinematics.md` - the architecture and configuration guide:
   the axis roster, the kinematics engine, and how each machine flavour is
-  configured.
+  configured. `docs/Turn_Kinematics_Architecture.html` is the same material
+  with diagrams; rebuild its PDF with `docs/build-architecture-pdf.sh`.
 - `FORK_CHANGES.md` - the maintenance ledger: every fork change file by
   file, the conflict-resolution rules, and the verification steps to run
   after rebasing onto a new upstream version.

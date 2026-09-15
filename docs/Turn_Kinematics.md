@@ -3,9 +3,12 @@
 How this fork extends upstream Klipper, and how to configure a machine
 with it.
 
-This document is the architecture overview. [FORK_CHANGES.md](../FORK_CHANGES.md)
-is the maintenance ledger: the file-by-file list of what differs from
-upstream and the checklist for rebasing onto a new upstream release.
+This document is the architecture overview in text form.
+[Turn_Kinematics_Architecture.pdf](Turn_Kinematics_Architecture.pdf) is the
+same material with diagrams, for reading away from the code;
+[FORK_CHANGES.md](../FORK_CHANGES.md) is the maintenance ledger, the
+file-by-file list of what differs from upstream and the checklist for
+rebasing onto a new upstream release.
 
 - **Upstream base:** https://github.com/Klipper3d/klipper, commit
   `2d7717e3` (`temperature_probe: Use bed_z as toolhead zero reference`).

@@ -4,3 +4,5 @@
 /scripts/*.sh text eol=lf
 /sim/*.sh text eol=lf
 /Makefile text eol=lf
+/docs/*.sh text eol=lf
+*.pdf binary

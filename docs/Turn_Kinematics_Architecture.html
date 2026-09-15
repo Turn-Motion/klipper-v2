@@ -1,0 +1,1555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Turn Multi-Axis Kinematics - Architecture and Design</title>
+<style>
+  @page { size: A4; margin: 18mm 17mm 16mm 17mm; }
+  @page :first { margin: 0; }
+
+  :root {
+    --ink: #17222a;
+    --muted: #5b6a75;
+    --rule: #d3dade;
+    --accent: #0f5f6b;
+    --accent-soft: #e3f0f2;
+    --mod: #fdf1e2;
+    --mod-line: #b3762a;
+    --up: #f3f5f6;
+    --up-line: #93a1a9;
+    --code-bg: #f6f8f8;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.2pt;
+    line-height: 1.52;
+    color: var(--ink);
+  }
+
+  /* ---------- cover ---------- */
+  .cover {
+    height: 297mm;
+    padding: 34mm 22mm 20mm 22mm;
+    page-break-after: always;
+    position: relative;
+    background: linear-gradient(180deg, #0f5f6b 0 84mm, #ffffff 84mm 100%);
+    color: var(--ink);
+  }
+  .cover .eyebrow {
+    color: #bfe2e6; font-size: 9.5pt; letter-spacing: .16em;
+    text-transform: uppercase; margin: 0 0 6mm 0;
+  }
+  .cover h1 {
+    color: #fff; font-size: 27pt; line-height: 1.15; margin: 0 0 4mm 0;
+    font-weight: 600; letter-spacing: -.01em;
+  }
+  .cover .sub { color: #d8eef0; font-size: 12pt; margin: 0; font-weight: 400; }
+  .cover .abstract {
+    margin-top: 30mm; font-size: 11pt; line-height: 1.6; max-width: 135mm;
+  }
+  .cover .facts {
+    margin-top: 14mm; border-top: 1px solid var(--rule);
+    padding-top: 5mm; font-size: 9.5pt; color: var(--muted);
+  }
+  .cover .facts div { margin: 1.6mm 0; }
+  .cover .facts b { color: var(--ink); font-weight: 600; }
+  .cover .foot {
+    position: absolute; left: 22mm; right: 22mm; bottom: 18mm;
+    font-size: 9pt; color: var(--muted);
+    border-top: 1px solid var(--rule); padding-top: 4mm;
+  }
+
+  /* ---------- structure ---------- */
+  h2 {
+    font-size: 15pt; color: var(--accent); margin: 0 0 4mm 0;
+    padding-bottom: 2mm; border-bottom: 2px solid var(--accent);
+    font-weight: 600; page-break-after: avoid;
+  }
+  h2 .num { color: #7fb3bb; margin-right: 3mm; font-variant-numeric: tabular-nums; }
+  h3 {
+    font-size: 11.4pt; margin: 7mm 0 2.5mm 0; font-weight: 600;
+    color: var(--ink); page-break-after: avoid;
+  }
+  h4 {
+    font-size: 10.2pt; margin: 5mm 0 1.5mm 0; font-weight: 600;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+    page-break-after: avoid;
+  }
+  section { page-break-before: always; }
+  section.contents { page-break-before: avoid; }
+  p { margin: 0 0 3mm 0; }
+  ul, ol { margin: 0 0 3mm 0; padding-left: 5mm; }
+  li { margin: 0 0 1.4mm 0; }
+  code, .mono {
+    font-family: "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+    font-size: 8.9pt; background: var(--code-bg); padding: 0 .6mm;
+    border-radius: 1px;
+  }
+  pre {
+    font-family: "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+    font-size: 8.5pt; line-height: 1.45; background: var(--code-bg);
+    border-left: 2.5px solid var(--accent); padding: 3mm 4mm;
+    margin: 0 0 4mm 0; overflow: hidden; page-break-inside: avoid;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 0 0 4mm 0;
+    font-size: 9.2pt; page-break-inside: avoid;
+  }
+  th {
+    text-align: left; background: var(--accent-soft); color: var(--accent);
+    font-weight: 600; padding: 2mm 2.5mm; border-bottom: 1px solid #9ec8ce;
+    vertical-align: bottom;
+  }
+  td { padding: 2mm 2.5mm; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 8.4pt; }
+
+  figure { margin: 0 0 5mm 0; page-break-inside: avoid; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption {
+    font-size: 8.8pt; color: var(--muted); margin-top: 2mm;
+    padding-top: 1.6mm; border-top: 1px solid var(--rule);
+  }
+  figcaption b { color: var(--accent); font-weight: 600; }
+
+  .note {
+    background: var(--accent-soft); border-left: 2.5px solid var(--accent);
+    padding: 3mm 4mm; margin: 0 0 4mm 0; font-size: 9.4pt;
+    page-break-inside: avoid;
+  }
+  .note b { color: var(--accent); }
+  .warn {
+    background: var(--mod); border-left: 2.5px solid var(--mod-line);
+    padding: 3mm 4mm; margin: 0 0 4mm 0; font-size: 9.4pt;
+    page-break-inside: avoid;
+  }
+  .warn b { color: #8a5a1d; }
+
+  .legend { display: flex; gap: 6mm; font-size: 8.6pt; color: var(--muted); margin: 2mm 0 0 0; }
+  .legend span { display: flex; align-items: center; gap: 1.6mm; }
+  .chip { width: 3.4mm; height: 3.4mm; border-radius: 1px; display: inline-block; }
+  .chip-fork { background: var(--accent-soft); border: 1px solid var(--accent); }
+  .chip-mod  { background: var(--mod); border: 1px solid var(--mod-line); }
+  .chip-up   { background: var(--up); border: 1px solid var(--up-line); }
+
+  .toc { font-size: 10.4pt; }
+  .toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+  .toc li {
+    counter-increment: toc; padding: 2.2mm 0;
+    border-bottom: 1px solid var(--rule); display: flex; gap: 4mm;
+  }
+  .toc li::before {
+    content: counter(toc); color: #7fb3bb; font-weight: 600;
+    min-width: 7mm; font-variant-numeric: tabular-nums;
+  }
+  .toc .t { font-weight: 600; }
+  .toc .d { color: var(--muted); font-size: 9.2pt; display: block; font-weight: 400; }
+
+  .cols { display: flex; gap: 6mm; }
+  .cols > * { flex: 1; }
+
+  /* ---------- svg shared ---------- */
+  svg text {
+    font-family: "Segoe UI", Arial, sans-serif; font-size: 11px; fill: #17222a;
+  }
+  svg .ttl { font-weight: 600; font-size: 11.5px; }
+  svg .sm { font-size: 9.5px; fill: #5b6a75; }
+  svg .xs { font-size: 8.5px; fill: #5b6a75; }
+  svg .mono { font-family: Consolas, monospace; font-size: 9.5px; }
+  svg .b { font-weight: 600; }
+  svg .box { fill: #fff; stroke: #93a1a9; stroke-width: 1.1; }
+  svg .fork { fill: #e3f0f2; stroke: #0f5f6b; stroke-width: 1.2; }
+  svg .mod  { fill: #fdf1e2; stroke: #b3762a; stroke-width: 1.2; }
+  svg .up   { fill: #f3f5f6; stroke: #93a1a9; stroke-width: 1.1; }
+  svg .accent-t { fill: #0f5f6b; }
+  svg .ln { stroke: #5b6a75; stroke-width: 1.2; fill: none; }
+  svg .ln-dash { stroke: #93a1a9; stroke-width: 1; fill: none; stroke-dasharray: 3 2.5; }
+  svg .arw { stroke: #5b6a75; stroke-width: 1.2; fill: none; marker-end: url(#ah); }
+  svg .arw-a { stroke: #0f5f6b; stroke-width: 1.5; fill: none; marker-end: url(#aha); }
+  svg .grid { stroke: #e6ebec; stroke-width: 1; }
+  /* Last, so it wins over the size classes above: a CSS rule also beats a
+     fill="" attribute, so light-on-dark text needs a class of its own. */
+  svg .on-dark { fill: #ffffff; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
+            markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#5b6a75"/>
+    </marker>
+    <marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
+            markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#0f5f6b"/>
+    </marker>
+  </defs>
+</svg>
+
+<!-- ============================= COVER ============================= -->
+<div class="cover">
+  <p class="eyebrow">Turn-Motion &middot; Klipper fork</p>
+  <h1>Multi-Axis Kinematics</h1>
+  <p class="sub">Architecture and design</p>
+
+  <div class="abstract">
+    <p>Upstream Klipper plans exactly three kinematic axes. This fork removes
+    that number from the motion core: the kinematics class owns the axis
+    roster and everything else reads it. One repository, one build and one
+    firmware then serve a bed carried by three vertical motors, the same
+    machine with a rotary axis, the same machine with derived bed-joint
+    carriages, and every stock Klipper printer, with <code>printer.cfg</code>
+    choosing between them.</p>
+  </div>
+
+  <div class="facts">
+    <div><b>Repository</b> &nbsp; Turn-Motion/klipper-v2</div>
+    <div><b>Branch</b> &nbsp; feature/multiaxis-kinematics</div>
+    <div><b>Upstream base</b> &nbsp; Klipper3d/klipper @ 2d7717e3</div>
+    <div><b>Kinematics</b> &nbsp; cartesianxy3z &middot; cartesianxy3zr &middot; + bed joint carriages</div>
+  </div>
+
+  <div class="foot">
+    Companion documents: <b>docs/Turn_Kinematics.md</b> (the same material as
+    text) and <b>FORK_CHANGES.md</b> (the file-by-file maintenance ledger).
+  </div>
+</div>
+
+<!-- ============================ CONTENTS =========================== -->
+<section class="contents">
+  <h2><span class="num">&mdash;</span>Contents</h2>
+  <div class="toc">
+    <ol>
+      <li><span><span class="t">The problem and the idea</span>
+        <span class="d">Why a number in the core had to go, and what replaced it</span></span></li>
+      <li><span><span class="t">The axis roster</span>
+        <span class="d">Position layout, the accessors, and what each machine declares</span></span></li>
+      <li><span><span class="t">System architecture</span>
+        <span class="d">Where the fork touches the host stack, and what it leaves alone</span></span></li>
+      <li><span><span class="t">The life of a move</span>
+        <span class="d">From one G1 line to steps on the wire</span></span></li>
+      <li><span><span class="t">Move distance and speed</span>
+        <span class="d">Distance groups, and why the bed does not slow the gantry</span></span></li>
+      <li><span><span class="t">The kinematics engine</span>
+        <span class="d">One engine, a module per machine flavour</span></span></li>
+      <li><span><span class="t">Homing</span>
+        <span class="d">The G28 sequence for a three-motor bed</span></span></li>
+      <li><span><span class="t">Derived bed-joint carriages</span>
+        <span class="d">Geometry, equations, and the two selectable behaviours</span></span></li>
+      <li><span><span class="t">The rotary axis</span>
+        <span class="d">Coordinated and slaved motion, homed and un-homed</span></span></li>
+      <li><span><span class="t">Bed queries</span>
+        <span class="d">How seven modules stopped guessing which axes carry the bed</span></span></li>
+      <li><span><span class="t">Configuration</span>
+        <span class="d">Choosing a flavour and setting every option</span></span></li>
+      <li><span><span class="t">What changes for the operator</span>
+        <span class="d">G-code, commands and status</span></span></li>
+      <li><span><span class="t">Verification</span>
+        <span class="d">The four gates and what each one proves</span></span></li>
+      <li><span><span class="t">Extending and maintaining</span>
+        <span class="d">Adding a flavour, and surviving the next upstream rebase</span></span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============================ 1 ================================== -->
+<section>
+  <h2><span class="num">1</span>The problem and the idea</h2>
+
+  <p>Upstream Klipper plans three kinematic axes &ndash; x, y and z &ndash;
+  followed by the extruder and any &ldquo;extra axes&rdquo;. The number three
+  is not a parameter. It is written into the motion core, the g-code layer,
+  the homing code and roughly twenty other modules as slices
+  (<code>pos[:3]</code>), literals (<code>range(3)</code>), axis strings
+  (<code>"xyz"</code>) and fixed indexes (the extruder at 3).</p>
+
+  <p>The Turn machines need five: a cartesian gantry over a bed carried by
+  three independent vertical motors. The previous fork answered by changing
+  every three into a five. That works, but it makes each new machine another
+  sweep through the whole tree, and it puts the fork permanently at odds with
+  upstream, which keeps adding code that assumes three.</p>
+
+  <p>This fork removes the number instead.</p>
+
+  <div class="note">
+    <b>The idea.</b> The kinematics class owns the axis roster. It publishes
+    the axis letters, and the toolhead, the g-code layer, homing, probing and
+    bed levelling all read them. A kinematics that declares nothing gets
+    upstream's <code>"xyz"</code>, so every stock printer runs at three axes
+    with upstream behaviour, from the same build.
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 700 250" role="img">
+      <rect class="fork" x="10" y="80" width="150" height="86" rx="3"/>
+      <text class="ttl" x="85" y="106" text-anchor="middle">One repository</text>
+      <text class="sm" x="85" y="123" text-anchor="middle">one host build</text>
+      <text class="sm" x="85" y="137" text-anchor="middle">one MCU firmware</text>
+      <text class="sm" x="85" y="151" text-anchor="middle">no board reflash</text>
+
+      <path class="arw-a" d="M 162 123 L 214 123"/>
+
+      <rect class="mod" x="216" y="86" width="132" height="74" rx="3"/>
+      <text class="ttl" x="282" y="110" text-anchor="middle">printer.cfg</text>
+      <text class="mono" x="282" y="128" text-anchor="middle">[printer]</text>
+      <text class="mono" x="282" y="143" text-anchor="middle">kinematics:</text>
+
+      <path class="arw" d="M 350 110 L 402 46"/>
+      <path class="arw" d="M 350 118 L 402 111"/>
+      <path class="arw" d="M 350 132 L 402 176"/>
+      <path class="arw" d="M 350 140 L 402 226"/>
+
+      <rect class="box" x="404" y="22" width="288" height="44" rx="3"/>
+      <text class="b" x="416" y="41">cartesianxy3z</text>
+      <text class="sm" x="416" y="56">x y z a b &mdash; gantry over a three-motor bed</text>
+
+      <rect class="box" x="404" y="88" width="288" height="44" rx="3"/>
+      <text class="b" x="416" y="107">cartesianxy3z + [bed_joint_carriages]</text>
+      <text class="sm" x="416" y="122">the same, plus two derived horizontal slides</text>
+
+      <rect class="box" x="404" y="154" width="288" height="44" rx="3"/>
+      <text class="b" x="416" y="173">cartesianxy3zr</text>
+      <text class="sm" x="416" y="188">x y z a b r &mdash; plus a rotary axis, in degrees</text>
+
+      <rect class="up" x="404" y="206" width="288" height="38" rx="3"/>
+      <text class="b" x="416" y="223">cartesian, corexy, delta, ...</text>
+      <text class="sm" x="416" y="237">stock Klipper, unchanged, at three axes</text>
+    </svg>
+    <figcaption><b>Figure 1.</b> One build, four kinds of machine. The
+    kinematics line in <code>printer.cfg</code> is the only thing that
+    differs between them.</figcaption>
+  </figure>
+
+  <h3>What this buys</h3>
+  <ul>
+    <li><b>A rebase that converges.</b> When upstream adds a module that
+    assumes three axes, the fix is mechanical and local: ask the toolhead
+    instead of writing a literal.</li>
+    <li><b>Real test coverage.</b> The 34 upstream regression tests exercise
+    the fork's own motion core, because they run through it at three axes.</li>
+    <li><b>Machines as configuration.</b> A new flavour is a roster
+    declaration, not a copy of the kinematics.</li>
+  </ul>
+</section>
+
+<!-- ============================ 2 ================================== -->
+<section>
+  <h2><span class="num">2</span>The axis roster</h2>
+
+  <p>A kinematics publishes <code>axis_names</code>: one lower-case letter per
+  kinematic axis, in order. The toolhead reads it once the kinematics has
+  loaded, sizes the position tuple from it, and places the extruder
+  immediately after the kinematic axes. Everything downstream &ndash; the
+  g-code axis map, <code>M114</code>, <code>G28</code>, homing, status
+  reporting &ndash; is derived from the same string.</p>
+
+  <figure>
+    <svg viewBox="0 0 700 300" role="img">
+      <text class="ttl" x="0" y="14">Position tuple layout</text>
+
+      <!-- upstream -->
+      <text class="sm b" x="0" y="46">upstream</text>
+      <text class="xs" x="0" y="60">cartesian, corexy, delta</text>
+      <g>
+        <rect class="fork" x="150" y="34" width="46" height="30" rx="2"/>
+        <text class="mono b" x="173" y="54" text-anchor="middle">x</text>
+        <rect class="fork" x="198" y="34" width="46" height="30" rx="2"/>
+        <text class="mono b" x="221" y="54" text-anchor="middle">y</text>
+        <rect class="fork" x="246" y="34" width="46" height="30" rx="2"/>
+        <text class="mono b" x="269" y="54" text-anchor="middle">z</text>
+        <rect class="mod" x="294" y="34" width="46" height="30" rx="2"/>
+        <text class="mono b" x="317" y="54" text-anchor="middle">e</text>
+        <rect class="up" x="342" y="34" width="86" height="30" rx="2"/>
+        <text class="sm" x="385" y="54" text-anchor="middle">extra axes</text>
+      </g>
+      <text class="xs" x="440" y="54">K = 3, extruder at index 3</text>
+
+      <!-- xy3z -->
+      <text class="sm b" x="0" y="112">cartesianxy3z</text>
+      <text class="xs" x="0" y="126">Turn V2</text>
+      <g>
+        <rect class="fork" x="150" y="100" width="46" height="30" rx="2"/>
+        <text class="mono b" x="173" y="120" text-anchor="middle">x</text>
+        <rect class="fork" x="198" y="100" width="46" height="30" rx="2"/>
+        <text class="mono b" x="221" y="120" text-anchor="middle">y</text>
+        <rect class="fork" x="246" y="100" width="46" height="30" rx="2"/>
+        <text class="mono b" x="269" y="120" text-anchor="middle">z</text>
+        <rect class="fork" x="294" y="100" width="46" height="30" rx="2"/>
+        <text class="mono b" x="317" y="120" text-anchor="middle">a</text>
+        <rect class="fork" x="342" y="100" width="46" height="30" rx="2"/>
+        <text class="mono b" x="365" y="120" text-anchor="middle">b</text>
+        <rect class="mod" x="390" y="100" width="46" height="30" rx="2"/>
+        <text class="mono b" x="413" y="120" text-anchor="middle">e</text>
+        <rect class="up" x="438" y="100" width="86" height="30" rx="2"/>
+        <text class="sm" x="481" y="120" text-anchor="middle">extra axes</text>
+      </g>
+      <text class="xs" x="536" y="120">K = 5, extruder at index 5</text>
+
+      <!-- xy3zr -->
+      <text class="sm b" x="0" y="178">cartesianxy3zr</text>
+      <text class="xs" x="0" y="192">Turn V2 + rotary</text>
+      <g>
+        <rect class="fork" x="150" y="166" width="46" height="30" rx="2"/>
+        <text class="mono b" x="173" y="186" text-anchor="middle">x</text>
+        <rect class="fork" x="198" y="166" width="46" height="30" rx="2"/>
+        <text class="mono b" x="221" y="186" text-anchor="middle">y</text>
+        <rect class="fork" x="246" y="166" width="46" height="30" rx="2"/>
+        <text class="mono b" x="269" y="186" text-anchor="middle">z</text>
+        <rect class="fork" x="294" y="166" width="46" height="30" rx="2"/>
+        <text class="mono b" x="317" y="186" text-anchor="middle">a</text>
+        <rect class="fork" x="342" y="166" width="46" height="30" rx="2"/>
+        <text class="mono b" x="365" y="186" text-anchor="middle">b</text>
+        <rect class="fork" x="390" y="166" width="46" height="30" rx="2"/>
+        <text class="mono b" x="413" y="186" text-anchor="middle">r</text>
+        <rect class="mod" x="438" y="166" width="46" height="30" rx="2"/>
+        <text class="mono b" x="461" y="186" text-anchor="middle">e</text>
+        <rect class="up" x="486" y="166" width="86" height="30" rx="2"/>
+        <text class="sm" x="529" y="186" text-anchor="middle">extra axes</text>
+      </g>
+      <text class="xs" x="584" y="186">K = 6, e at 6</text>
+
+      <!-- index ruler -->
+      <path class="ln-dash" d="M 150 214 L 640 214"/>
+      <text class="xs" x="173" y="228" text-anchor="middle">0</text>
+      <text class="xs" x="221" y="228" text-anchor="middle">1</text>
+      <text class="xs" x="269" y="228" text-anchor="middle">2</text>
+      <text class="xs" x="317" y="228" text-anchor="middle">3</text>
+      <text class="xs" x="365" y="228" text-anchor="middle">4</text>
+      <text class="xs" x="413" y="228" text-anchor="middle">5</text>
+      <text class="xs" x="461" y="228" text-anchor="middle">6</text>
+      <text class="xs" x="150" y="243">index</text>
+
+      <rect class="box" x="0" y="258" width="700" height="34" rx="3"/>
+      <text class="mono" x="12" y="271">toolhead.get_axis_names() -&gt; "xyzab"</text>
+      <text class="mono" x="12" y="285">toolhead.get_axis_count() -&gt; 5      toolhead.get_extruder_index() -&gt; 5</text>
+    </svg>
+    <figcaption><b>Figure 2.</b> The kinematic axes are teal, the extruder
+    amber, the optional extra axes grey. The extruder index is the axis
+    count; nothing in the host code may assume a number.</figcaption>
+    <div class="legend">
+      <span><i class="chip chip-fork"></i>kinematic axes</span>
+      <span><i class="chip chip-mod"></i>extruder</span>
+      <span><i class="chip chip-up"></i>extra axes (manual_stepper GCODE_AXIS)</span>
+    </div>
+  </figure>
+
+  <h3>Where the roster is published and consumed</h3>
+  <table>
+    <tr><th style="width:38%">Producer or consumer</th><th>Role</th></tr>
+    <tr><td><code>kin.axis_names</code></td>
+        <td>The roster itself, declared by the flavour module.</td></tr>
+    <tr><td><code>kin.distance_groups</code></td>
+        <td>Optional. How a move's length is measured (section 5).</td></tr>
+    <tr><td><code>toolhead._setup_axes()</code></td>
+        <td>Reads both once the kinematics loads; sizes the position tuple;
+        rejects a roster wider than the compiled <code>KIN_AXES</code>.</td></tr>
+    <tr><td><code>gcode.Coord</code></td>
+        <td>Re-shaped in place to carry one attribute per axis letter plus
+        <code>e</code>, so <code>position.a</code> works in macros.</td></tr>
+    <tr><td><code>gcode_move</code></td>
+        <td>Builds the G1 axis map and every axis-naming command from it.</td></tr>
+    <tr><td><code>axis_roster.py</code></td>
+        <td>Answers the machine-shaped questions: bed axes, bed steppers,
+        derived steppers (section 10).</td></tr>
+  </table>
+
+  <div class="warn">
+    <b>Ordering trap.</b> Config sections are loaded before the toolhead, so a
+    module can capture a reference to <code>gcode.Coord</code> before the
+    roster exists. That is why <code>Coord</code> is one class object that is
+    re-shaped in place rather than a new class that replaces it. Rebinding the
+    name leaves macros failing with <i>&ldquo;Coord object has no attribute
+    'a'&rdquo;</i>.
+  </div>
+</section>
+
+<!-- ============================ 3 ================================== -->
+<section>
+  <h2><span class="num">3</span>System architecture</h2>
+
+  <p>The fork touches the host process only. The MCU firmware, the serial
+  protocol and step compression are untouched, so one firmware serves every
+  machine and no board is reflashed when a flavour changes.</p>
+
+  <figure>
+    <svg viewBox="0 0 700 468" role="img">
+      <!-- host frame -->
+      <rect x="4" y="4" width="470" height="404" rx="4" fill="none"
+            stroke="#c3ccd1" stroke-width="1" stroke-dasharray="4 3"/>
+      <text class="xs b" x="14" y="20">KLIPPY HOST PROCESS</text>
+
+      <!-- layers -->
+      <rect class="up" x="20" y="30" width="330" height="34" rx="3"/>
+      <text class="b" x="32" y="45">G-code source</text>
+      <text class="sm" x="32" y="58">virtual_sdcard, API server, console</text>
+
+      <path class="arw" d="M 185 64 L 185 78"/>
+
+      <rect class="mod" x="20" y="80" width="330" height="42" rx="3"/>
+      <text class="b" x="32" y="96">gcode.py &middot; gcode_move.py</text>
+      <text class="sm" x="32" y="110">axis map, Coord class and every axis-naming
+      command built from the roster</text>
+
+      <path class="arw" d="M 185 122 L 185 136"/>
+
+      <rect class="mod" x="20" y="138" width="330" height="42" rx="3"/>
+      <text class="b" x="32" y="154">Move transforms</text>
+      <text class="sm" x="32" y="168">bed_mesh, bed_tilt, z_thermal_adjust,
+      exclude_object, tuning_tower</text>
+
+      <path class="arw" d="M 185 180 L 185 194"/>
+
+      <rect class="mod" x="20" y="196" width="330" height="50" rx="3"/>
+      <text class="b" x="32" y="212">toolhead.py</text>
+      <text class="sm" x="32" y="226">roster, distance groups, Move,
+      LookAheadQueue</text>
+      <text class="mono xs" x="32" y="239">get_axis_names / get_axis_count / get_extruder_index</text>
+
+      <path class="arw" d="M 185 246 L 185 260"/>
+
+      <rect class="fork" x="20" y="262" width="330" height="60" rx="3"/>
+      <text class="b" x="32" y="278">kinematics</text>
+      <text class="sm" x="32" y="292">axis_kinematics engine + flavour module</text>
+      <text class="sm" x="32" y="305">+ bed_joint_carriages, + safety checks</text>
+      <text class="mono xs" x="32" y="317">check_move() &middot; home() &middot; calc_position()</text>
+
+      <path class="arw" d="M 185 322 L 185 336"/>
+
+      <rect class="mod" x="20" y="338" width="330" height="58" rx="3"/>
+      <text class="b" x="32" y="354">chelper (C)</text>
+      <text class="sm" x="32" y="368">trapq &middot; itersolve &middot; kin_axis &middot; kin_bedjoint</text>
+      <text class="xs" x="32" y="381">struct coord is an array of KIN_AXES coordinates;</text>
+      <text class="xs" x="32" y="392">every entry point takes a count and an array</text>
+
+      <!-- side: axis_roster -->
+      <rect class="fork" x="364" y="196" width="100" height="126" rx="3"/>
+      <text class="b" x="414" y="216" text-anchor="middle">axis_roster</text>
+      <text class="xs" x="414" y="231" text-anchor="middle">bed axes</text>
+      <text class="xs" x="414" y="243" text-anchor="middle">bed steppers</text>
+      <text class="xs" x="414" y="255" text-anchor="middle">derived steppers</text>
+      <path class="ln-dash" d="M 364 262 L 352 290"/>
+      <text class="xs" x="414" y="278" text-anchor="middle">asks the</text>
+      <text class="xs" x="414" y="290" text-anchor="middle">kinematics</text>
+      <text class="xs" x="414" y="308" text-anchor="middle">used by probe,</text>
+      <text class="xs" x="414" y="318" text-anchor="middle">z_tilt, homing</text>
+
+      <!-- boundary -->
+      <path class="ln" d="M 20 412 L 700 412" stroke-dasharray="5 3"/>
+      <text class="xs b" x="20" y="426">SERIAL / CAN &mdash; unchanged protocol</text>
+
+      <rect class="up" x="20" y="432" width="660" height="32" rx="3"/>
+      <text class="b" x="32" y="447">MCU firmware</text>
+      <text class="sm" x="32" y="459">stepper queues, endstops, trsync &mdash; no fork changes, one firmware for every flavour</text>
+
+      <!-- right column: unchanged subsystems -->
+      <rect class="up" x="490" y="30" width="190" height="150" rx="3"/>
+      <text class="b" x="502" y="47">Untouched by the fork</text>
+      <text class="sm" x="502" y="65">input shaper</text>
+      <text class="sm" x="502" y="80">pressure advance</text>
+      <text class="sm" x="502" y="95">stepcompress / steppersync</text>
+      <text class="sm" x="502" y="110">serialqueue, trsync</text>
+      <text class="sm" x="502" y="125">heaters, fans, sensors</text>
+      <text class="sm" x="502" y="140">stock kinematics</text>
+      <text class="xs" x="502" y="162">these run at three axes</text>
+      <text class="xs" x="502" y="173">from the same build</text>
+    </svg>
+    <figcaption><b>Figure 3.</b> The host stack. Teal is fork-only code, amber
+    is upstream code the fork modifies, grey is upstream code left alone. The
+    modification is always the same in kind: replace a fixed axis count with a
+    question to the roster.</figcaption>
+    <div class="legend">
+      <span><i class="chip chip-fork"></i>fork-only</span>
+      <span><i class="chip chip-mod"></i>upstream, modified</span>
+      <span><i class="chip chip-up"></i>upstream, unchanged</span>
+    </div>
+  </figure>
+
+  <h3>The C boundary</h3>
+  <p>In the compiled helper a coordinate is an array of up to
+  <code>KIN_AXES</code> (8) doubles, with <code>x</code>, <code>y</code> and
+  <code>z</code> retained as names so that the stock solvers compile
+  unchanged. Every entry point that carries coordinates takes a count and an
+  array.</p>
+
+  <pre><code>struct coord { union { struct { double x, y, z; }; double axis[KIN_AXES]; }; };
+
+void   trapq_append(tq, print_time, accel_t, cruise_t, decel_t,
+                    int naxes, const double *start_pos, const double *axes_r,
+                    start_v, cruise_v, accel);
+void   trapq_set_position(tq, print_time, int naxes, const double *pos);
+void   itersolve_set_position(sk, int naxes, const double *coord);
+double itersolve_calc_position_from_coord(sk, int naxes, const double *coord);
+int    trapq_get_kin_axes(void);   /* compiled maximum, checked at startup */</code></pre>
+
+  <p><code>kin_axis.c</code> is one pass-through solver parameterised by axis
+  index, replacing five copy-pasted ones; <code>kin_bedjoint.c</code> solves
+  the derived carriages. Every other solver is upstream's.</p>
+</section>
+
+<!-- ============================ 4 ================================== -->
+<section>
+  <h2><span class="num">4</span>The life of a move</h2>
+
+  <p>One <code>G1</code> line, followed from the parser to the step queue, on
+  a <code>cartesianxy3z</code> machine.</p>
+
+  <figure>
+    <svg viewBox="0 0 700 520" role="img">
+      <text class="mono b" x="0" y="14">G1 X100 A5 B5 F3000</text>
+
+      <!-- step blocks -->
+      <g>
+        <rect class="mod" x="0" y="28" width="470" height="46" rx="3"/>
+        <circle cx="20" cy="51" r="9" fill="#0f5f6b"/>
+        <text x="20" y="55" text-anchor="middle" class="b on-dark">1</text>
+        <text class="b" x="38" y="47">gcode_move.cmd_G1</text>
+        <text class="sm" x="38" y="63">axis_map {X:0 Y:1 Z:2 A:3 B:4 E:5} built from the roster</text>
+        <text class="mono xs" x="486" y="55">last_position[0,3,4] updated</text>
+      </g>
+      <path class="arw" d="M 235 74 L 235 86"/>
+
+      <g>
+        <rect class="up" x="0" y="88" width="470" height="40" rx="3"/>
+        <circle cx="20" cy="108" r="9" fill="#0f5f6b"/>
+        <text x="20" y="112" text-anchor="middle" class="b on-dark">2</text>
+        <text class="b" x="38" y="106">move transforms</text>
+        <text class="sm" x="38" y="121">bed_mesh / bed_tilt adjust every bed axis, not just Z</text>
+        <text class="mono xs" x="486" y="112">z, a, b all shifted</text>
+      </g>
+      <path class="arw" d="M 235 128 L 235 140"/>
+
+      <g>
+        <rect class="mod" x="0" y="142" width="470" height="56" rx="3"/>
+        <circle cx="20" cy="170" r="9" fill="#0f5f6b"/>
+        <text x="20" y="174" text-anchor="middle" class="b on-dark">3</text>
+        <text class="b" x="38" y="160">toolhead.Move()</text>
+        <text class="sm" x="38" y="175">axes_d = [100, 0, 0, 5, 5, 0]</text>
+        <text class="sm" x="38" y="190">move_d = largest distance group</text>
+        <text class="mono xs" x="486" y="166">max(100, 0, 5, 5)</text>
+        <text class="mono xs b" x="486" y="180">= 100 mm</text>
+      </g>
+      <path class="arw" d="M 235 198 L 235 210"/>
+
+      <g>
+        <rect class="fork" x="0" y="212" width="470" height="56" rx="3"/>
+        <circle cx="20" cy="240" r="9" fill="#0f5f6b"/>
+        <text x="20" y="244" text-anchor="middle" class="b on-dark">4</text>
+        <text class="b" x="38" y="230">kin.check_move()</text>
+        <text class="sm" x="38" y="245">range check per axis; speed set by the slowest group;</text>
+        <text class="sm" x="38" y="260">bed geometry safety model consulted</text>
+        <text class="mono xs" x="486" y="236">XY: 100/100 = 1.00 s</text>
+        <text class="mono xs b" x="486" y="250">A : 5/8.4 = 0.60 s</text>
+        <text class="mono xs" x="486" y="264">v = 100 mm/s</text>
+      </g>
+      <path class="arw" d="M 235 268 L 235 280"/>
+
+      <g>
+        <rect class="up" x="0" y="282" width="470" height="40" rx="3"/>
+        <circle cx="20" cy="302" r="9" fill="#0f5f6b"/>
+        <text x="20" y="306" text-anchor="middle" class="b on-dark">5</text>
+        <text class="b" x="38" y="300">LookAheadQueue</text>
+        <text class="sm" x="38" y="315">junction speeds over every kinematic axis, then trapezoid</text>
+        <text class="mono xs" x="486" y="306">accel / cruise / decel</text>
+      </g>
+      <path class="arw" d="M 235 322 L 235 334"/>
+
+      <g>
+        <rect class="mod" x="0" y="336" width="470" height="52" rx="3"/>
+        <circle cx="20" cy="362" r="9" fill="#0f5f6b"/>
+        <text x="20" y="366" text-anchor="middle" class="b on-dark">6</text>
+        <text class="b" x="38" y="354">trapq_append()</text>
+        <text class="mono sm" x="38" y="370">(tq, t, at, ct, dt, naxes=5,</text>
+        <text class="mono sm" x="38" y="383"> start_pos[5], axes_r[5], sv, cv, a)</text>
+        <text class="mono xs" x="486" y="360">one motion queue</text>
+        <text class="mono xs" x="486" y="374">carries all five axes</text>
+      </g>
+      <path class="arw" d="M 235 388 L 235 400"/>
+
+      <g>
+        <rect class="fork" x="0" y="402" width="470" height="56" rx="3"/>
+        <circle cx="20" cy="430" r="9" fill="#0f5f6b"/>
+        <text x="20" y="434" text-anchor="middle" class="b on-dark">7</text>
+        <text class="b" x="38" y="420">itersolve, once per stepper</text>
+        <text class="sm" x="38" y="435">kin_axis: stepper_a reads coord.axis[3]</text>
+        <text class="sm" x="38" y="450">kin_bedjoint: stepper_u derives from z, a, b</text>
+        <text class="mono xs" x="486" y="426">a solver callback</text>
+        <text class="mono xs" x="486" y="440">per stepper, same</text>
+        <text class="mono xs" x="486" y="454">motion queue</text>
+      </g>
+      <path class="arw" d="M 235 458 L 235 470"/>
+
+      <g>
+        <rect class="up" x="0" y="472" width="470" height="40" rx="3"/>
+        <circle cx="20" cy="492" r="9" fill="#0f5f6b"/>
+        <text x="20" y="496" text-anchor="middle" class="b on-dark">8</text>
+        <text class="b" x="38" y="490">stepcompress &rarr; MCU</text>
+        <text class="sm" x="38" y="505">unchanged from upstream</text>
+        <text class="mono xs" x="486" y="496">queue_step</text>
+      </g>
+    </svg>
+    <figcaption><b>Figure 4.</b> Steps 1, 3, 4 and 7 are where the axis count
+    used to be a literal. Each is now driven by the roster, so the same path
+    serves three, five or six axes.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================ 5 ================================== -->
+<section>
+  <h2><span class="num">5</span>Move distance and speed</h2>
+
+  <p>Upstream measures a move by the euclidean distance over x, y and z, and a
+  single feed rate then applies to that distance. With three motors under one
+  bed this is the wrong measure: a pure tilt, where Z rises and A falls, has a
+  large euclidean length but each motor only travels a little, and combining
+  them into one distance makes every tilt needlessly slow.</p>
+
+  <p>A kinematics may therefore publish <code>distance_groups</code>: a list of
+  axis-index tuples. Each group contributes the euclidean norm of its own
+  axes, and the move distance is the <b>largest</b> group. Axes in different
+  groups each get the whole move time instead of sharing it.</p>
+
+  <figure>
+    <svg viewBox="0 0 700 300" role="img">
+      <text class="ttl" x="0" y="14">Move: X +100 mm, Z +5 mm, A &minus;8 mm, B +3 mm</text>
+      <text class="xs" x="0" y="30">max_velocity 100 mm/s &nbsp;&middot;&nbsp; max_z_velocity 8.4 mm/s</text>
+
+      <!-- upstream rule -->
+      <rect class="up" x="0" y="44" width="330" height="108" rx="3"/>
+      <text class="b" x="14" y="62">Upstream rule &mdash; one group</text>
+      <text class="mono sm" x="14" y="80">groups = [(x, y, z)]</text>
+      <text class="sm" x="14" y="98">A and B are not kinematic axes at all;</text>
+      <text class="sm" x="14" y="112">they would be &ldquo;extra axes&rdquo;, excluded from</text>
+      <text class="sm" x="14" y="126">the distance and forcing a full stop around</text>
+      <text class="sm" x="14" y="140">any move that only tilts the bed.</text>
+
+      <!-- fork rule -->
+      <rect class="fork" x="350" y="44" width="350" height="108" rx="3"/>
+      <text class="b" x="364" y="62">Turn rule &mdash; four groups</text>
+      <text class="mono sm" x="364" y="80">groups = [(x, y), (z,), (a,), (b,)]</text>
+      <text class="sm" x="364" y="98">Each bed motor is a first-class axis with its</text>
+      <text class="sm" x="364" y="112">own share of the move time. A tilt is planned</text>
+      <text class="sm" x="364" y="126">in the same trapezoid as the gantry, with no</text>
+      <text class="sm" x="364" y="140">stop before or after it.</text>
+
+      <!-- bars -->
+      <text class="ttl" x="0" y="180">Time each group needs</text>
+      <g>
+        <text class="mono sm" x="0" y="205">XY  100.0 mm</text>
+        <rect x="120" y="194" width="400" height="14" rx="2" fill="#0f5f6b"/>
+        <text class="xs b" x="528" y="205">1.000 s</text>
+
+        <text class="mono sm" x="0" y="227">Z     5.0 mm</text>
+        <rect x="120" y="216" width="238" height="14" rx="2" fill="#7fb3bb"/>
+        <text class="xs" x="366" y="227">0.595 s</text>
+
+        <text class="mono sm" x="0" y="249">A     8.0 mm</text>
+        <rect x="120" y="238" width="381" height="14" rx="2" fill="#7fb3bb"/>
+        <text class="xs" x="509" y="249">0.952 s</text>
+
+        <text class="mono sm" x="0" y="271">B     3.0 mm</text>
+        <rect x="120" y="260" width="143" height="14" rx="2" fill="#7fb3bb"/>
+        <text class="xs" x="271" y="271">0.357 s</text>
+      </g>
+      <path class="ln-dash" d="M 520 188 L 520 282" stroke="#0f5f6b"/>
+      <text class="xs b accent-t" x="524" y="292">move takes 1.000 s &mdash; the gantry wins here</text>
+      <text class="xs" x="0" y="292">move_d = max(100.0, 5.0, 8.0, 3.0) = 100.0 mm</text>
+    </svg>
+    <figcaption><b>Figure 5.</b> Each group is timed against its own limit and
+    the slowest one sets the duration of the whole move. Had the bed moved
+    90 mm instead of 8, the A group would have won and the gantry would have
+    been slowed to match.</figcaption>
+  </figure>
+
+  <h3>The rule in code</h3>
+  <pre><code>move_d = max over groups of  ||axes_d[group]||        # toolhead.calc_move_distance
+v      = min over groups of  max_velocity[group] * move_d / group_d
+a      = min over groups of  max_accel[group]    * move_d / group_d</code></pre>
+
+  <p>One group covering every axis reproduces upstream exactly, and is the
+  default for a kinematics that publishes nothing. That is what keeps the
+  34 upstream regression tests meaningful.</p>
+
+  <div class="note">
+    <b>Axes in no group.</b> An axis left out of every group is carried along
+    and never lengthens a move. When it is the only axis moving, the largest
+    single axis distance is the fallback, so it still moves and is still
+    limited. This is exactly what <code>motion_mode: slaved</code> does to a
+    rotary axis (section 9).
+  </div>
+</section>
+
+<!-- ============================ 6 ================================== -->
+<section>
+  <h2><span class="num">6</span>The kinematics engine</h2>
+
+  <p>There is one engine. A flavour module declares a roster and nothing
+  else; the engine builds the rails, homes them, range-checks moves and
+  applies the per-group limits.</p>
+
+  <figure>
+    <svg viewBox="0 0 700 380" role="img">
+      <!-- flavour -->
+      <rect class="fork" x="0" y="20" width="200" height="130" rx="3"/>
+      <text class="b" x="12" y="38">Flavour module</text>
+      <text class="xs" x="12" y="52">kinematics/cartesianxy3z.py</text>
+      <text class="mono xs" x="12" y="74">AXES = [</text>
+      <text class="mono xs" x="12" y="86">  AxisDef('x', PLANAR),</text>
+      <text class="mono xs" x="12" y="98">  AxisDef('y', PLANAR),</text>
+      <text class="mono xs" x="12" y="110">  AxisDef('z', VERTICAL),</text>
+      <text class="mono xs" x="12" y="122">  AxisDef('a', VERTICAL),</text>
+      <text class="mono xs" x="12" y="134">  AxisDef('b', VERTICAL)]</text>
+      <text class="xs accent-t" x="12" y="146">29 lines in total</text>
+
+      <path class="arw-a" d="M 202 85 L 246 85"/>
+
+      <!-- engine -->
+      <rect class="fork" x="248" y="20" width="230" height="230" rx="3"/>
+      <text class="b" x="260" y="38">AxisKinematics</text>
+      <text class="xs" x="260" y="52">kinematics/axis_kinematics.py</text>
+
+      <rect class="box" x="260" y="62" width="206" height="44" rx="2"/>
+      <text class="sm b" x="270" y="78">Axis[]</text>
+      <text class="xs" x="270" y="92">rail, motion group, limits, homed state</text>
+
+      <rect class="box" x="260" y="112" width="206" height="40" rx="2"/>
+      <text class="sm b" x="270" y="128">DualCarriages</text>
+      <text class="xs" x="270" y="142">optional, from [dual_carriage]</text>
+
+      <rect class="box" x="260" y="158" width="206" height="40" rx="2"/>
+      <text class="sm b" x="270" y="174">BedJointCarriages</text>
+      <text class="xs" x="270" y="188">optional, from [bed_joint_carriages]</text>
+
+      <rect class="box" x="260" y="204" width="206" height="36" rx="2"/>
+      <text class="sm b" x="270" y="220">Bed geometry safety model</text>
+      <text class="xs" x="270" y="232">on by default for these machines</text>
+
+      <path class="arw-a" d="M 480 135 L 524 135"/>
+
+      <!-- outputs -->
+      <rect class="mod" x="526" y="20" width="174" height="230" rx="3"/>
+      <text class="b" x="538" y="38">Interface to the core</text>
+      <text class="mono xs" x="538" y="60">axis_names</text>
+      <text class="mono xs" x="538" y="74">distance_groups</text>
+      <text class="mono xs" x="538" y="88">get_steppers()</text>
+      <text class="mono xs" x="538" y="102">calc_position()</text>
+      <text class="mono xs" x="538" y="116">set_position()</text>
+      <text class="mono xs" x="538" y="130">clear_homing_state()</text>
+      <text class="mono xs" x="538" y="144">home()</text>
+      <text class="mono xs" x="538" y="158">check_move()</text>
+      <text class="mono xs" x="538" y="172">get_status()</text>
+      <text class="xs b" x="538" y="196">and, for this fork:</text>
+      <text class="mono xs" x="538" y="212">get_bed_axes()</text>
+      <text class="mono xs" x="538" y="226">get_bed_steppers()</text>
+      <text class="mono xs" x="538" y="240">get_derived_steppers()</text>
+
+      <!-- motion groups table -->
+      <text class="ttl" x="0" y="282">Motion groups</text>
+      <rect class="box" x="0" y="292" width="228" height="76" rx="3"/>
+      <text class="b accent-t" x="12" y="310">PLANAR</text>
+      <text class="xs" x="12" y="326">the gantry; all planar axes share</text>
+      <text class="xs" x="12" y="338">one euclidean group</text>
+      <text class="mono xs" x="12" y="356">max_velocity / max_accel</text>
+
+      <rect class="box" x="236" y="292" width="228" height="76" rx="3"/>
+      <text class="b accent-t" x="248" y="310">VERTICAL</text>
+      <text class="xs" x="248" y="326">the bed motors; one group each,</text>
+      <text class="xs" x="248" y="338">homed together, and the bed axes</text>
+      <text class="mono xs" x="248" y="356">max_z_velocity / max_z_accel</text>
+
+      <rect class="box" x="472" y="292" width="228" height="76" rx="3"/>
+      <text class="b accent-t" x="484" y="310">ROTARY</text>
+      <text class="xs" x="484" y="326">an axis in degrees; own group,</text>
+      <text class="xs" x="484" y="338">or none when slaved</text>
+      <text class="mono xs" x="484" y="356">max_&lt;letter&gt;_velocity / _accel</text>
+    </svg>
+    <figcaption><b>Figure 6.</b> The flavour supplies a list; the engine
+    supplies the behaviour. Adding a machine does not mean subclassing an
+    existing one.</figcaption>
+  </figure>
+
+  <p>An <code>AxisDef</code> is a letter, a motion group and optionally a
+  config section name, defaulting to <code>stepper_&lt;letter&gt;</code>. An
+  axis configured without an <code>endstop_pin</code> gets a
+  <code>BareAxisRail</code>: usable over its configured range from startup and
+  skipped by <code>G28</code>.</p>
+</section>
+
+<!-- ============================ 7 ================================== -->
+<section>
+  <h2><span class="num">7</span>Homing</h2>
+
+  <p>A bed on three motors cannot be homed one motor at a time from an unknown
+  pose without tilting it hard against its joints. <code>G28</code> therefore
+  runs a coordinated approach first, and only then homes each motor precisely.</p>
+
+  <figure>
+    <svg viewBox="0 0 700 396" role="img">
+      <path class="ln" d="M 40 30 L 40 372" stroke="#c3ccd1"/>
+
+      <circle cx="40" cy="44" r="7" fill="#0f5f6b"/>
+      <rect class="mod" x="62" y="26" width="480" height="36" rx="3"/>
+      <text class="b" x="74" y="42">G28</text>
+      <text class="sm" x="74" y="56">axes to home come from the roster, not from a fixed list</text>
+
+      <circle cx="40" cy="96" r="7" fill="#0f5f6b"/>
+      <rect class="fork" x="62" y="78" width="480" height="52" rx="3"/>
+      <text class="b" x="74" y="94">Derived carriages leave the motion queue</text>
+      <text class="sm" x="74" y="108">homing_mode: detached &mdash; the forced start pose is one the rigid</text>
+      <text class="sm" x="74" y="122">plate cannot occupy, so a position derived from it is meaningless</text>
+
+      <circle cx="40" cy="164" r="7" fill="#0f5f6b"/>
+      <rect class="fork" x="62" y="140" width="480" height="66" rx="3"/>
+      <text class="b" x="74" y="156">Vertical group &mdash; coordinated fast approach</text>
+      <text class="sm" x="74" y="170">one move drives Z, A and B towards their endstops together</text>
+      <text class="sm" x="74" y="184">the move stops as soon as any endstop triggers</text>
+      <text class="sm" x="74" y="198">then all three back off 2 mm</text>
+      <text class="mono xs" x="556" y="176">15 mm/s</text>
+
+      <circle cx="40" cy="238" r="7" fill="#0f5f6b"/>
+      <rect class="fork" x="62" y="216" width="480" height="52" rx="3"/>
+      <text class="b" x="74" y="232">Vertical axes &mdash; individually, for precision</text>
+      <text class="sm" x="74" y="246">Z, then A, then B through the normal homing module,</text>
+      <text class="sm" x="74" y="260">each with its own endstop, retract and second pass</text>
+
+      <circle cx="40" cy="296" r="7" fill="#0f5f6b"/>
+      <rect class="mod" x="62" y="278" width="480" height="40" rx="3"/>
+      <text class="b" x="74" y="294">Planar axes</text>
+      <text class="sm" x="74" y="308">X then Y, dual carriage aware, with the bed already clear</text>
+
+      <circle cx="40" cy="352" r="7" fill="#0f5f6b"/>
+      <rect class="box" x="62" y="330" width="480" height="48" rx="3"/>
+      <text class="b" x="74" y="346">Anything else with an endstop</text>
+      <text class="sm" x="74" y="360">a rotary axis is homed here if it has one, and silently</text>
+      <text class="sm" x="74" y="374">skipped if it has none &mdash; it was usable from startup</text>
+
+      <rect class="fork" x="556" y="278" width="144" height="100" rx="3"/>
+      <text class="sm b" x="568" y="296">On completion</text>
+      <text class="xs" x="568" y="312">the derived carriages</text>
+      <text class="xs" x="568" y="324">rejoin the queue and are</text>
+      <text class="xs" x="568" y="336">re-derived from the true</text>
+      <text class="xs" x="568" y="348">pose &mdash; no steps are</text>
+      <text class="xs" x="568" y="360">emitted, because the</text>
+      <text class="xs" x="568" y="372">plate back-drove them</text>
+    </svg>
+    <figcaption><b>Figure 7.</b> The <code>G28</code> sequence. The coordinated
+    phase is a single <code>HomingMove</code> across all three bed endstops; if
+    it fails the individual phase still recovers.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================ 8 ================================== -->
+<section>
+  <h2><span class="num">8</span>Derived bed-joint carriages</h2>
+
+  <p>The bed is a rigid plate on three ball joints. As it tilts, the A and B
+  joints must slide horizontally, and the Z joint slides in the other
+  direction. Plate rigidity fixes those slides completely: they are
+  <b>not</b> degrees of freedom. They are modelled the way delta towers are
+  &ndash; steppers with a non-trivial position function &ndash; rather than as
+  g-code axes.</p>
+
+  <figure>
+    <svg viewBox="0 0 700 300" role="img">
+      <text class="ttl" x="0" y="14">Plan view of the bed plate</text>
+
+      <!-- plate -->
+      <path d="M 120 60 L 560 60 L 560 200 L 120 200 z" fill="#e3f0f2"
+            stroke="#0f5f6b" stroke-width="1.4"/>
+      <text class="sm" x="340" y="136" text-anchor="middle" fill="#0f5f6b">rigid bed plate</text>
+
+      <!-- joints -->
+      <circle cx="150" cy="185" r="8" fill="#fff" stroke="#17222a" stroke-width="1.4"/>
+      <text class="b" x="150" y="212" text-anchor="middle">A</text>
+      <text class="xs" x="150" y="226" text-anchor="middle">x = &minus;23</text>
+
+      <circle cx="530" cy="185" r="8" fill="#fff" stroke="#17222a" stroke-width="1.4"/>
+      <text class="b" x="530" y="212" text-anchor="middle">B</text>
+      <text class="xs" x="530" y="226" text-anchor="middle">x = +623</text>
+
+      <circle cx="340" cy="78" r="8" fill="#fff" stroke="#17222a" stroke-width="1.4"/>
+      <text class="b" x="340" y="52" text-anchor="middle">Z</text>
+      <text class="xs" x="340" y="38" text-anchor="middle">opposite edge</text>
+
+      <!-- slide arrows -->
+      <path class="arw-a" d="M 122 165 L 178 165"/>
+      <path class="arw-a" d="M 178 165 L 122 165"/>
+      <text class="xs b accent-t" x="150" y="156" text-anchor="middle">U slide (X)</text>
+
+      <path class="arw-a" d="M 502 165 L 558 165"/>
+      <path class="arw-a" d="M 558 165 L 502 165"/>
+      <text class="xs b accent-t" x="530" y="156" text-anchor="middle">V slide (X)</text>
+
+      <path class="arw" d="M 370 60 L 370 104"/>
+      <path class="arw" d="M 370 104 L 370 60"/>
+      <text class="xs" x="382" y="86">free Y slide</text>
+
+      <!-- d_x -->
+      <path class="ln-dash" d="M 150 250 L 530 250"/>
+      <path class="ln" d="M 150 245 L 150 255"/>
+      <path class="ln" d="M 530 245 L 530 255"/>
+      <text class="xs" x="340" y="244" text-anchor="middle">d_x = 646 mm (A to B joint spacing)</text>
+
+      <!-- vertical actuators note -->
+      <rect class="box" x="590" y="60" width="110" height="140" rx="3"/>
+      <text class="sm b" x="600" y="78">Commanded</text>
+      <text class="mono xs" x="600" y="96">Z  height</text>
+      <text class="mono xs" x="600" y="110">A  height</text>
+      <text class="mono xs" x="600" y="124">B  height</text>
+      <text class="sm b" x="600" y="150">Derived</text>
+      <text class="mono xs" x="600" y="168">U  slide</text>
+      <text class="mono xs" x="600" y="182">V  slide</text>
+      <text class="xs" x="600" y="196">never commanded</text>
+
+      <text class="xs" x="0" y="278">Zero slide is the level-bed home position. Both carriages read 0 with the bed level.</text>
+    </svg>
+    <figcaption><b>Figure 8.</b> Three commanded heights determine two
+    horizontal slides. Geometry shown for the reference machine.</figcaption>
+  </figure>
+
+  <h3>The solve</h3>
+  <p>Writing the A&ndash;B rigid link constraint and eliminating the Z joint's
+  free slide gives a closed form. It is implemented in
+  <code>klippy/chelper/kin_bedjoint.c</code> and verified against an
+  independent reference implementation to about 1e&minus;13 mm across the whole
+  reachable envelope.</p>
+
+  <pre><code>z_mz = Z - (A + B) / 2                 pitch variable
+z_ab = B - A                           roll variable
+csx  = sqrt(d_x^2 - z_ab^2)            projected A-B separation
+U    = mid_x + z_mz*z_ab/csx - csx/2   A joint world X
+V    = mid_x + z_mz*z_ab/csx + csx/2   B joint world X</code></pre>
+
+  <p>Because the position is recomputed from whatever the bed axes actually
+  are, the carriages follow every bed transform &ndash; z_tilt,
+  <code>SET_GCODE_OFFSET</code>, bed mesh, probe lifts &ndash; with no code of
+  their own, and homing them is unnecessary. The G-code is unchanged: there is
+  no U or V word, and the same file runs with or without the carriages
+  fitted.</p>
+
+  <h3>Why the travel check is sampled</h3>
+  <p>U is nonlinear in the bed pose. A move whose two endpoints are both
+  within the rail can still take a carriage outside it partway through, and
+  the peak rate at the end of a long roll sweep is about twice the average
+  across the move.</p>
+
+  <figure>
+    <svg viewBox="0 0 700 300" role="img">
+      <text class="ttl" x="0" y="14">Carriage U during one roll sweep: A 20&rarr;180, B 180&rarr;20</text>
+
+      <!-- axes -->
+      <path class="ln" d="M 80 250 L 660 250"/>
+      <path class="ln" d="M 80 60 L 80 250"/>
+      <text class="xs" x="80" y="266" text-anchor="middle">0.0</text>
+      <text class="xs" x="360" y="266" text-anchor="middle">0.5</text>
+      <text class="xs" x="640" y="266" text-anchor="middle">1.0</text>
+      <text class="xs" x="360" y="282" text-anchor="middle">move parameter s</text>
+      <text class="xs" x="72" y="254" text-anchor="end">0</text>
+      <text class="xs" x="72" y="170" text-anchor="end">5</text>
+      <text class="xs" x="72" y="87" text-anchor="end">10</text>
+      <text class="xs" x="20" y="60">U (mm)</text>
+
+      <!-- limit -->
+      <path class="ln-dash" d="M 80 166.7 L 660 166.7" stroke="#b3762a" stroke-width="1.3"/>
+      <text class="xs b" x="88" y="182" fill="#b3762a">position_min = 5 mm</text>
+
+      <!-- forbidden band -->
+      <rect x="80" y="166.7" width="580" height="83.3" fill="#b3762a" opacity="0.07"/>
+      <text class="xs" x="612" y="200" text-anchor="middle" fill="#8a5a1d">below the</text>
+      <text class="xs" x="612" y="212" text-anchor="middle" fill="#8a5a1d">rail limit</text>
+
+      <!-- curve -->
+      <polyline class="ln" stroke="#0f5f6b" stroke-width="2" fill="none"
+        points="80.0,82.3 89.3,93.4 98.7,104.2 108.0,114.5 117.3,124.5 126.7,134.1 136.0,143.3 145.3,152.1 154.7,160.5 164.0,168.5 173.3,176.1 182.7,183.4 192.0,190.2 201.3,196.7 210.7,202.8 220.0,208.6 229.3,213.9 238.7,218.9 248.0,223.5 257.3,227.8 266.7,231.6 276.0,235.1 285.3,238.2 294.7,241.0 304.0,243.4 313.3,245.4 322.7,247.1 332.0,248.3 341.3,249.3 350.7,249.8 360.0,250.0 369.3,249.8 378.7,249.3 388.0,248.3 397.3,247.1 406.7,245.4 416.0,243.4 425.3,241.0 434.7,238.2 444.0,235.1 453.3,231.6 462.7,227.8 472.0,223.5 481.3,218.9 490.7,213.9 500.0,208.6 509.3,202.8 518.7,196.7 528.0,190.2 537.3,183.4 546.7,176.1 556.0,168.5 565.3,160.5 574.7,152.1 584.0,143.3 593.3,134.1 602.7,124.5 612.0,114.5 621.3,104.2 630.7,93.4 640.0,82.3"/>
+
+      <!-- sampled points -->
+      <g fill="#0f5f6b">
+        <circle cx="115.0" cy="122.1" r="2.6"/><circle cx="150.0" cy="156.3" r="2.6"/>
+        <circle cx="185.0" cy="185.1" r="2.6"/><circle cx="220.0" cy="208.6" r="2.6"/>
+        <circle cx="255.0" cy="226.7" r="2.6"/><circle cx="290.0" cy="239.7" r="2.6"/>
+        <circle cx="325.0" cy="247.4" r="2.6"/><circle cx="360.0" cy="250.0" r="3.4"/>
+        <circle cx="395.0" cy="247.4" r="2.6"/><circle cx="430.0" cy="239.7" r="2.6"/>
+        <circle cx="465.0" cy="226.7" r="2.6"/><circle cx="500.0" cy="208.6" r="2.6"/>
+        <circle cx="535.0" cy="185.1" r="2.6"/><circle cx="570.0" cy="156.3" r="2.6"/>
+        <circle cx="605.0" cy="122.1" r="2.6"/>
+      </g>
+
+      <!-- endpoints -->
+      <circle cx="80" cy="82.3" r="5" fill="#fff" stroke="#b3762a" stroke-width="2"/>
+      <circle cx="640" cy="82.3" r="5" fill="#fff" stroke="#b3762a" stroke-width="2"/>
+      <text class="xs b" x="94" y="78" fill="#8a5a1d">endpoints: 10.06 mm &mdash; both inside the rail</text>
+
+      <!-- callout into the empty middle of the curve -->
+      <path class="ln-dash" d="M 360 128 L 360 244" stroke="#0f5f6b"/>
+      <text class="xs b accent-t" x="360" y="110" text-anchor="middle">sampled: 0.00 mm at mid-move</text>
+      <text class="xs b accent-t" x="360" y="122" text-anchor="middle">&mdash; move rejected</text>
+    </svg>
+    <figcaption><b>Figure 9.</b> <code>travel_check: endpoints</code> sees only
+    the two hollow markers and passes this move.
+    <code>travel_check: sampled</code> walks the path and rejects it. The
+    sample count scales with how far the bed pose actually travels, so an
+    ordinary small adjustment still costs two evaluations.</figcaption>
+  </figure>
+
+  <div class="warn">
+    <b>Why the limits are mandatory.</b> The carriages have no endstop and no
+    encoder. <code>position_min</code> and <code>position_max</code> on each
+    stepper section are the only thing standing between a commanded bed pose
+    and a ball joint being driven off the end of its rail by the full-power
+    bed actuators. They are required on purpose.
+  </div>
+</section>
+
+<!-- ============================ 9 ================================== -->
+<section>
+  <h2><span class="num">9</span>The rotary axis</h2>
+
+  <p><code>cartesianxy3zr</code> adds an axis commanded in degrees and planned
+  in the same trapezoid as the linear axes. Degrees come from the config, not
+  from code: <code>rotation_distance: 360</code> with a <code>gear_ratio</code>
+  makes one G-code unit one degree.</p>
+
+  <p>It is a first-class kinematic axis rather than an upstream &ldquo;extra
+  axis&rdquo;, because extra axes are excluded from the move distance, cannot
+  be homed by <code>G28</code>, and force a full stop around a move that only
+  rotates.</p>
+
+  <h3>Two configurable choices</h3>
+  <table>
+    <tr><th style="width:26%">Option</th><th style="width:22%">Values</th><th>Effect</th></tr>
+    <tr>
+      <td><code>endstop_pin</code><br><span class="mono" style="font-size:8pt">[stepper_r]</span></td>
+      <td>present<br>absent</td>
+      <td><b>Present:</b> <code>G28</code> homes R like any other axis, with
+      <code>position_endstop</code>, <code>homing_speed</code> and the rest.<br>
+      <b>Absent:</b> R has no home reference. It is usable over its configured
+      range from startup, <code>G28</code> skips it, and
+      <code>SET_KINEMATIC_POSITION R=&lt;angle&gt;</code> redefines its zero.</td>
+    </tr>
+    <tr>
+      <td><code>motion_mode</code><br><span class="mono" style="font-size:8pt">[stepper_r]</span></td>
+      <td>coordinated<br>slaved</td>
+      <td><b>coordinated</b> (default): R has its own share of the move time,
+      so a combined move is as slow as its slowest part.<br>
+      <b>slaved:</b> the linear axes carry R along and it never lengthens a
+      combined move. R moving on its own still works, and is still held to its
+      own limits in both modes.</td>
+    </tr>
+  </table>
+
+  <figure>
+    <svg viewBox="0 0 700 250" role="img">
+      <text class="ttl" x="0" y="14">G1 X100 R180 F6000</text>
+      <text class="xs" x="0" y="30">max_velocity 100 mm/s &nbsp;&middot;&nbsp; max_r_velocity 90 deg/s</text>
+
+      <!-- coordinated -->
+      <rect class="fork" x="0" y="44" width="340" height="88" rx="3"/>
+      <text class="b" x="14" y="62">motion_mode: coordinated</text>
+      <text class="mono sm" x="14" y="80">groups = [(x,y), (z,), (a,), (b,), (r,)]</text>
+      <text class="sm" x="14" y="98">R needs 180/90 = 2.0 s; XY needs 1.0 s.</text>
+      <text class="sm" x="14" y="114">The move takes 2.0 s &mdash; R sets the pace</text>
+      <text class="sm" x="14" y="128">and the gantry is slowed to 50 mm/s.</text>
+
+      <!-- slaved -->
+      <rect class="mod" x="360" y="44" width="340" height="88" rx="3"/>
+      <text class="b" x="374" y="62">motion_mode: slaved</text>
+      <text class="mono sm" x="374" y="80">groups = [(x,y), (z,), (a,), (b,)]</text>
+      <text class="sm" x="374" y="98">R is in no group. The move takes 1.0 s,</text>
+      <text class="sm" x="374" y="114">the gantry runs at full speed, and R turns</text>
+      <text class="sm" x="374" y="128">at 180 deg/s &mdash; above its own limit.</text>
+
+      <!-- bars -->
+      <text class="sm b" x="0" y="164">coordinated</text>
+      <rect x="110" y="152" width="460" height="16" rx="2" fill="#0f5f6b"/>
+      <text class="xs b" x="578" y="164">2.00 s</text>
+      <text class="xs on-dark" x="120" y="164">XY 100 mm at 50 mm/s &nbsp;|&nbsp; R 180 deg at 90 deg/s</text>
+
+      <text class="sm b" x="0" y="196">slaved</text>
+      <rect x="110" y="184" width="230" height="16" rx="2" fill="#b3762a"/>
+      <text class="xs b" x="348" y="196">1.00 s</text>
+      <text class="xs on-dark" x="120" y="196">XY 100 mm at 100 mm/s &nbsp;|&nbsp; R 180 deg/s</text>
+
+      <path class="ln-dash" d="M 110 146 L 110 206"/>
+      <path class="ln-dash" d="M 570 146 L 570 206"/>
+
+      <rect class="box" x="0" y="216" width="700" height="32" rx="3"/>
+      <text class="xs" x="12" y="236">A solo <tspan class="mono">G1 R90</tspan> works in both modes: with R in no group the move distance falls back to the largest single axis distance, and its own limits then apply.</text>
+    </svg>
+    <figcaption><b>Figure 10.</b> The trade-off is explicit. Slaved motion
+    keeps the linear path at full speed and lets the rotary rate follow it;
+    coordinated motion keeps the rotary inside its limit and slows the path to
+    match.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================ 10 ================================= -->
+<section>
+  <h2><span class="num">10</span>Bed queries</h2>
+
+  <p>Probing and bed levelling are full of the assumption that the bed is the
+  Z axis. In the previous fork that assumption had been rewritten as
+  &ldquo;axes 2, 3 and 4&rdquo; in seven separate modules. Each copy was a
+  place for the next machine to break.</p>
+
+  <figure>
+    <svg viewBox="0 0 700 320" role="img">
+      <!-- callers -->
+      <g>
+        <rect class="mod" x="0" y="20" width="176" height="26" rx="2"/>
+        <text class="sm" x="12" y="37">probe.py</text>
+        <rect class="mod" x="0" y="52" width="176" height="26" rx="2"/>
+        <text class="sm" x="12" y="69">load_cell_probe.py</text>
+        <rect class="mod" x="0" y="84" width="176" height="26" rx="2"/>
+        <text class="sm" x="12" y="101">z_tilt.py</text>
+        <rect class="mod" x="0" y="116" width="176" height="26" rx="2"/>
+        <text class="sm" x="12" y="133">bed_mesh.py</text>
+        <rect class="mod" x="0" y="148" width="176" height="26" rx="2"/>
+        <text class="sm" x="12" y="165">bed_tilt.py</text>
+        <rect class="mod" x="0" y="180" width="176" height="26" rx="2"/>
+        <text class="sm" x="12" y="197">z_thermal_adjust.py</text>
+        <rect class="mod" x="0" y="212" width="176" height="26" rx="2"/>
+        <text class="sm" x="12" y="229">safe_z_home.py</text>
+        <rect class="mod" x="0" y="244" width="176" height="26" rx="2"/>
+        <text class="sm" x="12" y="261">homing.py</text>
+      </g>
+
+      <path class="arw" d="M 178 33 L 254 130"/>
+      <path class="arw" d="M 178 65 L 254 134"/>
+      <path class="arw" d="M 178 97 L 254 138"/>
+      <path class="arw" d="M 178 129 L 254 142"/>
+      <path class="arw" d="M 178 161 L 254 150"/>
+      <path class="arw" d="M 178 193 L 254 154"/>
+      <path class="arw" d="M 178 225 L 254 158"/>
+      <path class="arw" d="M 178 257 L 254 162"/>
+
+      <rect class="fork" x="256" y="100" width="182" height="96" rx="3"/>
+      <text class="b" x="347" y="122" text-anchor="middle">axis_roster.py</text>
+      <text class="mono xs" x="268" y="142">get_bed_axes()</text>
+      <text class="mono xs" x="268" y="156">get_bed_steppers()</text>
+      <text class="mono xs" x="268" y="170">get_derived_steppers()</text>
+      <text class="mono xs" x="268" y="184">bed_delta_position()</text>
+
+      <path class="arw-a" d="M 440 148 L 500 148"/>
+
+      <rect class="fork" x="502" y="86" width="198" height="60" rx="3"/>
+      <text class="b" x="514" y="104">The kinematics</text>
+      <text class="xs" x="514" y="120">answers if it can:</text>
+      <text class="mono xs" x="514" y="136">get_bed_axes() -&gt; [2, 3, 4]</text>
+
+      <rect class="up" x="502" y="156" width="198" height="60" rx="3"/>
+      <text class="b" x="514" y="174">Otherwise the default</text>
+      <text class="xs" x="514" y="190">the z axis alone, which is</text>
+      <text class="xs" x="514" y="204">exactly upstream behaviour</text>
+
+      <rect class="box" x="0" y="286" width="700" height="28" rx="3"/>
+      <text class="xs" x="12" y="304">Derived steppers are excluded from the bed stepper set, so z_tilt and probing never mistake a bed-joint carriage for a bed motor.</text>
+    </svg>
+    <figcaption><b>Figure 11.</b> Seven modules, one question, one answer.
+    A kinematics that says nothing gets the Z axis, so a stock printer keeps
+    upstream behaviour without a special case.</figcaption>
+  </figure>
+
+  <p>The same helper provides the two position utilities these modules need:
+  <code>bed_delta_position()</code> shifts every bed axis by a delta, and
+  <code>bed_target_position()</code> moves the bed to an absolute height while
+  carrying the other motors by the same amount &ndash; which is what preserves
+  a <code>Z_TILT_ADJUST</code> correction across a probe lift.</p>
+</section>
+
+<!-- ============================ 11 ================================= -->
+<section>
+  <h2><span class="num">11</span>Configuration</h2>
+
+  <h3>Choosing a flavour</h3>
+  <table>
+    <tr><th style="width:30%">Machine</th><th style="width:30%">kinematics</th><th>Extra sections</th></tr>
+    <tr><td>Gantry over a three-motor bed</td><td><code>cartesianxy3z</code></td><td>&mdash;</td></tr>
+    <tr><td>&hellip; with the bed-joint carriages</td><td><code>cartesianxy3z</code></td><td><code>[bed_joint_carriages]</code>, <code>[stepper_u]</code>, <code>[stepper_v]</code></td></tr>
+    <tr><td>&hellip; with a rotary axis</td><td><code>cartesianxy3zr</code></td><td><code>[stepper_r]</code></td></tr>
+    <tr><td>&hellip; with both</td><td><code>cartesianxy3zr</code></td><td>all of the above</td></tr>
+    <tr><td>Any stock printer</td><td><code>cartesian</code>, <code>corexy</code>, &hellip;</td><td>&mdash; nothing in this document applies</td></tr>
+  </table>
+
+  <h3>Baseline</h3>
+  <pre><code>[printer]
+kinematics: cartesianxy3z
+max_velocity: 100
+max_accel: 3000
+max_z_velocity: 8.4        # shared by Z, A and B
+max_z_accel: 300
+
+[stepper_x]                # and stepper_y, stepper_z, stepper_a, stepper_b
+...</code></pre>
+
+  <p><code>max_z_velocity</code> and <code>max_z_accel</code> live on
+  <code>[printer]</code> in this fork, not on a kinematics section, and apply
+  to every vertical axis. <code>[dual_carriage]</code> works as upstream, on X
+  or Y.</p>
+
+  <h3>Rotary axis</h3>
+  <pre><code>[printer]
+kinematics: cartesianxy3zr
+max_r_velocity: 90         # degrees/s   - the option name follows the letter
+max_r_accel: 800           # degrees/s^2
+
+[stepper_r]
+step_pin: PXX
+dir_pin: !PXX
+enable_pin: !PXX
+microsteps: 16
+rotation_distance: 360     # with gear_ratio, one G-code unit = one degree
+gear_ratio: 6:1
+position_min: -100000
+position_max: 100000
+motion_mode: coordinated   # or slaved
+#endstop_pin: ^PXX         # add to make G28 home it</code></pre>
+
+  <h3>Derived bed-joint carriages</h3>
+  <pre><code>[bed_joint_carriages]
+a_joint_home_x: -23        # world X of each ball joint with the bed level
+b_joint_home_x: 623
+travel_check: sampled      # or endpoints
+homing_mode: detached      # or attached
+#max_velocity: 8.4         # defaults to max_z_velocity
+#max_accel: 300            # defaults to max_z_accel
+#carriages: stepper_u, stepper_v
+
+[stepper_u]                # and stepper_v
+step_pin: PXX
+dir_pin: !PXX
+enable_pin: !PXX
+microsteps: 16
+rotation_distance: 5
+position_min: -120         # REQUIRED - the only guard on the rail
+position_max: 120</code></pre>
+
+  <table>
+    <tr><th style="width:22%">Option</th><th style="width:24%">Values</th><th>Effect</th></tr>
+    <tr>
+      <td><code>travel_check</code></td>
+      <td><b>sampled</b> (default)<br>endpoints</td>
+      <td>Sampled walks the carriage path along the move, catching an interior
+      rail overrun and the true peak rate. Endpoints evaluates only the two
+      ends, which is cheaper and matches the first implementation.</td>
+    </tr>
+    <tr>
+      <td><code>homing_mode</code></td>
+      <td><b>detached</b> (default)<br>attached</td>
+      <td>Detached takes the carriages off the motion queue while the bed
+      homes; the plate back-drives them and they are re-derived afterwards
+      without emitting steps. Attached leaves them on the queue, following the
+      commanded pose through the homing moves.</td>
+    </tr>
+  </table>
+
+  <h3>Bed geometry safety checks</h3>
+  <p>Both flavours run a bed-joint clearance model that rejects a move which
+  would collide the extruder with the bed frame. It is <b>on by default</b>;
+  no config section is required. Add <code>[CartesianXY3ZSafety]</code> to
+  override the geometry or to switch the checks off with
+  <code>disable_safety_checks: True</code>. It provides
+  <code>CHECK_CARTESIANXY3Z_SAFETY</code> and <code>PREVIEW_MOVE</code>. The
+  checks are suspended during homing and probing, because the end position of
+  such a move is a travel limit rather than a point the bed will reach.</p>
+
+  <h4>Worked examples in the repository</h4>
+  <ul>
+    <li><code>config/example-cartesianxy3z-full.cfg</code> &ndash; the baseline machine</li>
+    <li><code>config/example-Turn-V2.cfg</code> &ndash; the production machine</li>
+    <li><code>config/example-cartesianxy3zr.cfg</code> &ndash; the rotary axis</li>
+    <li><code>config/example-bed-joint-carriages.cfg</code> &ndash; the derived carriages</li>
+    <li><code>sim/printer.sim.rotary.cfg</code>, <code>sim/printer.sim.uvderived.cfg</code>
+    &ndash; simulation profiles, written as thin overlays that include the baseline</li>
+  </ul>
+</section>
+
+<!-- ============================ 12 ================================= -->
+<section>
+  <h2><span class="num">12</span>What changes for the operator</h2>
+
+  <table>
+    <tr><th style="width:26%">Area</th><th>Difference from upstream</th></tr>
+    <tr><td><code>G1</code>, <code>G92</code>, <code>G2</code>/<code>G3</code>,
+        <code>SET_GCODE_OFFSET</code></td>
+        <td>Accept a word per kinematic axis: <code>G1 X10 Y10 Z5 A5 B5</code>,
+        and <code>R45</code> on the rotary flavour. Arc moves interpolate every
+        kinematic axis outside the arc plane.</td></tr>
+    <tr><td><code>M114</code>, <code>GET_POSITION</code></td>
+        <td>Report every axis in the roster.</td></tr>
+    <tr><td><code>SET_VELOCITY_LIMIT</code></td>
+        <td>Adds <code>Z_VELOCITY=</code> and <code>Z_ACCEL=</code> for the
+        shared vertical limits.</td></tr>
+    <tr><td><code>SET_KINEMATIC_POSITION</code></td>
+        <td>Takes a parameter per axis; <code>SET_HOMED</code> and
+        <code>CLEAR_HOMED</code> follow the roster.</td></tr>
+    <tr><td><code>G28</code></td>
+        <td>Bed axes first, coordinated then individually; then X and Y; then
+        anything else with an endstop.</td></tr>
+    <tr><td><code>Z_TILT_ADJUST</code></td>
+        <td>Corrects the three bed motors in one coordinated move, then applies
+        session g-code offsets so they all report the same coordinate. The
+        offsets reset on the next <code>G28</code>.</td></tr>
+    <tr><td>Probing</td>
+        <td>Lifts and descents move every bed motor by the same delta, so a
+        tilt correction survives them. <code>probe_travel_limit</code>
+        (default <code>max(-1.5, position_min)</code>) bounds a descent.</td></tr>
+    <tr><td>Extrusion</td>
+        <td><code>max_extrude_cross_section</code> is <b>not enforced</b>, only
+        logged: the move distance includes bed travel, so the ratio is not a
+        meaningful measure on this machine.</td></tr>
+    <tr><td>Status</td>
+        <td><code>toolhead.position</code>, <code>axis_minimum</code> and
+        <code>axis_maximum</code> carry every axis; <code>homed_axes</code>
+        uses the roster letters. With the carriages fitted,
+        <code>bed_joint_carriages</code> reports their positions.</td></tr>
+  </table>
+
+  <div class="note">
+    <b>Macros.</b> <code>printer.toolhead.position.a</code> and
+    <code>axis_maximum.b</code> work because the <code>Coord</code> class
+    carries one attribute per roster letter. On a stock three axis printer
+    those attributes simply do not exist, which is the correct answer rather
+    than a silent zero.
+  </div>
+</section>
+
+<!-- ============================ 13 ================================= -->
+<section>
+  <h2><span class="num">13</span>Verification</h2>
+
+  <p>Everything runs in Docker; no toolchain is needed on the host. The four
+  gates answer four different questions.</p>
+
+  <figure>
+    <svg viewBox="0 0 700 330" role="img">
+      <rect class="up" x="0" y="20" width="700" height="66" rx="3"/>
+      <text class="b" x="14" y="40">1 &nbsp; Upstream regression suite &mdash; 34 tests</text>
+      <text class="sm" x="14" y="58">Every stock config, every stock kinematics, running through the fork's motion core at three axes.</text>
+      <text class="xs b accent-t" x="14" y="76">Proves: the generalisation did not change upstream behaviour.</text>
+
+      <path class="arw" d="M 350 86 L 350 98"/>
+
+      <rect class="fork" x="0" y="100" width="700" height="80" rx="3"/>
+      <text class="b" x="14" y="120">2 &nbsp; sim/verify-axes.sh &mdash; one build, three profiles</text>
+      <text class="sm" x="14" y="138">Unit tests: test_axis_motion (roster, groups, limits, rotary modes, carriage range),</text>
+      <text class="sm" x="14" y="152">test_bed_transforms (the bed-adjusting transforms), test_uv_derived (C solver vs reference).</text>
+      <text class="sm" x="14" y="166">Then klippy in batch mode on the baseline, derived-carriage and rotary profiles.</text>
+      <text class="xs b accent-t" x="430" y="120">Proves: every flavour boots and moves from one build.</text>
+
+      <path class="arw" d="M 350 180 L 350 192"/>
+
+      <rect class="mod" x="0" y="194" width="700" height="66" rx="3"/>
+      <text class="b" x="14" y="214">3 &nbsp; Differential motion check</text>
+      <text class="sm" x="14" y="232">Two trees, the same g-code, [move_capture] on both, diffed with sim/compare_moves.py.</text>
+      <text class="xs b accent-t" x="14" y="250">Proves: the refactor changed no motion. 830 of 830 moves identical, to the last digit.</text>
+
+      <path class="arw" d="M 350 260 L 350 272"/>
+
+      <rect class="box" x="0" y="274" width="700" height="56" rx="3"/>
+      <text class="b" x="14" y="294">4 &nbsp; On the machine</text>
+      <text class="sm" x="14" y="312">G28, PROBE_ACCURACY, two consecutive Z_TILT_ADJUST (they should converge), a short print.</text>
+      <text class="xs b" x="14" y="326" fill="#8a5a1d">The only gate software cannot close.</text>
+    </svg>
+    <figcaption><b>Figure 12.</b> The verification ladder. Gates 1 to 3 run
+    unattended in a container; gate 4 needs the machine.</figcaption>
+  </figure>
+
+  <h3>Current results</h3>
+  <table>
+    <tr><th style="width:52%">Gate</th><th>Result</th></tr>
+    <tr><td>Upstream regression suite</td><td>34 of 34 pass</td></tr>
+    <tr><td>Demo print, move by move against master</td><td>830 of 830 identical; zero position, extrusion or velocity differences</td></tr>
+    <tr><td>Bed pose smoke file against master</td><td>29 of 29 identical</td></tr>
+    <tr><td>Three profiles from one build</td><td>all boot, home and move</td></tr>
+    <tr><td>Whitespace and style check</td><td>clean</td></tr>
+    <tr><td>On the machine</td><td>not yet run</td></tr>
+  </table>
+
+  <p>The unit tests also run standalone with plain Python and no compiler,
+  which makes them usable on a developer machine without Docker:</p>
+  <pre><code>python test/test_axis_motion.py
+python test/test_bed_transforms.py
+python test/test_uv_derived.py</code></pre>
+</section>
+
+<!-- ============================ 14 ================================= -->
+<section>
+  <h2><span class="num">14</span>Extending and maintaining</h2>
+
+  <h3>Adding a machine flavour</h3>
+  <ol>
+    <li>Add a module in <code>klippy/kinematics/</code> with an
+    <code>AXES</code> list and a <code>load_kinematics</code> that calls
+    <code>AxisKinematics</code>. Do not subclass an existing flavour.</li>
+    <li>Add a simulation profile in <code>sim/</code> as a thin overlay that
+    includes <code>printer.sim.cfg</code> and overrides only what differs.</li>
+    <li>Add a line to <code>sim/verify-axes.sh</code> so the gate covers it.</li>
+    <li>Add a worked example in <code>config/</code>.</li>
+  </ol>
+
+  <h3>Adding a derived stepper</h3>
+  <ol>
+    <li>Write a C solver in <code>klippy/chelper/</code> that reads the axes it
+    depends on from <code>move_get_coord()</code>, and register it in
+    <code>chelper/__init__.py</code>.</li>
+    <li>Add a feature module shaped like
+    <code>bed_joint_carriages.py</code>: allocate the steppers, re-derive them
+    in <code>set_position</code>, range-check and rate-limit them in
+    <code>check_move</code>, and report them through
+    <code>get_derived_steppers()</code> so that probing and levelling ignore
+    them.</li>
+  </ol>
+
+  <h3>Surviving the next upstream rebase</h3>
+  <p><code>FORK_CHANGES.md</code> carries the full checklist. The substance of
+  it is four greps and one rule.</p>
+
+  <table>
+    <tr><th style="width:44%">Upstream pattern</th><th>Fork equivalent</th></tr>
+    <tr><td><code>pos[:3]</code>, <code>pos[3:]</code>, <code>range(3)</code></td>
+        <td><code>[:naxes]</code>, <code>[naxes:]</code>, <code>range(naxes)</code></td></tr>
+    <tr><td><code>"xyz"</code>, <code>'XYZ'</code>, <code>'XYZE'</code></td>
+        <td><code>toolhead.get_axis_names()</code> (plus <code>'E'</code>)</td></tr>
+    <tr><td>extruder index <code>3</code></td>
+        <td><code>toolhead.get_extruder_index()</code></td></tr>
+    <tr><td>&ldquo;the Z axis carries the bed&rdquo;</td>
+        <td><code>axis_roster.get_bed_axes(printer)</code></td></tr>
+    <tr><td>&ldquo;these are the Z steppers&rdquo;</td>
+        <td><code>axis_roster.get_bed_steppers(printer)</code></td></tr>
+    <tr><td>coordinate-carrying C calls</td>
+        <td>a count and an array</td></tr>
+  </table>
+
+  <div class="note">
+    <b>The rule.</b> Never write a literal kinematic axis index. If a new
+    upstream module indexes a position, decide whether it means the kinematic
+    axes &ndash; then convert it &ndash; or something else, and leave it alone.
+    A new upstream kinematics needs no work at all: it simply runs at three
+    axes.
+  </div>
+
+  <h3>Where things live</h3>
+  <table>
+    <tr><th style="width:44%">Path</th><th>Role</th></tr>
+    <tr><td><code>klippy/axis_roster.py</code></td><td>fork-only &mdash; the roster and bed queries</td></tr>
+    <tr><td><code>klippy/kinematics/axis_kinematics.py</code></td><td>fork-only &mdash; the engine</td></tr>
+    <tr><td><code>klippy/kinematics/cartesianxy3z.py</code></td><td>fork-only &mdash; flavour</td></tr>
+    <tr><td><code>klippy/kinematics/cartesianxy3zr.py</code></td><td>fork-only &mdash; flavour</td></tr>
+    <tr><td><code>klippy/kinematics/bed_joint_carriages.py</code></td><td>fork-only &mdash; derived carriages</td></tr>
+    <tr><td><code>klippy/kinematics/cartesianxy3z_safety.py</code></td><td>fork-only &mdash; bed clearance model</td></tr>
+    <tr><td><code>klippy/chelper/kin_axis.c</code></td><td>fork-only &mdash; pass-through solver</td></tr>
+    <tr><td><code>klippy/chelper/kin_bedjoint.c</code></td><td>fork-only &mdash; carriage solver</td></tr>
+    <tr><td><code>klippy/toolhead.py</code>, <code>gcode.py</code>, <code>gcode_move.py</code>, <code>stepper.py</code>, <code>extras/homing.py</code></td><td>upstream, modified for the roster</td></tr>
+    <tr><td><code>docs/Turn_Kinematics.md</code></td><td>this document, as text</td></tr>
+    <tr><td><code>FORK_CHANGES.md</code></td><td>the file-by-file maintenance ledger</td></tr>
+  </table>
+</section>
+
+</body>
+</html>

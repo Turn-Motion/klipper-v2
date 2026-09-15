@@ -14,7 +14,10 @@ or moved. It is written for both humans and coding agents.
 
 For the architecture - how the axis roster works, what the kinematics
 engine does, and how to configure each machine - see
-[docs/Turn_Kinematics.md](docs/Turn_Kinematics.md).
+[docs/Turn_Kinematics.md](docs/Turn_Kinematics.md), or the illustrated
+version in [docs/Turn_Kinematics_Architecture.pdf](docs/Turn_Kinematics_Architecture.pdf)
+(rebuild it with `docs/build-architecture-pdf.sh` after editing the HTML
+source beside it).
 
 ## 1. Branch and update strategy
 
@@ -177,6 +180,7 @@ roster and nothing else; everything else is shared.
 | `klippy/kinematics/cartesianxy3z_safety.py` | Bed joint geometry checks (`[CartesianXY3ZSafety]` section, `CHECK_CARTESIANXY3Z_SAFETY`, `PREVIEW_MOVE`).  Pure fork code.  It is specific to the three-vertical-axis bed and indexes z, a and b at 2, 3 and 4, which holds for every flavour that enables it. |
 | `config/example-Turn-V2.cfg`, `config/example-cartesianxy3z-full.cfg`, `config/example-cartesianxy3zr.cfg`, `config/example-bed-joint-carriages.cfg`, `printer.cfg` | machine configs |
 | `docs/Turn_Kinematics.md` | **fork-only** architecture and configuration guide |
+| `docs/Turn_Kinematics_Architecture.html` / `.pdf`, `docs/build-architecture-pdf.sh` | **fork-only** the same guide with diagrams, and its build script |
 
 Adding a flavour is a new module with a roster and a `load_kinematics`
 that calls `AxisKinematics`.  Do not subclass an existing flavour.
