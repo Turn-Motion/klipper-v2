@@ -189,6 +189,10 @@ class BedMesh:
         else:
             # return current position minus the current z-adjustment
             cur_pos = self.toolhead.get_position()
+            # Deliberate x/y/z slice: the mesh is a height over the x/y
+            # surface, so these three are the surface lookup and the
+            # height, not the kinematic axis list.  The adjustment itself
+            # goes to every bed axis, through axis_roster below.
             x, y, z = cur_pos[:3]
             max_adj = self.z_mesh.calc_z(x, y)
             factor = 1.
@@ -213,6 +217,7 @@ class BedMesh:
         factor = self.get_z_factor(newpos[2])
         if self.z_mesh is None or not factor:
             # No mesh calibrated, or mesh leveling phased out.
+            # Deliberate x/y/z slice - see get_position() above.
             x, y, z = newpos[:3]
             if self.log_fade_complete:
                 self.log_fade_complete = False
@@ -1282,6 +1287,11 @@ class MoveSplitter:
         self.traverse_complete = False
         self.distance_checked = 0.
         axes_d = [np - pp for np, pp in zip(self.next_pos, self.prev_pos)]
+        # Deliberate x/y/z slice: this is the length of the PATH being
+        # sliced, not a count of kinematic axes.  It is only ever used as
+        # the parameter that _set_next_move() interpolates along, so
+        # widening it to the axis roster would move where the mesh splits
+        # a move.  See FORK_CHANGES.md section 6.
         self.total_move_length = math.sqrt(sum([d*d for d in axes_d[:3]]))
         self.axis_move = [not isclose(d, 0., abs_tol=1e-10) for d in axes_d]
     def _calc_z_offset(self, pos):

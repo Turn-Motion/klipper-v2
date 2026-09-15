@@ -319,7 +319,28 @@ will actually reach.
 | Extrusion | `max_extrude_cross_section` is **not enforced**, only logged: the move distance includes bed travel, so the ratio is not meaningful on this machine. |
 | Status | `toolhead.position`, `axis_minimum` and `axis_maximum` carry every axis; `homed_axes` uses the roster letters. With the carriages fitted, `bed_joint_carriages` reports their positions. |
 
-## 6. Extending it
+## 6. Known limitations
+
+**Manual probing moves the Z motor alone.** `manual_probe.py` jogs the bed
+with `toolhead.manual_move([None, None, z])`, which drives the z axis and
+leaves the other bed motors behind. On a bed carried by three motors that
+tilts the plate slightly during `PROBE_CALIBRATE`, `Z_ENDSTOP_CALIBRATE`
+and every `TESTZ` jog, so the offset is calibrated at a tilted pose rather
+than a level one.
+
+The module is untouched by the fork and the old fork behaved the same way,
+so this is long-standing rather than new. It is recorded rather than fixed
+because patching it adds a rebase conflict point in a file the fork
+otherwise never touches. The fix, when it is wanted, is to build the
+coordinate with `axis_roster.bed_target_position()` inside `move_z()` and
+to read the bed height from `axis_roster.get_bed_axes(printer)[0]` rather
+than index 2.
+
+The same z-only pattern is in `probe_eddy_current.py`,
+`temperature_probe.py` and the bed mesh scan helper. Those matter only on
+a machine that enables them.
+
+## 7. Extending it
 
 **A new machine flavour.** Add a module in `klippy/kinematics/` with an
 `AXES` list and a `load_kinematics` that calls `AxisKinematics`. Do not
@@ -338,7 +359,7 @@ ignore them.
 limits of its own, it is a `ROTARY`-style group; if it moves with the
 bed, it is `VERTICAL` and it becomes a bed axis automatically.
 
-## 7. Verifying a change
+## 8. Verifying a change
 
 All of it runs in Docker; no toolchain is needed on the host. See
 [FORK_CHANGES.md](../FORK_CHANGES.md) section 7 for the commands.

@@ -67,6 +67,11 @@ class ArcSupport:
         toolhead = self.printer.lookup_object('toolhead')
         axis_names = toolhead.get_axis_names()
         e_index = toolhead.get_extruder_index()
+        # Deliberate 'xyz' literal: a G17/G18/G19 arc PLANE is defined
+        # over x, y and z, so those three must exist and be in that order.
+        # Every other kinematic axis is interpolated linearly along the
+        # arc and does come from the roster.  See FORK_CHANGES.md
+        # section 6.
         if len(axis_names) < 3 or axis_names[:3] != 'xyz':
             raise gcmd.error("G2/G3 requires x, y and z axes")
 

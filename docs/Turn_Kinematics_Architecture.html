@@ -1410,6 +1410,23 @@ position_max: 120</code></pre>
         <code>bed_joint_carriages</code> reports their positions.</td></tr>
   </table>
 
+  <div class="warn">
+    <b>Known limitation: manual probing moves the Z motor alone.</b>
+    <code>manual_probe.py</code> jogs the bed with
+    <code>manual_move([None, None, z])</code>, which drives the z axis and
+    leaves the other bed motors behind, so <code>PROBE_CALIBRATE</code>,
+    <code>Z_ENDSTOP_CALIBRATE</code> and every <code>TESTZ</code> jog tilt
+    the plate slightly and calibrate the offset at a tilted pose. The
+    module is untouched by the fork and the old fork behaved the same way.
+    It is recorded rather than fixed because patching it adds a rebase
+    conflict point in a file the fork otherwise never touches; the fix is
+    <code>axis_roster.bed_target_position()</code> inside
+    <code>move_z()</code>. The same pattern is in
+    <code>probe_eddy_current.py</code>, <code>temperature_probe.py</code>
+    and the bed mesh scan helper, which matter only if those modules are
+    enabled.
+  </div>
+
   <div class="note">
     <b>Macros.</b> <code>printer.toolhead.position.a</code> and
     <code>axis_maximum.b</code> work because the <code>Coord</code> class
@@ -1525,6 +1542,13 @@ python test/test_uv_derived.py</code></pre>
     <tr><td>coordinate-carrying C calls</td>
         <td>a count and an array</td></tr>
   </table>
+
+  <p>Three literals inside modified files are deliberate and carry a
+  comment saying so: the bed mesh move splitter measures the x/y/z
+  <i>path</i> it slices, the bed mesh transform reads x and y because the
+  mesh is a height over that <i>surface</i>, and <code>gcode_arcs</code>
+  requires x, y and z because an arc <i>plane</i> is defined over them.
+  Do not widen them to the roster.</p>
 
   <div class="note">
     <b>The rule.</b> Never write a literal kinematic axis index. If a new

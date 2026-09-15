@@ -156,7 +156,7 @@ thing to preserve; the exact lines may move as upstream evolves.
 | `klippy/extras/gcode_move.py` | positions, `axis_map` and every axis-naming command (G1, G92, M114, M221, SET_GCODE_OFFSET, SAVE/RESTORE_GCODE_STATE, GET_POSITION) built from the roster | `G1 A.. B.. R..` and offsets on any axis |
 | `klippy/extras/homing.py` | roster-driven distances, axis letters and padding; `G28` axes from the roster; `_probing_home` applies the probed Z correction to every bed axis; `probing_move` calls `kin.set_probing(True/False)` around the move | homing with extra axes; safety checks off while probing |
 | `klippy/kinematics/extruder.py` | array `set_position` and `trapq_append`; **maximum extrusion cross-section check is not enforced** (only logged) | move distance includes bed travel, so the ratio is not meaningful on this machine |
-| `klippy/kinematics/rotary_delta.py`, `none.py` | array-form C calls | |
+| `klippy/kinematics/rotary_delta.py` | array-form C calls | |
 | `klippy/extras/manual_stepper.py`, `force_move.py` | single-axis private trapqs; `SET_KINEMATIC_POSITION` and `SET_HOMED`/`CLEAR_HOMED` follow the roster | |
 | `klippy/extras/motion_report.py` | trapq dumps and live position sized from the roster | |
 | `klippy/extras/exclude_object.py`, `tuning_tower.py`, `hall_filament_width_sensor.py`, `tsl1401cl_filament_width_sensor.py` | extruder index from the toolhead | |
@@ -211,6 +211,23 @@ that calls `AxisKinematics`.  Do not subclass an existing flavour.
 | `src/Kconfig`, `src/linux/Kconfig`, `src/sched.c`, `src/stepper.c` | `STEPPER_PAST_THRESHOLD_US` / `SCHED_TIMER_PAST_THRESHOLD_US` (1000/0 us on real MCUs, 500 ms on the Linux process) replace the hard-coded "too far in past" limits |
 | `.gitattributes`, `.gitignore` | LF for scripts; ignore IDE folders |
 
+### 4.7 Tests and verification assets
+
+| File | Change | Why |
+|------|--------|-----|
+| `scripts/check_whitespace.sh` | prunes `test/reference` from the scan | the vendored reference package must stay byte-identical to its source, so it is not reformatted to Klipper's conventions |
+| `test/reference/printerkin/` | **fork-only**, vendored **verbatim** from the Turn-Motion reference implementation | it is the independent oracle the derived bed joint solver is checked against; do not reformat it, do not "fix" it, re-vendor it if its source changes |
+| `test/test_axis_motion.py` | **fork-only** | the axis roster, distance groups, move checking, both rotary modes and the derived carriage range check |
+| `test/test_bed_transforms.py` | **fork-only** | the bed-adjusting g-code transforms, which have no upstream test of their own |
+| `test/test_uv_derived.py` | **fork-only** | the derived carriage equations against `test/reference`, with the compiled C solver required |
+| `sim/verify-axes.sh` | **fork-only** | one build, three profiles: the gate for every flavour |
+| `sim/compare_moves.py` | **fork-only** | diffs two `[move_capture]` captures move by move |
+| `sim/printer.sim.rotary.cfg`, `sim/printer.sim.uvderived.cfg` | **fork-only** | thin overlays that `[include]` the baseline profile and override only what differs |
+| `gcode/bed_pose_smoke.gcode`, `gcode/rotary_smoke.gcode` | **fork-only** | motion exercises for the batch-mode runs |
+
+All three unit tests also run standalone with plain Python and no
+compiler, so they are usable without Docker.
+
 ## 5. Intentional behaviour differences from upstream
 
 - Move distance is the largest distance group, not the XYZ euclidean
@@ -231,6 +248,28 @@ that calls `AxisKinematics`.  Do not subclass an existing flavour.
   recomputed from the bed pose, and their configured `position_min` /
   `position_max` are enforced by rejecting the move.
 
+### Known limitations
+
+- **Manual probing moves the Z motor alone.**
+  `klippy/extras/manual_probe.py` jogs the bed with
+  `toolhead.manual_move([None, None, z])`, which drives the z axis and
+  leaves the other bed motors where they are.  On a bed carried by three
+  motors that tilts the plate slightly during `PROBE_CALIBRATE`,
+  `Z_ENDSTOP_CALIBRATE` and every `TESTZ` jog, so the offset is
+  calibrated at a tilted pose rather than a level one.
+
+  The module is untouched by the fork, and the **old fork had the same
+  behaviour**, so this is long-standing rather than a regression.  It is
+  recorded rather than fixed because patching it adds a rebase conflict
+  point in a file the fork otherwise never touches; the fix, when it is
+  wanted, is to build the coordinate with
+  `axis_roster.bed_target_position()` in `move_z()` and to read the bed
+  height from `axis_roster.get_bed_axes(printer)[0]` instead of index 2.
+
+  The same z-only pattern is present in `probe_eddy_current.py`,
+  `temperature_probe.py` and the `bed_mesh` scan helper.  Those matter
+  only if the machine enables them; the Turn V2 config does not.
+
 Things that were in the old fork and are **deliberately not** here:
 the pre-merge load cell probe snapshot and its MCU protocol, the
 "adaptive horizontal_move_z" lift, `PROBE_ACCURACY` average delta, the
@@ -250,6 +289,18 @@ that swallowed errors, and all debug logging.
    `bltouch.py` retry loops, `probe_eddy_current.py` matrix maths,
    `temperature_probe.py`, `garbage_collection.py`, `console.py`,
    `hybrid_corexy.py` / `hybrid_corexz.py` (rail indexes, not axes).
+
+   Three hits are inside **modified** files and are deliberate.  Each
+   carries a comment at the site saying so; do not "widen" them to the
+   roster, because each refers to something other than the axis list:
+   - `bed_mesh.py` `MoveSplitter.build_move` measures the move along the
+     x/y/z **path** it is slicing, not across the axis roster.  Widening
+     it changes where the mesh splits a move.
+   - `bed_mesh.py` `get_position` / `move` read x, y and z because the
+     mesh is a height over the x/y **surface**.
+   - `gcode_arcs.py` requires x, y and z because a `G17`/`G18`/`G19`
+     arc **plane** is defined over them; every other kinematic axis is
+     interpolated linearly and does come from the roster.
 2. Grep for new "Z is the bed" assumptions - anything that adjusts or
    looks up `pos[2]` in a probing or levelling path should go through
    `axis_roster`.
