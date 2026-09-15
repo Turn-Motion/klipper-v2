@@ -9,12 +9,26 @@ import chelper
 class error(Exception):
     pass
 
-# Return the five kinematic coordinates (x, y, z, a, b) of a position,
-# padding with zeros if fewer were given
+# The kinematic axis roster.  The toolhead installs the roster of the
+# configured kinematics here once it is known (see toolhead._setup_axes);
+# until then the stock three cartesian axes apply.  Steppers are created
+# before that happens, but positions are only ever converted at runtime.
+KIN_AXIS_NAMES = "xyz"
+
+def set_axis_names(axis_names):
+    global KIN_AXIS_NAMES
+    KIN_AXIS_NAMES = axis_names
+
+def get_axis_names():
+    return KIN_AXIS_NAMES
+
+# Return the kinematic coordinates of a position, padding with zeros if
+# fewer were given and dropping the extruder and any extra axes
 def pad_coord(coord):
-    if len(coord) >= 5:
-        return coord[0], coord[1], coord[2], coord[3], coord[4]
-    return tuple(coord[:5]) + (0.,) * (5 - len(coord))
+    naxes = len(KIN_AXIS_NAMES)
+    if len(coord) >= naxes:
+        return list(coord[:naxes])
+    return list(coord) + [0.] * (naxes - len(coord))
 
 
 ######################################################################
@@ -160,15 +174,15 @@ class MCU_stepper:
         self._mcu.get_printer().send_event("stepper:set_dir_inverted", self)
     def calc_position_from_coord(self, coord):
         ffi_main, ffi_lib = chelper.get_ffi()
-        x, y, z, a, b = pad_coord(coord)
+        kin_coord = pad_coord(coord)
         return ffi_lib.itersolve_calc_position_from_coord(
-            self._stepper_kinematics, x, y, z, a, b)
+            self._stepper_kinematics, len(kin_coord), kin_coord)
     def set_position(self, coord):
         mcu_pos = self.get_mcu_position()
         sk = self._stepper_kinematics
         ffi_main, ffi_lib = chelper.get_ffi()
-        x, y, z, a, b = pad_coord(coord)
-        ffi_lib.itersolve_set_position(sk, x, y, z, a, b)
+        kin_coord = pad_coord(coord)
+        ffi_lib.itersolve_set_position(sk, len(kin_coord), kin_coord)
         self._set_mcu_position(mcu_pos)
     def get_commanded_position(self):
         ffi_main, ffi_lib = chelper.get_ffi()
@@ -267,9 +281,13 @@ class MCU_stepper:
         for cb in cbs:
             cb(ret)
     def is_active_axis(self, axis):
+        # 'axis' is an axis letter from the kinematics roster, or an index
+        if not isinstance(axis, int):
+            axis = KIN_AXIS_NAMES.find(axis)
+            if axis < 0:
+                return False
         ffi_main, ffi_lib = chelper.get_ffi()
-        a = axis.encode()
-        return ffi_lib.itersolve_is_active_axis(self._stepper_kinematics, a)
+        return ffi_lib.itersolve_is_active_axis(self._stepper_kinematics, axis)
 
 # Helper code to build a stepper object from a config section
 def PrinterStepper(config, units_in_radians=False):

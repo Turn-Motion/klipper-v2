@@ -4,6 +4,7 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import logging, math
+import axis_roster
 
 HOMING_START_DELAY = 0.001
 ENDSTOP_SAMPLE_TIME = .000015
@@ -54,8 +55,9 @@ class HomingMove:
         return [es for es, name in self.endstops]
     def _calc_endstop_rate(self, mcu_endstop, movepos, speed):
         startpos = self.toolhead.get_position()
+        naxes = self.toolhead.get_axis_count()
         axes_d = [mp - sp for mp, sp in zip(movepos, startpos)]
-        move_d = math.sqrt(sum([d*d for d in axes_d[:5]]))
+        move_d = math.sqrt(sum([d*d for d in axes_d[:naxes]]))
         move_t = move_d / speed
         max_steps = max([(abs(s.calc_position_from_coord(startpos)
                               - s.calc_position_from_coord(movepos))
@@ -71,10 +73,11 @@ class HomingMove:
             sname = stepper.get_name()
             kin_spos[sname] += offsets.get(sname, 0) * stepper.get_step_dist()
         thpos = self.toolhead.get_position()
+        naxes = self.toolhead.get_axis_count()
         cpos = list(kin.calc_position(kin_spos))
-        cpos += [None] * (5 - len(cpos))
+        cpos += [None] * (naxes - len(cpos))
         return [cp if cp is not None else tp
-                for cp, tp in zip(cpos, thpos[:5])] + thpos[5:]
+                for cp, tp in zip(cpos, thpos[:naxes])] + thpos[naxes:]
     def homing_move(self, movepos, speed, probe_pos=False,
                     triggered=True, check_triggered=True):
         # Notify start of homing/probing move
@@ -166,6 +169,8 @@ class Homing:
     def __init__(self, printer):
         self.printer = printer
         self.toolhead = printer.lookup_object('toolhead')
+        self.axis_names = self.toolhead.get_axis_names()
+        self.naxes = len(self.axis_names)
         self.changed_axes = []
         self.trigger_mcu_pos = {}
         self.adjust_pos = {}
@@ -187,7 +192,8 @@ class Homing:
     def set_homed_position(self, pos):
         self.toolhead.set_position(self._fill_coord(pos))
     def _set_start_position(self, forcepos):
-        homing_axes = "".join(["xyzab"[axis] for axis in range(5)
+        homing_axes = "".join([self.axis_names[axis]
+                               for axis in range(self.naxes)
                                if forcepos[axis] is not None])
         startpos = self._fill_coord(forcepos)
         self.toolhead.set_position(startpos, homing_axes=homing_axes)
@@ -196,7 +202,7 @@ class Homing:
         startpos = self._fill_coord(forcepos)
         homepos = self._fill_coord(movepos)
         axes_d = [hp - sp for hp, sp in zip(homepos, startpos)]
-        move_d = math.sqrt(sum([d*d for d in axes_d[:5]]))
+        move_d = math.sqrt(sum([d*d for d in axes_d[:self.naxes]]))
         retract_r = min(1., homing_info.retract_dist / move_d)
         retractpos = [hp - ad * retract_r
                       for hp, ad in zip(homepos, axes_d)]
@@ -241,13 +247,13 @@ class Homing:
                                        + self.adjust_pos.get(s.get_name(), 0.))
                         for s in kin.get_steppers()}
             newpos = list(kin.calc_position(kin_spos))
-            newpos += [None] * (5 - len(newpos))
-            for axis in range(5):
+            newpos += [None] * (self.naxes - len(newpos))
+            for axis in range(self.naxes):
                 if forcepos[axis] is not None:
                     if newpos[axis] is None:
                         raise self.printer.command_error(
                             "Cannot determine position of toolhead on "
-                            "axis %s after homing" % "xyzab"[axis])
+                            "axis %s after homing" % self.axis_names[axis])
                     homepos[axis] = newpos[axis]
             self.toolhead.set_position(homepos)
     def _create_probe_gcmd(self, attempt_num, probe_speed):
@@ -260,12 +266,9 @@ class Homing:
         gcmd = self._create_probe_gcmd(attempt_num, probe_speed)
         probe_session.run_probe(gcmd)
         ppos = probe_session.pull_probed_results()[0]
-        # Update toolhead position
-        curpos = self.toolhead.get_position()
-        # The Z, A, and B motors carry the bed together
-        curpos[2] -= ppos.bed_z
-        curpos[3] -= ppos.bed_z
-        curpos[4] -= ppos.bed_z
+        # Update toolhead position - every bed motor moves together
+        curpos = axis_roster.bed_delta_position(
+            self.printer, self.toolhead.get_position(), -ppos.bed_z)
         self.toolhead.set_position(curpos)
     def _do_home_z_via_probe(self, rails, forcepos, movepos):
         if movepos[0] is not None or movepos[1] is not None:
@@ -290,9 +293,10 @@ class Homing:
         probe_session.end_probe_session()
     def home_rails(self, rails, forcepos, movepos):
         # Kinematics may describe only the first few axes - pad to the
-        # five kinematic axes (x, y, z, a, b)
-        forcepos = list(forcepos) + [None] * (5 - len(forcepos))
-        movepos = list(movepos) + [None] * (5 - len(movepos))
+        # full kinematic axis roster
+        naxes = self.naxes
+        forcepos = list(forcepos) + [None] * (naxes - len(forcepos))
+        movepos = list(movepos) + [None] * (naxes - len(movepos))
         # Check if this is actually a Z home via probe request
         endstops = [es for rail in rails for es in rail.get_endstops()]
         probe_endstops = [hasattr(e[0], "get_position_endstop")
@@ -354,11 +358,12 @@ class PrinterHoming:
         return epos
     def cmd_G28(self, gcmd):
         # Move to origin (only the axes the kinematics actually has)
-        kin = self.printer.lookup_object('toolhead').get_kinematics()
-        kin_axes = getattr(kin, 'axis_names', 'xyz')
+        toolhead = self.printer.lookup_object('toolhead')
+        kin = toolhead.get_kinematics()
+        kin_axes = toolhead.get_axis_names()
         axes = []
-        for pos, axis in enumerate('XYZAB'[:len(kin_axes)]):
-            if gcmd.get(axis, None) is not None:
+        for pos, axis in enumerate(kin_axes):
+            if gcmd.get(axis.upper(), None) is not None:
                 axes.append(pos)
         if not axes:
             axes = list(range(len(kin_axes)))

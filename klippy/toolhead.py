@@ -4,16 +4,37 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import math, logging, importlib
-import mcu, chelper, kinematics.extruder
+import mcu, chelper, stepper, kinematics.extruder
 
 # Common suffixes: _d is distance (in mm), _v is velocity (in
 #   mm/second), _v2 is velocity squared (mm^2/s^2), _t is time (in
 #   seconds), _r is ratio (scalar between 0.0 and 1.0)
 
-# Axis layout: positions are [x, y, z, a, b, e, ...].  The first five
-# entries are the kinematic axes (A and B are the two additional bed
-# joint motors), the extruder is index 5, and any further "extra axes"
-# follow it.
+# Axis layout: a position is [<kinematic axes>, e, <extra axes>...].
+# The kinematics class owns the kinematic axis roster - it publishes the
+# axis letters as "axis_names" (the stock kinematics use "xyz") and the
+# number of them is the index of the extruder.  Nothing in the core
+# assumes a particular count; use toolhead.get_axis_count() and
+# toolhead.get_extruder_index() instead of a literal.
+
+# Kinematics that do not declare a roster get the upstream three axes
+DEFAULT_AXIS_NAMES = "xyz"
+
+# Group the kinematic axes for the purpose of measuring a move's length.
+# A group contributes the euclidean norm of its axes, and the move
+# distance is the largest group - so axes in different groups each get
+# the full move time rather than sharing it.  One group over every axis
+# is the classic "cartesian distance" behaviour.
+def calc_move_distance(axes_d, distance_groups):
+    move_d = 0.
+    for group in distance_groups:
+        if len(group) == 1:
+            d = abs(axes_d[group[0]])
+        else:
+            d = math.sqrt(sum([axes_d[i]**2 for i in group]))
+        if d > move_d:
+            move_d = d
+    return move_d
 
 # Class to track each move request
 class Move:
@@ -26,18 +47,18 @@ class Move:
         self.timing_callbacks = []
         velocity = min(speed, toolhead.max_velocity)
         self.is_kinematic_move = True
+        naxes = toolhead.axis_count
         self.axes_d = axes_d = [ep - sp for sp, ep in zip(start_pos, end_pos)]
-        # The move distance is the largest of the XY distance and the
-        # individual Z, A, and B distances - the slowest axis group
-        # determines the time available for the move.
-        xy_move_d = math.sqrt(axes_d[0]**2 + axes_d[1]**2)
-        self.move_d = move_d = max(xy_move_d, abs(axes_d[2]),
-                                   abs(axes_d[3]), abs(axes_d[4]))
+        # The move distance is the largest of the kinematics' distance
+        # groups - the slowest group determines the time for the move.
+        self.move_d = move_d = calc_move_distance(axes_d,
+                                                  toolhead.distance_groups)
         if move_d < .000000001:
             # Extrude only move
-            self.end_pos = tuple(start_pos[:5]) + self.end_pos[5:]
-            axes_d[0] = axes_d[1] = axes_d[2] = axes_d[3] = axes_d[4] = 0.
-            self.move_d = move_d = max([abs(ad) for ad in axes_d[5:]])
+            self.end_pos = tuple(start_pos[:naxes]) + self.end_pos[naxes:]
+            for i in range(naxes):
+                axes_d[i] = 0.
+            self.move_d = move_d = max([abs(ad) for ad in axes_d[naxes:]])
             inv_move_d = 0.
             if move_d:
                 inv_move_d = 1. / move_d
@@ -69,15 +90,18 @@ class Move:
     def limit_next_junction_speed(self, speed):
         self.next_junction_v2 = min(self.next_junction_v2, speed**2)
     def move_error(self, msg="Move out of range"):
+        naxes = self.toolhead.axis_count
         ep = self.end_pos
-        m = "%s: %.3f %.3f %.3f %.3f %.3f [%.3f]" % (
-            msg, ep[0], ep[1], ep[2], ep[3], ep[4], ep[5])
+        m = "%s: %s [%.3f]" % (msg, " ".join(["%.3f" % (v,)
+                                              for v in ep[:naxes]]),
+                               ep[naxes])
         return self.toolhead.printer.command_error(m)
     def calc_junction(self, prev_move):
         if not self.is_kinematic_move or not prev_move.is_kinematic_move:
             return
         # Allow extra axes to calculate maximum junction
-        ea_v2 = [ea.calc_junction(prev_move, self, e_index+5)
+        naxes = self.toolhead.axis_count
+        ea_v2 = [ea.calc_junction(prev_move, self, e_index + naxes)
                  for e_index, ea in enumerate(self.toolhead.extra_axes)]
         max_start_v2 = min([self.max_cruise_v2,
                             prev_move.max_cruise_v2, prev_move.next_junction_v2,
@@ -86,11 +110,8 @@ class Move:
         # Find max velocity using "approximated centripetal velocity"
         axes_r = self.axes_r
         prev_axes_r = prev_move.axes_r
-        junction_cos_theta = -(axes_r[0] * prev_axes_r[0]
-                               + axes_r[1] * prev_axes_r[1]
-                               + axes_r[2] * prev_axes_r[2]
-                               + axes_r[3] * prev_axes_r[3]
-                               + axes_r[4] * prev_axes_r[4])
+        junction_cos_theta = -sum([axes_r[i] * prev_axes_r[i]
+                                   for i in range(naxes)])
         sin_theta_d2 = math.sqrt(max(0.5*(1.0-junction_cos_theta), 0.))
         cos_theta_d2 = math.sqrt(max(0.5*(1.0+junction_cos_theta), 0.))
         one_minus_sin_theta_d2 = 1. - sin_theta_d2
@@ -216,7 +237,12 @@ class ToolHead:
         self.mcu = self.printer.lookup_object('mcu')
         self.lookahead = LookAheadQueue()
         self.lookahead.set_flush_time(BUFFER_TIME_HIGH)
-        self.commanded_pos = [0., 0., 0., 0., 0., 0.]
+        # The kinematic axis roster is filled in once the kinematics
+        # class has been created (see _setup_axes)
+        self.axis_names = DEFAULT_AXIS_NAMES
+        self.axis_count = len(DEFAULT_AXIS_NAMES)
+        self.distance_groups = [tuple(range(self.axis_count))]
+        self.commanded_pos = [0.] * (self.axis_count + 1)
         # Velocity and acceleration control
         self.max_velocity = config.getfloat('max_velocity', above=0.)
         self.max_accel = config.getfloat('max_accel', above=0.)
@@ -252,6 +278,7 @@ class ToolHead:
         self.trapq_append = self.motion_queuing.lookup_trapq_append()
         # Create kinematics class
         gcode = self.printer.lookup_object('gcode')
+        self.gcode = gcode
         self.Coord = gcode.Coord
         extruder = kinematics.extruder.DummyExtruder(self.printer)
         self.extra_axes = [extruder]
@@ -269,9 +296,53 @@ class ToolHead:
             msg = "Error loading kinematics '%s'" % (kin_name,)
             logging.exception(msg)
             raise config.error(msg)
+        self._setup_axes()
         # Register handlers
         self.printer.register_event_handler("klippy:shutdown",
                                             self._handle_shutdown)
+    # Kinematic axis roster
+    def _setup_axes(self):
+        # The kinematics class owns the axis roster.  Stock kinematics
+        # declare nothing and get the upstream three cartesian axes.
+        kin = self.kin
+        axis_names = getattr(kin, 'axis_names', DEFAULT_AXIS_NAMES)
+        if (not axis_names or len(set(axis_names)) != len(axis_names)
+            or not axis_names.islower() or not axis_names.isalpha()):
+            raise self.printer.config_error(
+                "Kinematics reported an invalid axis roster '%s'"
+                % (axis_names,))
+        ffi_main, ffi_lib = chelper.get_ffi()
+        max_axes = ffi_lib.trapq_get_kin_axes()
+        if len(axis_names) > max_axes:
+            raise self.printer.config_error(
+                "Kinematics has %d axes, but the motion queue is built for"
+                " at most %d (see KIN_AXES in chelper/trapq.h)"
+                % (len(axis_names), max_axes))
+        self.axis_names = axis_names
+        self.axis_count = naxes = len(axis_names)
+        # Distance groups: a kinematics may split its axes so that each
+        # group gets the whole move time instead of sharing it
+        groups = getattr(kin, 'distance_groups', None)
+        if groups is None:
+            groups = [tuple(range(naxes))]
+        groups = [tuple(g) for g in groups if g]
+        seen = sorted([i for g in groups for i in g])
+        if seen != sorted(set(seen)) or (seen and seen[-1] >= naxes):
+            raise self.printer.config_error(
+                "Kinematics reported invalid distance groups %s" % (groups,))
+        self.distance_groups = groups
+        # Resize the position tuple and publish the roster to the g-code
+        extra_pos = self.commanded_pos[len(self.commanded_pos)-1:]
+        self.commanded_pos = [0.] * naxes + extra_pos
+        self.Coord = self.gcode.set_axis_names(axis_names)
+        stepper.set_axis_names(axis_names)
+        self._build_extra_axes_status()
+    def get_axis_names(self):
+        return self.axis_names
+    def get_axis_count(self):
+        return self.axis_count
+    def get_extruder_index(self):
+        return self.axis_count
     # Print time tracking
     def _advance_move_time(self, next_print_time):
         self.print_time = max(self.print_time, next_print_time)
@@ -296,20 +367,19 @@ class ToolHead:
             self._calc_print_time()
         # Queue moves into trapezoid motion queue (trapq)
         next_move_time = self.print_time
+        naxes = self.axis_count
         with self.reactor.assert_no_pause():
             for move in moves:
                 if move.is_kinematic_move:
                     self.trapq_append(
                         self.trapq, next_move_time,
                         move.accel_t, move.cruise_t, move.decel_t,
-                        move.start_pos[0], move.start_pos[1], move.start_pos[2],
-                        move.start_pos[3], move.start_pos[4],
-                        move.axes_r[0], move.axes_r[1], move.axes_r[2],
-                        move.axes_r[3], move.axes_r[4],
+                        naxes, move.start_pos[:naxes], move.axes_r[:naxes],
                         move.start_v, move.cruise_v, move.accel)
                 for e_index, ea in enumerate(self.extra_axes):
-                    if move.axes_d[e_index + 5]:
-                        ea.process_move(next_move_time, move, e_index + 5)
+                    if move.axes_d[e_index + naxes]:
+                        ea.process_move(next_move_time, move,
+                                        e_index + naxes)
                 next_move_time = (next_move_time + move.accel_t
                                   + move.cruise_t + move.decel_t)
                 for cb in move.timing_callbacks:
@@ -401,15 +471,15 @@ class ToolHead:
     def get_position(self):
         return list(self.commanded_pos)
     def set_position(self, newpos, homing_axes=""):
-        if len(newpos) < 5:
+        naxes = self.axis_count
+        if len(newpos) < naxes:
             # Callers may only describe the first few kinematic axes
-            newpos = list(newpos) + self.commanded_pos[len(newpos):5]
+            newpos = list(newpos) + self.commanded_pos[len(newpos):naxes]
         self.flush_step_generation()
         ffi_main, ffi_lib = chelper.get_ffi()
         ffi_lib.trapq_set_position(self.trapq, self.print_time,
-                                   newpos[0], newpos[1], newpos[2],
-                                   newpos[3], newpos[4])
-        self.commanded_pos[:5] = newpos[:5]
+                                   naxes, newpos[:naxes])
+        self.commanded_pos[:naxes] = newpos[:naxes]
         self.kin.set_position(newpos, homing_axes)
         self.printer.send_event("toolhead:set_position")
     def limit_next_junction_speed(self, speed):
@@ -423,9 +493,10 @@ class ToolHead:
         try:
             if move.is_kinematic_move:
                 self.kin.check_move(move)
+            naxes = self.axis_count
             for e_index, ea in enumerate(self.extra_axes):
-                if move.axes_d[e_index + 5]:
-                    ea.check_move(move, e_index + 5)
+                if move.axes_d[e_index + naxes]:
+                    ea.check_move(move, e_index + naxes)
         except self.printer.command_error:
             # The move was rejected - flush the moves queued before it
             # so they still execute, then let the g-code layer report
@@ -459,13 +530,14 @@ class ToolHead:
                 break
             eventtime = self.reactor.pause(eventtime + 0.100)
     def _build_extra_axes_status(self):
+        naxes = self.axis_count
         enames = [ea.get_name() for ea in self.extra_axes]
-        self.extra_axes_status = {n: e_index + 5
+        self.extra_axes_status = {n: e_index + naxes
                                   for e_index, n in enumerate(enames) if n}
     def set_extruder(self, extruder, extrude_pos):
         # XXX - should use add_extra_axis
         self.extra_axes[0] = extruder
-        self.commanded_pos[5] = extrude_pos
+        self.commanded_pos[self.axis_count] = extrude_pos
         self._build_extra_axes_status()
     def get_extruder(self):
         return self.extra_axes[0]
@@ -479,13 +551,13 @@ class ToolHead:
         self._flush_lookahead()
         if ea not in self.extra_axes:
             return
-        ea_index = self.extra_axes.index(ea) + 5
+        ea_index = self.extra_axes.index(ea) + self.axis_count
         self.commanded_pos.pop(ea_index)
-        self.extra_axes.pop(ea_index - 5)
+        self.extra_axes.pop(ea_index - self.axis_count)
         self._build_extra_axes_status()
         self.printer.send_event("toolhead:update_extra_axes")
     def get_extra_axes(self):
-        return [None, None, None, None, None] + self.extra_axes
+        return [None] * self.axis_count + self.extra_axes
     # Homing "drip move" handling
     def _drip_load_trapq(self, submit_move):
         # Queue move into trapezoid motion queue (trapq)
@@ -495,21 +567,20 @@ class ToolHead:
         moves = self.lookahead.flush()
         self._calc_print_time()
         start_time = end_time = self.print_time
+        naxes = self.axis_count
         for move in moves:
             self.trapq_append(
                 self.trapq, end_time,
                 move.accel_t, move.cruise_t, move.decel_t,
-                move.start_pos[0], move.start_pos[1], move.start_pos[2],
-                move.start_pos[3], move.start_pos[4],
-                move.axes_r[0], move.axes_r[1], move.axes_r[2],
-                move.axes_r[3], move.axes_r[4],
+                naxes, move.start_pos[:naxes], move.axes_r[:naxes],
                 move.start_v, move.cruise_v, move.accel)
             end_time = end_time + move.accel_t + move.cruise_t + move.decel_t
         self.lookahead.reset()
         return start_time, end_time
     def drip_move(self, newpos, speed, drip_completion):
         # Create and verify move is valid
-        newpos = list(newpos[:5]) + self.commanded_pos[5:]
+        naxes = self.axis_count
+        newpos = list(newpos[:naxes]) + self.commanded_pos[naxes:]
         move = Move(self, self.commanded_pos, newpos, speed)
         if move.move_d:
             self.kin.check_move(move)

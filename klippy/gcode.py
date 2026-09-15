@@ -8,20 +8,38 @@ import os, re, logging, collections, shlex, operator
 class CommandError(Exception):
     pass
 
-# Custom "tuple" class for coordinates - add easy access to the
-# x, y, z, a, b, and e components
-class Coord(tuple):
+# Custom "tuple" class for coordinates - adds an attribute per axis.
+# The set of attributes follows the kinematics' axis roster: one per
+# kinematic axis letter plus "e" for the extruder.  build_coord_class()
+# makes the class for a roster and set_axis_names() installs it as the
+# printer-wide Coord once the kinematics is known.
+class CoordBase(tuple):
     __slots__ = ()
+    axis_names = "xyz"
+    ncoord = 4
     def __new__(cls, t):
-        if len(t) < 6:
-            t = tuple(t) + (0,) * (6 - len(t))
+        if len(t) < cls.ncoord:
+            t = tuple(t) + (0,) * (cls.ncoord - len(t))
         return tuple.__new__(cls, t)
-    x = property(operator.itemgetter(0))
-    y = property(operator.itemgetter(1))
-    z = property(operator.itemgetter(2))
-    a = property(operator.itemgetter(3))
-    b = property(operator.itemgetter(4))
-    e = property(operator.itemgetter(5))
+
+def build_coord_class(axis_names):
+    names = list(axis_names) + ['e']
+    ns = {'__slots__': (), 'axis_names': axis_names, 'ncoord': len(names)}
+    for index, name in enumerate(names):
+        ns[name] = property(operator.itemgetter(index))
+    return type('Coord', (CoordBase,), ns)
+
+Coord = build_coord_class(CoordBase.axis_names)
+
+# Install the Coord class for a kinematics' axis roster.  Modules that
+# captured gcode.Coord before the kinematics loaded keep working - the
+# old class still builds valid tuples - but every Coord built from here
+# on carries the full roster.
+def set_axis_names(axis_names):
+    global Coord
+    Coord = build_coord_class(axis_names)
+    GCodeDispatch.Coord = Coord
+    return Coord
 
 # Class for handling gcode command parameters (gcmd)
 class GCodeCommand:
@@ -102,6 +120,9 @@ class GCodeCommand:
 class GCodeDispatch:
     error = CommandError
     Coord = Coord
+    def set_axis_names(self, axis_names):
+        self.Coord = set_axis_names(axis_names)
+        return self.Coord
     def __init__(self, printer):
         self.printer = printer
         self.is_fileinput = not not printer.get_start_args().get("debuginput")
