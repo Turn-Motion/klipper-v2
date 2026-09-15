@@ -10,10 +10,12 @@ class CommandError(Exception):
 
 # Custom "tuple" class for coordinates - adds an attribute per axis.
 # The set of attributes follows the kinematics' axis roster: one per
-# kinematic axis letter plus "e" for the extruder.  build_coord_class()
-# makes the class for a roster and set_axis_names() installs it as the
-# printer-wide Coord once the kinematics is known.
-class CoordBase(tuple):
+# kinematic axis letter plus "e" for the extruder.  The class starts
+# out with the stock three axes and is re-shaped in place by
+# set_axis_names() once the kinematics is known, so that references
+# captured before that (there is no ordering guarantee between config
+# sections and the toolhead) see the new roster too.
+class Coord(tuple):
     __slots__ = ()
     axis_names = "xyz"
     ncoord = 4
@@ -21,24 +23,20 @@ class CoordBase(tuple):
         if len(t) < cls.ncoord:
             t = tuple(t) + (0,) * (cls.ncoord - len(t))
         return tuple.__new__(cls, t)
+    x = property(operator.itemgetter(0))
+    y = property(operator.itemgetter(1))
+    z = property(operator.itemgetter(2))
+    e = property(operator.itemgetter(3))
 
-def build_coord_class(axis_names):
-    names = list(axis_names) + ['e']
-    ns = {'__slots__': (), 'axis_names': axis_names, 'ncoord': len(names)}
-    for index, name in enumerate(names):
-        ns[name] = property(operator.itemgetter(index))
-    return type('Coord', (CoordBase,), ns)
-
-Coord = build_coord_class(CoordBase.axis_names)
-
-# Install the Coord class for a kinematics' axis roster.  Modules that
-# captured gcode.Coord before the kinematics loaded keep working - the
-# old class still builds valid tuples - but every Coord built from here
-# on carries the full roster.
 def set_axis_names(axis_names):
-    global Coord
-    Coord = build_coord_class(axis_names)
-    GCodeDispatch.Coord = Coord
+    names = list(axis_names) + ['e']
+    for name in list(Coord.axis_names) + ['e']:
+        if name not in names:
+            delattr(Coord, name)
+    Coord.axis_names = axis_names
+    Coord.ncoord = len(names)
+    for index, name in enumerate(names):
+        setattr(Coord, name, property(operator.itemgetter(index)))
     return Coord
 
 # Class for handling gcode command parameters (gcmd)

@@ -175,6 +175,10 @@ class PrinterMotionReport:
     def _connect(self):
         # Lookup toolhead trapq
         toolhead = self.printer.lookup_object("toolhead")
+        # The axis roster is known by now - size the reported position
+        self.last_status = dict(self.last_status)
+        self.last_status['live_position'] = toolhead.Coord(
+            [0.] * len(toolhead.get_extra_axes()))
         trapq = toolhead.get_trapq()
         self.dtrapqs['toolhead'] = DumpTrapQ(self.printer, 'toolhead', trapq)
         # Lookup extruder trapqs
