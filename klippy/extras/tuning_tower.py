@@ -11,7 +11,7 @@ class TuningTower:
     def __init__(self, config):
         self.printer = config.get_printer()
         self.normal_transform = None
-        self.last_position = [0., 0., 0., 0., 0., 0.]
+        self.last_position = [0., 0., 0., 0.]
         self.last_z = self.start = self.factor = self.band = 0.
         self.last_command_value = None
         self.command_fmt = ""
@@ -76,8 +76,12 @@ class TuningTower:
         return self.start + z * self.factor
     def move(self, newpos, speed):
         normal_transform = self.normal_transform
-        if (newpos[5] > self.last_position[5] and newpos[2] != self.last_z
-            and newpos[:5] != self.last_position[:5]):
+        toolhead = self.printer.lookup_object('toolhead')
+        naxes = toolhead.get_axis_count()
+        e_index = toolhead.get_extruder_index()
+        if (newpos[e_index] > self.last_position[e_index]
+            and newpos[2] != self.last_z
+            and newpos[:naxes] != self.last_position[:naxes]):
             # Extrusion move at new z height
             z = newpos[2]
             if z < self.last_z - CANCEL_Z_DELTA:

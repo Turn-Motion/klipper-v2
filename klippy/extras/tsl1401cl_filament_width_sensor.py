@@ -81,7 +81,7 @@ class FilamentWidthSensor:
     def extrude_factor_update_event(self, eventtime):
         # Update extrude factor
         pos = self.toolhead.get_position()
-        last_epos = pos[5]
+        last_epos = pos[self.toolhead.get_extruder_index()]
         # Update filament array for lastFilamentWidthReading
         self.update_filament_array(last_epos)
         # Does filament exists

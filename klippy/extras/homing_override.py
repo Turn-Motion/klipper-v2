@@ -7,9 +7,14 @@
 class HomingOverride:
     def __init__(self, config):
         self.printer = config.get_printer()
-        self.start_pos = [config.getfloat('set_position_' + a, None)
-                          for a in 'xyzab']
-        self.axes = config.get('axes', 'XYZAB').upper()
+        # The axis roster is not known until the kinematics loads, so
+        # take whatever "set_position_<axis>" options are present
+        self.start_pos_config = {}
+        for option in config.get_prefix_options('set_position_'):
+            name = option[len('set_position_'):].lower()
+            if len(name) == 1 and name.isalpha():
+                self.start_pos_config[name] = config.getfloat(option, None)
+        self.axes = config.get('axes', '').upper()
         gcode_macro = self.printer.load_object(config, 'gcode_macro')
         self.template = gcode_macro.load_template(config, 'gcode')
         self.in_script = False
@@ -23,10 +28,14 @@ class HomingOverride:
             self.prev_G28(gcmd)
             return
 
+        toolhead = self.printer.lookup_object('toolhead')
+        axis_names = toolhead.get_axis_names()
+        axes = self.axes or axis_names.upper()
+
         # if no axis is given as parameter we assume the override
         no_axis = True
-        for axis in 'XYZAB':
-            if gcmd.get(axis, None) is not None:
+        for axis in axis_names:
+            if gcmd.get(axis.upper(), None) is not None:
                 no_axis = False
                 break
 
@@ -35,7 +44,7 @@ class HomingOverride:
         else:
             # check if we home an axis which needs the override
             override = False
-            for axis in self.axes:
+            for axis in axes:
                 if gcmd.get(axis, None) is not None:
                     override = True
 
@@ -44,13 +53,17 @@ class HomingOverride:
             return
 
         # Calculate forced position (if configured)
-        toolhead = self.printer.lookup_object('toolhead')
         pos = toolhead.get_position()
         homing_axes = ""
-        for axis, loc in enumerate(self.start_pos):
-            if loc is not None:
-                pos[axis] = loc
-                homing_axes += "xyzab"[axis]
+        for name, loc in self.start_pos_config.items():
+            if loc is None:
+                continue
+            axis = axis_names.find(name)
+            if axis < 0:
+                raise gcmd.error("homing_override: this printer has no '%s'"
+                                 " axis" % (name.upper(),))
+            pos[axis] = loc
+            homing_axes += name
         toolhead.set_position(pos, homing_axes=homing_axes)
         # Perform homing
         context = self.template.create_template_context()

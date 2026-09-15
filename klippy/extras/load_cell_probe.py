@@ -3,6 +3,7 @@
 # Copyright (C) 2025  Gareth Farrington <gareth@waves.ky>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+import axis_roster
 import json
 import logging
 import math, sys
@@ -417,11 +418,9 @@ class TappingMove:
         # Homing workaround
         phoming = self._printer.lookup_object('homing')
         if phoming.check_probe_first_home(gcmd):
-            curpos = toolhead.get_position()
-            # The Z, A, and B motors carry the bed together
-            curpos[2] -= epos[2]
-            curpos[3] -= epos[2]
-            curpos[4] -= epos[2]
+            # Every motor that carries the bed moves together
+            curpos = axis_roster.bed_delta_position(
+                self._printer, toolhead.get_position(), -epos[2])
             toolhead.set_position(curpos)
 
         # Lift the toolhead while collecting the samples we will use for
@@ -434,10 +433,8 @@ class TappingMove:
         params = \
             self._load_cell_probing_move._param_helper.get_probe_params(gcmd)
         lift_dist = params['load_cell_retract_dist']
-        lift_pos = toolhead.get_position()
-        lift_pos[2] += lift_dist
-        lift_pos[3] += lift_dist
-        lift_pos[4] += lift_dist
+        lift_pos = axis_roster.bed_delta_position(
+            self._printer, toolhead.get_position(), lift_dist)
         toolhead.manual_move(lift_pos, params['lift_speed'])
 
         # Collect samples until the end of the ascent

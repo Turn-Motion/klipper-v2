@@ -31,6 +31,8 @@ class MoveCapture:
 
     def _handle_connect(self):
         toolhead = self.printer.lookup_object('toolhead')
+        naxes = toolhead.get_axis_count()
+        e_index = toolhead.get_extruder_index()
         lookahead = toolhead.lookahead
         orig_flush = lookahead.flush
         f = open(self.output_path, 'w')
@@ -41,8 +43,9 @@ class MoveCapture:
             for move in moves:
                 try:
                     f.write(json.dumps({
-                        'sp': [round(v, 4) for v in move.start_pos[:5]],
-                        'ep': [round(v, 4) for v in move.end_pos[:5]],
+                        'sp': [round(v, 4)
+                               for v in move.start_pos[:naxes]],
+                        'ep': [round(v, 4) for v in move.end_pos[:naxes]],
                         'sv': round(move.start_v,   4),
                         'cv': round(move.cruise_v,  4),
                         'ev': round(move.end_v,     4),
@@ -52,7 +55,8 @@ class MoveCapture:
                         'md': round(move.move_d,    4),
                         'kin': move.is_kinematic_move,
                         'ed': round(
-                            move.axes_d[5] if len(move.axes_d) > 5 else 0., 5),
+                            move.axes_d[e_index]
+                            if len(move.axes_d) > e_index else 0., 5),
                     }) + '\n')
                 except Exception as e:
                     logging.warning(

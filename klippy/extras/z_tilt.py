@@ -3,6 +3,7 @@
 # Copyright (C) 2018-2019  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+import axis_roster
 import logging
 import mathutil
 from . import probe
@@ -16,11 +17,8 @@ class ZAdjustHelper:
         self.printer.register_event_handler("klippy:connect",
                                             self.handle_connect)
     def handle_connect(self):
-        kin = self.printer.lookup_object('toolhead').get_kinematics()
-        # The Z, A, and B axes all carry the bed
-        z_steppers = [s for s in kin.get_steppers()
-                      if s.is_active_axis('z') or s.is_active_axis('a')
-                      or s.is_active_axis('b')]
+        # Every motor that carries the bed takes part in levelling
+        z_steppers = axis_roster.get_bed_steppers(self.printer)
         if len(z_steppers) != self.z_count:
             raise self.printer.config_error(
                 "%s z_positions needs exactly %d items" % (
@@ -30,10 +28,11 @@ class ZAdjustHelper:
                 "%s requires multiple z steppers" % (self.name,))
         self.z_steppers = z_steppers
     def _stepper_axis(self, stepper):
-        for axis, name in ((2, 'z'), (3, 'a'), (4, 'b')):
-            if stepper.is_active_axis(name):
+        bed_axes = axis_roster.get_bed_axes(self.printer)
+        for axis in bed_axes:
+            if stepper.is_active_axis(axis):
                 return axis
-        return 2
+        return bed_axes[0] if bed_axes else 2
     def adjust_steppers(self, adjustments, speed):
         toolhead = self.printer.lookup_object('toolhead')
         gcode = self.printer.lookup_object('gcode')
@@ -95,7 +94,9 @@ class ZAdjustHelper:
         # Equivalent to SET_GCODE_OFFSET A=.. B=.. - future moves then
         # carry the tilt correction transparently.  Nothing is saved to
         # the config file.
-        z_ref = final_pos[2]
+        bed_axes = axis_roster.get_bed_axes(self.printer)
+        z_ref = final_pos[bed_axes[0]]
+        axis_names = self.printer.lookup_object('toolhead').get_axis_names()
         gcode_move = self.printer.lookup_object('gcode_move')
         for axis in set(stepper_axes):
             desired_offset = final_pos[axis] - z_ref
@@ -103,12 +104,13 @@ class ZAdjustHelper:
             gcode_move.base_position[axis] += delta
             gcode_move.homing_position[axis] = desired_offset
         gcode_move.reset_last_position()
-        logging.info("z_tilt: physical Z=%.6f A=%.6f B=%.6f,"
-                     " gcode offsets Z=%.6f A=%.6f B=%.6f",
-                     final_pos[2], final_pos[3], final_pos[4],
-                     gcode_move.homing_position[2],
-                     gcode_move.homing_position[3],
-                     gcode_move.homing_position[4])
+        logging.info("z_tilt: physical %s, gcode offsets %s",
+                     " ".join(["%s=%.6f" % (axis_names[a].upper(),
+                                            final_pos[a])
+                               for a in bed_axes]),
+                     " ".join(["%s=%.6f" % (axis_names[a].upper(),
+                                            gcode_move.homing_position[a])
+                               for a in bed_axes]))
 
 class ZAdjustStatus:
     def __init__(self, printer):

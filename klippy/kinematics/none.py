@@ -10,7 +10,7 @@ class NoneKinematics:
     def get_steppers(self):
         return []
     def calc_position(self, stepper_positions):
-        return [0, 0, 0, 0, 0]
+        return [0, 0, 0]
     def set_position(self, newpos, homing_axes):
         pass
     def clear_homing_state(self, clear_axes):

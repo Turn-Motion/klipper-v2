@@ -60,7 +60,7 @@ class ExtruderStepper:
         if extruder is None or not isinstance(extruder, PrinterExtruder):
             raise self.printer.command_error("'%s' is not a valid extruder."
                                              % (extruder_name,))
-        self.stepper.set_position([extruder.last_position, 0., 0., 0., 0.])
+        self.stepper.set_position([extruder.last_position])
         self.stepper.set_trapq(extruder.get_trapq())
         self.motion_queue = extruder_name
         motion_queuing.check_step_generation_scan_windows()
@@ -248,8 +248,8 @@ class PrinterExtruder:
         # Queue movement (x is extruder movement, y is pressure advance flag)
         self.trapq_append(self.trapq, print_time,
                           move.accel_t, move.cruise_t, move.decel_t,
-                          move.start_pos[ea_index], 0., 0., 0., 0.,
-                          1., can_pressure_advance, 0., 0., 0.,
+                          2, [move.start_pos[ea_index], 0.],
+                          [1., can_pressure_advance],
                           start_v, cruise_v, accel)
         self.last_position = move.end_pos[ea_index]
     def find_past_position(self, print_time):

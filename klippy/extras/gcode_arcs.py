@@ -21,9 +21,6 @@ ARC_PLANE_Y_Z = 2
 X_AXIS = 0
 Y_AXIS = 1
 Z_AXIS = 2
-A_AXIS = 3
-B_AXIS = 4
-E_AXIS = 5
 
 
 class ArcSupport:
@@ -66,14 +63,18 @@ class ArcSupport:
         currentPos = gcodestatus['gcode_position']
         absolut_extrude = gcodestatus['absolute_extrude']
 
-        # Parse parameters
-        asTarget = [gcmd.get_float("X", currentPos[0]),
-                    gcmd.get_float("Y", currentPos[1]),
-                    gcmd.get_float("Z", currentPos[2]),
-                    gcmd.get_float("A", currentPos[3]),
-                    gcmd.get_float("B", currentPos[4])]
+        # The kinematic axes of this printer, in order
+        toolhead = self.printer.lookup_object('toolhead')
+        axis_names = toolhead.get_axis_names()
+        e_index = toolhead.get_extruder_index()
+        if len(axis_names) < 3 or axis_names[:3] != 'xyz':
+            raise gcmd.error("G2/G3 requires x, y and z axes")
 
-        if gcmd.get_float("R", None) is not None:
+        # Parse parameters - every kinematic axis may be given
+        asTarget = [gcmd.get_float(name.upper(), currentPos[index])
+                    for index, name in enumerate(axis_names)]
+
+        if 'r' not in axis_names and gcmd.get_float("R", None) is not None:
             raise gcmd.error("G2/G3 does not support R moves")
 
         # determine the plane coordinates and the helical axis
@@ -93,9 +94,14 @@ class ArcSupport:
         if not (asPlanar[0] or asPlanar[1]):
             raise gcmd.error("G2/G3 requires IJ, IK or JK parameters")
 
+        # Every kinematic axis that is not part of the arc plane and
+        # not the helical axis travels linearly along the arc
+        linear_axes = [i for i in range(len(axis_names)) if i not in axes]
+
         # Build linear coordinates to move
         self.planArc(currentPos, asTarget, asPlanar, clockwise,
-                     gcmd, absolut_extrude, *axes)
+                     gcmd, absolut_extrude, axis_names, e_index, linear_axes,
+                     *axes)
 
     # function planArc() originates from marlin plan_arc()
     # https://github.com/MarlinFirmware/Marlin
@@ -106,7 +112,7 @@ class ArcSupport:
     #
     # alpha and beta axes are the current plane, helical axis is linear travel
     def planArc(self, currentPos, targetPos, offset, clockwise,
-                gcmd, absolut_extrude,
+                gcmd, absolut_extrude, axis_names, e_index, linear_axes,
                 alpha_axis, beta_axis, helical_axis):
         # todo: sometimes produces full circles
 
@@ -153,11 +159,12 @@ class ArcSupport:
         e_per_move = e_base = 0.
         if asE is not None:
             if absolut_extrude:
-                e_base = currentPos[E_AXIS]
+                e_base = currentPos[e_index]
             e_per_move = (asE - e_base) / segments
-        # The A and B bed axes travel linearly along the arc
-        a_per_segment = (targetPos[A_AXIS] - currentPos[A_AXIS]) / segments
-        b_per_segment = (targetPos[B_AXIS] - currentPos[B_AXIS]) / segments
+        # Any remaining kinematic axis travels linearly along the arc
+        axis_per_segment = {
+            axis: (targetPos[axis] - currentPos[axis]) / segments
+            for axis in linear_axes}
 
         for i in range(1, int(segments) + 1):
             dist_Helical = i * linear_per_segment
@@ -167,19 +174,18 @@ class ArcSupport:
             r_P = -offset[0] * cos_Ti + offset[1] * sin_Ti
             r_Q = -offset[0] * sin_Ti - offset[1] * cos_Ti
 
-            c = [None, None, None, None, None]
+            c = [None] * len(axis_names)
             c[alpha_axis] = center_P + r_P
             c[beta_axis] = center_Q + r_Q
             c[helical_axis] = currentPos[helical_axis] + dist_Helical
-            c[A_AXIS] = currentPos[A_AXIS] + i * a_per_segment
-            c[B_AXIS] = currentPos[B_AXIS] + i * b_per_segment
-
+            for axis, per_segment in axis_per_segment.items():
+                c[axis] = currentPos[axis] + i * per_segment
 
             if i == segments:
                 c = targetPos
             # Convert coords into G1 commands
-            g1_params = {'X': c[0], 'Y': c[1], 'Z': c[2],
-                         'A': c[3], 'B': c[4]}
+            g1_params = {name.upper(): c[index]
+                         for index, name in enumerate(axis_names)}
             if e_per_move:
                 g1_params['E'] = e_base + e_per_move
                 if absolut_extrude:

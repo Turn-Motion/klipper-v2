@@ -168,7 +168,7 @@ class HallFilamentWidthSensor:
             return self.reactor.NEVER
         # Update extrude factor
         pos = self.toolhead.get_position()
-        last_epos = pos[5]
+        last_epos = pos[self.toolhead.get_extruder_index()]
         # Update filament array for lastFilamentWidthReading
         self.update_filament_array(last_epos)
         # Check runout

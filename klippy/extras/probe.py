@@ -3,6 +3,7 @@
 # Copyright (C) 2017-2026  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+import axis_roster
 import logging
 import pins
 from . import manual_probe
@@ -36,21 +37,24 @@ def calc_probe_z_average(positions, method='average'):
 ######################################################################
 
 # Helper to implement common probing commands
-# The bed is carried by the Z, A, and B motors together.  These helpers
-# build coordinates that move Z to a target height and carry A and B
-# along by the same amount, so any tilt correction between the three
-# motors is preserved.
+# The bed may be carried by several motors at once (the kinematics
+# reports them through axis_roster.get_bed_axes).  These helpers build
+# coordinates that move the bed to a target height and carry the other
+# bed motors by the same amount, so any tilt correction between them is
+# preserved.
 def bed_lift_coord(toolhead, z):
+    printer = toolhead.printer
     pos = toolhead.get_position()
-    dz = z - pos[2]
-    return [None, None, z, pos[3] + dz, pos[4] + dz]
+    coord = [None] * toolhead.get_axis_count()
+    bed_axes = axis_roster.get_bed_axes(printer)
+    if bed_axes:
+        dz = z - pos[bed_axes[0]]
+        for axis in bed_axes:
+            coord[axis] = pos[axis] + dz
+    return coord
 def bed_descend_position(toolhead, z):
-    pos = toolhead.get_position()
-    dz = z - pos[2]
-    pos[2] = z
-    pos[3] += dz
-    pos[4] += dz
-    return pos
+    return axis_roster.bed_target_position(toolhead.printer,
+                                           toolhead.get_position(), z)
 # The probe descends no further than this (relative to the toolhead Z
 # coordinate) unless the printer's minimum Z is higher.
 DEFAULT_PROBE_TRAVEL_LIMIT = -1.5
@@ -133,10 +137,9 @@ class ProbeCommandHelper:
         # Perform initial probe
         ppos = run_single_probe(self.probe, gcmd)
         # Move away from the bed
-        curpos = self.printer.lookup_object('toolhead').get_position()
-        curpos[2] += 5.
-        curpos[3] += 5.
-        curpos[4] += 5.
+        toolhead = self.printer.lookup_object('toolhead')
+        curpos = axis_roster.bed_delta_position(
+            self.printer, toolhead.get_position(), 5.)
         self._move(curpos, params['lift_speed'])
         # Move the nozzle over the probe point
         curpos[0] = ppos.bed_x
@@ -226,11 +229,9 @@ class LookupZSteppers:
         self.printer.register_event_handler('klippy:mcu_identify',
                                             self._handle_mcu_identify)
     def _handle_mcu_identify(self):
-        kin = self.printer.lookup_object('toolhead').get_kinematics()
-        for stepper in kin.get_steppers():
-            if (stepper.is_active_axis('z') or stepper.is_active_axis('a')
-                or stepper.is_active_axis('b')):
-                self.add_stepper_cb(stepper)
+        # Every motor that carries the bed must halt on a probe trigger
+        for stepper in axis_roster.get_bed_steppers(self.printer):
+            self.add_stepper_cb(stepper)
 
 # Support homing via probe using the probe:z_virtual_endstop pseudo-pin
 class HomingViaProbeHelper:
@@ -595,14 +596,16 @@ class ProbeEndstopWrapper:
         toolhead = self.printer.lookup_object('toolhead')
         start_pos = toolhead.get_position()
         self.deactivate_gcode.run_gcode_from_command()
-        if toolhead.get_position()[:5] != start_pos[:5]:
+        naxes = toolhead.get_axis_count()
+        if toolhead.get_position()[:naxes] != start_pos[:naxes]:
             raise self.printer.command_error(
                 "Toolhead moved during probe deactivate_gcode script")
     def _lower_probe(self):
         toolhead = self.printer.lookup_object('toolhead')
         start_pos = toolhead.get_position()
         self.activate_gcode.run_gcode_from_command()
-        if toolhead.get_position()[:5] != start_pos[:5]:
+        naxes = toolhead.get_axis_count()
+        if toolhead.get_position()[:naxes] != start_pos[:naxes]:
             raise self.printer.command_error(
                 "Toolhead moved during probe activate_gcode script")
     def start_probe_session(self, gcmd):

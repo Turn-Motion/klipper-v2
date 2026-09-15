@@ -7,6 +7,7 @@
 # Adjusts Z position in real-time using a thermal probe to e.g. compensate
 # for thermal expansion of the printer frame.
 
+import axis_roster
 import threading
 
 KELVIN_TO_CELSIUS = -273.15
@@ -106,17 +107,15 @@ class ZThermalAdjuster:
                 self.z_adjust_mm = min([self.max_z_adjust_mm*sign,
                     adjust], key=abs)
 
-        # Apply Z adjustment (the A and B bed axes move with Z)
+        # Apply Z adjustment (every bed axis moves with Z)
         adj = self.z_adjust_mm
         self.last_z_adjust_mm = self.z_adjust_mm
-        return [pos[0], pos[1], pos[2] + adj, pos[3] + adj,
-                pos[4] + adj] + pos[5:]
+        return axis_roster.bed_delta_position(self.printer, pos, adj)
 
     def calc_unadjust(self, pos):
         'Remove Z adjustment'
         adj = self.z_adjust_mm
-        return [pos[0], pos[1], pos[2] - adj, pos[3] - adj,
-                pos[4] - adj] + pos[5:]
+        return axis_roster.bed_delta_position(self.printer, pos, -adj)
 
     def get_position(self):
         position = self.calc_unadjust(self.next_transform.get_position())
@@ -127,8 +126,8 @@ class ZThermalAdjuster:
         # don't apply to extrude only moves or when disabled
         if (newpos[0:2] == self.last_position[0:2]) or not self.adjust_enable:
             adj = self.last_z_adjust_mm
-            adjusted_pos = [newpos[0], newpos[1], newpos[2] + adj,
-                            newpos[3] + adj, newpos[4] + adj] + newpos[5:]
+            adjusted_pos = axis_roster.bed_delta_position(
+                self.printer, newpos, adj)
             self.next_transform.move(adjusted_pos, speed)
         else:
             adjusted_pos = self.calc_adjust(newpos)

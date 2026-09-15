@@ -3,6 +3,7 @@
 # Copyright (C) 2019 Florian Heilmann <Florian.Heilmann@gmx.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+import axis_roster
 from . import manual_probe
 
 class SafeZHoming:
@@ -27,8 +28,17 @@ class SafeZHoming:
             raise config.error("homing_override and safe_z_homing cannot"
                                +" be used simultaneously")
 
+    def _bed_hop_coord(self, toolhead, height):
+        # A partial coordinate that lifts every bed axis to 'height'
+        coord = [None] * toolhead.get_axis_count()
+        for axis in axis_roster.get_bed_axes(self.printer):
+            coord[axis] = height
+        return coord
     def cmd_G28(self, gcmd):
         toolhead = self.printer.lookup_object('toolhead')
+        axis_names = toolhead.get_axis_names()
+        bed_axes = axis_roster.get_bed_axes(self.printer)
+        bed_axis_names = "".join([axis_names[a] for a in bed_axes])
 
         # Perform Z Hop if necessary
         if self.z_hop != 0.0:
@@ -37,26 +47,28 @@ class SafeZHoming:
             kin_status = toolhead.get_kinematics().get_status(curtime)
             pos = toolhead.get_position()
 
-            # The Z, A, and B axes carry the bed together
+            # Every bed axis carries the bed together
             if 'z' not in kin_status['homed_axes']:
                 # Always perform the z_hop if the Z axis is not homed
-                pos[2] = pos[3] = pos[4] = 0
-                toolhead.set_position(pos, homing_axes="zab")
-                toolhead.manual_move(
-                    [None, None, self.z_hop, self.z_hop, self.z_hop],
-                    self.z_hop_speed)
-                toolhead.get_kinematics().clear_homing_state("zab")
+                for axis in bed_axes:
+                    pos[axis] = 0
+                toolhead.set_position(pos, homing_axes=bed_axis_names)
+                toolhead.manual_move(self._bed_hop_coord(toolhead, self.z_hop),
+                                     self.z_hop_speed)
+                toolhead.get_kinematics().clear_homing_state(bed_axis_names)
             elif pos[2] < self.z_hop:
                 # If the Z axis is homed, and below z_hop, lift it to z_hop
-                toolhead.manual_move(
-                    [None, None, self.z_hop, self.z_hop, self.z_hop],
-                    self.z_hop_speed)
+                toolhead.manual_move(self._bed_hop_coord(toolhead, self.z_hop),
+                                     self.z_hop_speed)
 
         # Determine which axes we need to home
-        need_x, need_y, need_z, need_a, need_b = [
-            gcmd.get(axis, None) is not None for axis in "XYZAB"]
-        if not (need_x or need_y or need_z or need_a or need_b):
-            need_x = need_y = need_z = need_a = need_b = True
+        requested = [gcmd.get(name.upper(), None) is not None
+                     for name in axis_names]
+        if not any(requested):
+            requested = [True] * len(axis_names)
+        need_x = requested[0]
+        need_y = requested[1]
+        need_bed = any([requested[a] for a in bed_axes])
 
         # Home XY axes if necessary
         new_params = {}
@@ -68,8 +80,8 @@ class SafeZHoming:
             g28_gcmd = self.gcode.create_gcode_command("G28", "G28", new_params)
             self.prev_G28(g28_gcmd)
 
-        # Home Z axis if necessary (Z, A, and B are always homed together)
-        if need_z or need_a or need_b:
+        # Home the bed axes if necessary (they are homed together)
+        if need_bed:
             # Throw an error if X or Y are not homed
             curtime = self.printer.get_reactor().monotonic()
             kin_status = toolhead.get_kinematics().get_status(curtime)
@@ -79,16 +91,17 @@ class SafeZHoming:
             # Move to safe XY homing position
             prevpos = toolhead.get_position()
             toolhead.manual_move([self.home_x_pos, self.home_y_pos], self.speed)
-            # Home Z, A, and B
-            g28_gcmd = self.gcode.create_gcode_command(
-                "G28", "G28", {'Z': '0', 'A': '0', 'B': '0'})
+            # Home every bed axis
+            bed_params = {axis_names[a].upper(): '0' for a in bed_axes}
+            g28_gcmd = self.gcode.create_gcode_command("G28", "G28",
+                                                       bed_params)
             self.prev_G28(g28_gcmd)
             # Perform Z Hop again for pressure-based probes
             if self.z_hop:
                 pos = toolhead.get_position()
                 if pos[2] < self.z_hop:
                     toolhead.manual_move(
-                        [None, None, self.z_hop, self.z_hop, self.z_hop],
+                        self._bed_hop_coord(toolhead, self.z_hop),
                         self.z_hop_speed)
             # Move XY back to previous positions
             if self.move_to_previous:

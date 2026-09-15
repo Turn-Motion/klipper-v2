@@ -59,16 +59,16 @@ class ManualStepper:
         toolhead = self.printer.lookup_object('toolhead')
         toolhead.flush_step_generation()
         self.commanded_pos = setpos
-        self.rail.set_position([self.commanded_pos, 0., 0., 0., 0.])
+        self.rail.set_position([self.commanded_pos])
     def _submit_move(self, movetime, movepos, speed, accel):
         cp = self.commanded_pos
         dist = movepos - cp
         axis_r, accel_t, cruise_t, cruise_v = force_move.calc_move_time(
             dist, speed, accel)
+        # This stepper's private trapq carries one axis
         self.trapq_append(self.trapq, movetime,
                           accel_t, cruise_t, accel_t,
-                          cp, 0., 0., 0., 0., axis_r, 0., 0., 0., 0.,
-                          0., cruise_v, accel)
+                          1, [cp], [axis_r], 0., cruise_v, accel)
         self.commanded_pos = movepos
         return movetime + accel_t + cruise_t + accel_t
     def do_move(self, movepos, speed, accel, sync=True):
@@ -84,7 +84,7 @@ class ManualStepper:
             raise self.printer.command_error(
                 "No endstop for this manual stepper")
         self.homing_accel = accel
-        pos = [movepos, 0., 0., 0., 0., 0.]
+        pos = [movepos, 0., 0.]
         endstops = self.rail.get_endstops()
         phoming = self.printer.lookup_object('homing')
         phoming.manual_home(self, endstops, pos, speed,
@@ -173,8 +173,7 @@ class ManualStepper:
         cruise_v = move.cruise_v * axis_r
         self.trapq_append(self.trapq, print_time,
                           move.accel_t, move.cruise_t, move.decel_t,
-                          start_pos, 0., 0., 0., 0.,
-                          1., 0., 0., 0., 0.,
+                          1, [start_pos], [1.],
                           start_v, cruise_v, accel)
         self.commanded_pos = move.end_pos[ea_index]
     def check_move(self, move, ea_index):
@@ -204,7 +203,7 @@ class ManualStepper:
         toolhead = self.printer.lookup_object('toolhead')
         toolhead.flush_step_generation()
     def get_position(self):
-        return [self.commanded_pos, 0., 0., 0., 0., 0.]
+        return [self.commanded_pos, 0., 0.]
     def set_position(self, newpos, homing_axes=""):
         self.do_set_position(newpos[0])
     def get_last_move_time(self):
@@ -225,10 +224,15 @@ class ManualStepper:
         self.motion_queuing.wipe_trapq(self.trapq)
     def get_kinematics(self):
         return self
+    # This "toolhead" has a single axis of its own
+    def get_axis_names(self):
+        return "x"
+    def get_axis_count(self):
+        return 1
     def get_steppers(self):
         return self.steppers
     def calc_position(self, stepper_positions):
-        return [stepper_positions[self.rail.get_name()], 0., 0., 0., 0.]
+        return [stepper_positions[self.rail.get_name()], 0., 0.]
 
 def load_config_prefix(config):
     return ManualStepper(config)

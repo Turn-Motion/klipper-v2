@@ -3,6 +3,7 @@
 # Copyright (C) 2018-2019 Eric Callahan <arksine.code@gmail.com>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+import axis_roster
 import logging, math, json, collections
 from . import probe
 
@@ -165,7 +166,8 @@ class BedMesh:
             self.fade_target = 0.
         self.tool_offset = 0.
         self.z_mesh = mesh
-        self.splitter.initialize(mesh, self.fade_target)
+        self.splitter.initialize(mesh, self.fade_target,
+                                 axis_roster.get_bed_axes(self.printer))
         # cache the current position before a transform takes place
         gcode_move = self.printer.lookup_object('gcode_move')
         gcode_move.reset_last_position()
@@ -182,10 +184,8 @@ class BedMesh:
         # Return last, non-transformed position
         if self.z_mesh is None:
             # No mesh calibrated, so send toolhead position
-            self.last_position[:] = self.toolhead.get_position()
-            self.last_position[2] -= self.fade_target
-            self.last_position[3] -= self.fade_target
-            self.last_position[4] -= self.fade_target
+            self.last_position[:] = axis_roster.bed_delta_position(
+                self.printer, self.toolhead.get_position(), -self.fade_target)
         else:
             # return current position minus the current z-adjustment
             cur_pos = self.toolhead.get_position()
@@ -205,11 +205,9 @@ class BedMesh:
                           (self.fade_dist - z_adj))
                 factor = constrain(factor, 0., 1.)
             final_z_adj = factor * z_adj + self.fade_target
-            # The A and B bed motors carry the same adjustment as Z
-            self.last_position[:] = ([x, y, z - final_z_adj,
-                                      cur_pos[3] - final_z_adj,
-                                      cur_pos[4] - final_z_adj]
-                                     + cur_pos[5:])
+            # Every bed motor carries the same adjustment
+            self.last_position[:] = axis_roster.bed_delta_position(
+                self.printer, cur_pos, -final_z_adj)
         return list(self.last_position)
     def move(self, newpos, speed):
         factor = self.get_z_factor(newpos[2])
@@ -221,10 +219,8 @@ class BedMesh:
                 logging.info(
                     "bed_mesh fade complete: Current Z: %.4f fade_target: %.4f "
                     % (z, self.fade_target))
-            self.toolhead.move([x, y, z + self.fade_target,
-                                newpos[3] + self.fade_target,
-                                newpos[4] + self.fade_target] + newpos[5:],
-                               speed)
+            self.toolhead.move(axis_roster.bed_delta_position(
+                self.printer, newpos, self.fade_target), speed)
         else:
             self.splitter.build_move(self.last_position, newpos, factor)
             while not self.splitter.traverse_complete:
@@ -1265,6 +1261,7 @@ class RapidScanHelper:
 
 class MoveSplitter:
     def __init__(self, config, gcode):
+        self.bed_axes = [2]
         self.split_delta_z = config.getfloat(
             'split_delta_z', .025, minval=0.01)
         self.move_check_distance = config.getfloat(
@@ -1272,9 +1269,10 @@ class MoveSplitter:
         self.z_mesh = None
         self.fade_offset = 0.
         self.gcode = gcode
-    def initialize(self, mesh, fade_offset):
+    def initialize(self, mesh, fade_offset, bed_axes=(2,)):
         self.z_mesh = mesh
         self.fade_offset = fade_offset
+        self.bed_axes = list(bed_axes)
     def build_move(self, prev_pos, next_pos, factor):
         self.prev_pos = tuple(prev_pos)
         self.next_pos = tuple(next_pos)
@@ -1312,18 +1310,16 @@ class MoveSplitter:
                     if abs(next_z - self.z_offset) >= self.split_delta_z:
                         self.z_offset = next_z
                         newpos = list(self.current_pos)
-                        newpos[2] += self.z_offset
-                        newpos[3] += self.z_offset
-                        newpos[4] += self.z_offset
+                        for axis in self.bed_axes:
+                            newpos[axis] += self.z_offset
                         return newpos
             # end of move reached
             self.current_pos[:] = self.next_pos
             self.z_offset = self._calc_z_offset(self.current_pos)
             # Its okay to add Z-Offset to the final move, since it will not be
             # used again.
-            self.current_pos[2] += self.z_offset
-            self.current_pos[3] += self.z_offset
-            self.current_pos[4] += self.z_offset
+            for axis in self.bed_axes:
+                self.current_pos[axis] += self.z_offset
             self.traverse_complete = True
             return self.current_pos
         else:
