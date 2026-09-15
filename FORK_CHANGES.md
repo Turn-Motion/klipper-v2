@@ -293,8 +293,10 @@ docker compose -f docker-compose.sim.yml run --rm \
 
 It runs the unit tests (`test/test_axis_motion.py` for the roster,
 distance groups, move checking and the rotary modes;
-`test/test_uv_derived.py` for the derived carriage equations against the
-vendored reference solver, with the compiled C solver required), then
+`test/test_bed_transforms.py` for the bed-adjusting g-code transforms,
+which have no upstream test of their own; `test/test_uv_derived.py` for
+the derived carriage equations against the vendored reference solver,
+with the compiled C solver required), then
 boots klippy in batch mode against `sim/printer.sim.cfg`,
 `sim/printer.sim.uvderived.cfg` and `sim/printer.sim.rotary.cfg`.
 The first two run the *same* g-code, which is the point: adding the
@@ -304,6 +306,7 @@ The unit tests also run standalone with plain Python, no compiler:
 
 ```
 python test/test_axis_motion.py
+python test/test_bed_transforms.py
 python test/test_uv_derived.py
 ```
 

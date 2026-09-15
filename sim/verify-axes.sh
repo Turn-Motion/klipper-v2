@@ -10,6 +10,7 @@
 #   3. unit tests:
 #        test_axis_motion.py  - axis roster, distance groups, move checking,
 #                               the rotary modes, the derived carriages
+#        test_bed_transforms.py - the g-code transforms that adjust the bed
 #        test_uv_derived.py   - the derived carriage equations against the
 #                               vendored reference solver, with the compiled
 #                               C solver REQUIRED
@@ -68,6 +69,9 @@ echo " [3/6] unit tests"
 echo "============================================================"
 echo "--- test_axis_motion.py (roster, distance groups, move checking) ---"
 python /klipper/test/test_axis_motion.py || fail "test_axis_motion.py"
+echo
+echo "--- test_bed_transforms.py (bed_tilt, z_thermal_adjust, bed_mesh) ---"
+python /klipper/test/test_bed_transforms.py || fail "test_bed_transforms.py"
 echo
 # REQUIRE_C_SOLVER makes an unavailable compiled solver a hard failure, so
 # this stage cannot silently degrade to the Python transcription.
