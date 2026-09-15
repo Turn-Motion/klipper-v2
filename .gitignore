@@ -6,3 +6,6 @@ out
 klippy/.version
 .vs/
 .vscode/
+
+# Vendored reference package byte code
+test/reference/**/__pycache__/

@@ -25,7 +25,12 @@ DEFAULT_AXIS_NAMES = "xyz"
 # distance is the largest group - so axes in different groups each get
 # the full move time rather than sharing it.  One group over every axis
 # is the classic "cartesian distance" behaviour.
-def calc_move_distance(axes_d, distance_groups):
+#
+# A kinematics may leave an axis out of every group, which is how an
+# axis is carried along by a move without ever making it longer.  Such
+# an axis still needs a distance of its own when it is the only thing
+# moving, so the largest kinematic axis distance is the fallback.
+def calc_move_distance(axes_d, distance_groups, naxes):
     move_d = 0.
     for group in distance_groups:
         if len(group) == 1:
@@ -34,6 +39,11 @@ def calc_move_distance(axes_d, distance_groups):
             d = math.sqrt(sum([axes_d[i]**2 for i in group]))
         if d > move_d:
             move_d = d
+    if move_d < .000000001:
+        for i in range(naxes):
+            d = abs(axes_d[i])
+            if d > move_d:
+                move_d = d
     return move_d
 
 # Class to track each move request
@@ -51,8 +61,8 @@ class Move:
         self.axes_d = axes_d = [ep - sp for sp, ep in zip(start_pos, end_pos)]
         # The move distance is the largest of the kinematics' distance
         # groups - the slowest group determines the time for the move.
-        self.move_d = move_d = calc_move_distance(axes_d,
-                                                  toolhead.distance_groups)
+        self.move_d = move_d = calc_move_distance(
+            axes_d, toolhead.distance_groups, naxes)
         if move_d < .000000001:
             # Extrude only move
             self.end_pos = tuple(start_pos[:naxes]) + self.end_pos[naxes:]

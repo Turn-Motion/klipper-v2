@@ -130,6 +130,7 @@ class AxisKinematics:
         # Distance groups: the planar axes share one, every vertical axis
         # gets its own, and a rotary axis gets one unless it is slaved
         self.distance_groups = self._build_distance_groups(config)
+        self.slaved_axes = self._slaved_axes()
         # Optional derived (non-axis) steppers, e.g. the bed joint slides
         self.derived = None
         if config.has_section('bed_joint_carriages'):
@@ -189,6 +190,11 @@ class AxisKinematics:
                 if mode == 'coordinated':
                     groups.append((axis.index,))
         return groups
+    def _slaved_axes(self):
+        # Axes that are in no distance group: they are carried along by
+        # the other axes and never make a move longer
+        grouped = set([i for g in self.distance_groups for i in g])
+        return [axis for axis in self.axes if axis.index not in grouped]
     # Stepper and position plumbing
     def get_steppers(self):
         res = [s for rail in self.rails for s in rail.get_steppers()]
@@ -393,6 +399,15 @@ class AxisKinematics:
         # Each distance group runs at its own limit, and the group that
         # needs the most time sets the speed of the whole move
         move_d = move.move_d
+        groups = self.distance_groups
+        if self.slaved_axes:
+            # A slaved axis does not bound a move it shares with other
+            # axes, but when it moves on its own its limits are all
+            # there is to go by
+            grouped_moved = any([axes_d[i] for g in groups for i in g])
+            if not grouped_moved:
+                groups = [(axis.index,) for axis in self.slaved_axes
+                          if axes_d[axis.index]]
         effective_v = effective_a = None
         if self.derived is not None:
             # Derived steppers are not axes, but their travel still
@@ -400,7 +415,7 @@ class AxisKinematics:
             limits = self.derived.check_move(move)
             if limits is not None:
                 effective_v, effective_a = limits
-        for group in self.distance_groups:
+        for group in groups:
             if len(group) == 1:
                 group_d = abs(axes_d[group[0]])
             else:
