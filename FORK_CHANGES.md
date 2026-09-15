@@ -12,6 +12,10 @@ This file is the single place that records **what** the fork changes,
 version. Keep it up to date whenever a fork change is added, removed,
 or moved. It is written for both humans and coding agents.
 
+For the architecture - how the axis roster works, what the kinematics
+engine does, and how to configure each machine - see
+[docs/Turn_Kinematics.md](docs/Turn_Kinematics.md).
+
 ## 1. Branch and update strategy
 
 - `upstream` remote: https://github.com/Klipper3d/klipper.git
@@ -172,6 +176,7 @@ roster and nothing else; everything else is shared.
 | `klippy/kinematics/bed_joint_carriages.py` | `[bed_joint_carriages]`: the two horizontal bed joint slides, derived from the bed pose rather than commanded.  `travel_check: sampled|endpoints` and `homing_mode: detached|attached` select between the two implementations we have run. |
 | `klippy/kinematics/cartesianxy3z_safety.py` | Bed joint geometry checks (`[CartesianXY3ZSafety]` section, `CHECK_CARTESIANXY3Z_SAFETY`, `PREVIEW_MOVE`).  Pure fork code.  It is specific to the three-vertical-axis bed and indexes z, a and b at 2, 3 and 4, which holds for every flavour that enables it. |
 | `config/example-Turn-V2.cfg`, `config/example-cartesianxy3z-full.cfg`, `config/example-cartesianxy3zr.cfg`, `config/example-bed-joint-carriages.cfg`, `printer.cfg` | machine configs |
+| `docs/Turn_Kinematics.md` | **fork-only** architecture and configuration guide |
 
 Adding a flavour is a new module with a roster and a `load_kinematics`
 that calls `AxisKinematics`.  Do not subclass an existing flavour.
