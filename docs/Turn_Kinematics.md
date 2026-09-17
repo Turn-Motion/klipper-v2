@@ -15,25 +15,58 @@
 
 This document describes the motion architecture of the Turn Klipper fork:
 how many kinematic axes a printer has, which component decides that, and
-how the rest of the host software is written so that the answer can differ
-from one machine to the next. It is the reference for anyone changing
-motion, homing, probing or g-code handling in this repository, and for
-anyone configuring a machine against it.
+how the host software is written so the answer can differ between
+machines. It is the reference for changes to motion, homing, probing and
+g-code handling, and for configuring a machine against them.
+
+### Why the fork is based on current upstream
+
+The previous fork was based on Klipper from April 2025. Upstream moved 705
+commits beyond it, rewriting the lookahead queue and moving step generation
+into a new `motion_queuing` module. The fork's `toolhead.py` was by then an
+old upstream file carrying five-axis edits; it could not be rebased
+mechanically and was re-ported by hand onto current upstream.
+
+Rebasing onto upstream is therefore an architectural constraint rather than
+housekeeping:
+
+- **Divergence compounds.** Upstream restructures the motion path every few
+  releases. A fork that carries edits inside those files pays for each
+  restructuring it skipped, and eventually cannot rebase at all.
+- **Upstream's tests apply to this code.** Because the stock kinematics
+  still run through this motion core, upstream's own regression
+  configurations exercise it rather than bypassing it.
+- **Fixes and hardware support arrive without work**, provided the fork is
+  a small stack on top rather than a snapshot beside.
+- **Changes can be proposed upstream.** That is the only route by which the
+  fork's footprint shrinks instead of growing.
+
+### Why the axis count is generalised rather than raised
+
+Three machines are in scope: a gantry over a three-motor bed, the same bed
+with derived horizontal joint carriages, and the same machine with a rotary
+axis. Raising the hard-coded three to five, and then to six, makes each
+machine a separate sweep through the motion core, and the variants cannot
+be combined because each owns its own copy of that core.
+
+Generalising instead puts the machine-specific part in a declaration and
+leaves the shared part upstream-shaped, working for three axes as well as
+for six. One repository, one build and one firmware serve every machine,
+and `printer.cfg` selects between them. Stock Klipper kinematics keep
+running from the same build, which is what makes the point above about
+upstream's tests true.
+
+### Scope
 
 **In scope.** The axis roster and the interfaces built on it, the
 kinematics engine and the machine variants it serves, the runtime path a
 move takes, the configuration surface of each variant, and the conventions
-that keep the fork maintainable against upstream.
+that keep the fork rebaseable.
 
 **Out of scope.** The MCU firmware, the serial protocol and step
 compression, none of which this architecture changes. Upstream Klipper's
 own kinematics, which continue to work unmodified. Machine mechanics and
 electrical design.
-
-One repository, one build, one firmware: which machine a build behaves
-like is decided entirely by `printer.cfg`. No MCU-side change is involved,
-so no board needs a different flash, and the stock Klipper kinematics run
-from the same build.
 
 ## 1. The one idea
 

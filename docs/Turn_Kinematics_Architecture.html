@@ -142,18 +142,7 @@
   .chip-mod  { background: var(--subtle-2); border: 1px solid var(--muted); }
   .chip-up   { background: var(--subtle-3); border: 1px solid var(--border-strong); }
 
-  ol.toc { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
-  ol.toc li {
-    counter-increment: toc; padding: 1.8mm 0;
-    border-bottom: 1px solid var(--border); display: flex; gap: 4mm;
-  }
-  ol.toc li::before {
-    content: counter(toc) "."; color: var(--muted); font-weight: 600;
-    min-width: 7mm; font-variant-numeric: tabular-nums;
-  }
-  ol.toc .t { font-weight: 600; }
-  ol.toc .d { color: var(--muted); font-size: 9pt; display: block;
-              font-weight: 400; }
+
 
   /* ---------- diagrams ---------- */
   svg text {
@@ -223,54 +212,69 @@
         and the procedure for moving to a new upstream release</td></tr>
   </table>
 
-  <h2>Purpose and scope</h2>
+    <h2>Purpose and scope</h2>
 
   <p>This document describes the motion architecture of the Turn Klipper
   fork: how many kinematic axes a printer has, which component decides
-  that, and how the rest of the host software is written so that the
-  answer can differ from one machine to the next. It is the reference for
-  anyone changing motion, homing, probing or g-code handling in this
-  repository, and for anyone configuring a machine against it.</p>
+  that, and how the host software is written so the answer can differ
+  between machines. It is the reference for changes to motion, homing,
+  probing and g-code handling, and for configuring a machine against
+  them.</p>
+
+  <h3>Why the fork is based on current upstream</h3>
+
+  <p>The previous fork was based on Klipper from April 2025. Upstream
+  moved 705 commits beyond it, rewriting the lookahead queue and moving
+  step generation into a new <code>motion_queuing</code> module. The
+  fork's <code>toolhead.py</code> was by then an old upstream file
+  carrying five-axis edits; it could not be rebased mechanically and was
+  re-ported by hand onto current upstream.</p>
+
+  <p>Rebasing onto upstream is therefore an architectural constraint
+  rather than housekeeping:</p>
+
+  <ul>
+    <li><b>Divergence compounds.</b> Upstream restructures the motion path
+    every few releases. A fork that carries edits inside those files pays
+    for each restructuring it skipped, and eventually cannot rebase at
+    all.</li>
+    <li><b>Upstream's tests apply to this code.</b> Because the stock
+    kinematics still run through this motion core, upstream's own
+    regression configurations exercise it rather than bypassing it.</li>
+    <li><b>Fixes and hardware support arrive without work</b>, provided the
+    fork is a small stack on top rather than a snapshot beside.</li>
+    <li><b>Changes can be proposed upstream.</b> That is the only route by
+    which the fork's footprint shrinks instead of growing.</li>
+  </ul>
+
+  <h3>Why the axis count is generalised rather than raised</h3>
+
+  <p>Three machines are in scope: a gantry over a three-motor bed, the
+  same bed with derived horizontal joint carriages, and the same machine
+  with a rotary axis. Raising the hard-coded three to five, and then to
+  six, makes each machine a separate sweep through the motion core, and
+  the variants cannot be combined because each owns its own copy of that
+  core.</p>
+
+  <p>Generalising instead puts the machine-specific part in a declaration
+  and leaves the shared part upstream-shaped, working for three axes as
+  well as for six. One repository, one build and one firmware serve every
+  machine, and <code>printer.cfg</code> selects between them. Stock
+  Klipper kinematics keep running from the same build, which is what makes
+  the point above about upstream's tests true.</p>
+
+  <h3>Scope</h3>
 
   <p><b>In scope.</b> The axis roster and the interfaces built on it, the
   kinematics engine and the machine variants it serves, the runtime path a
   move takes, the configuration surface of each variant, and the
-  conventions that keep the fork maintainable against upstream.</p>
+  conventions that keep the fork rebaseable.</p>
 
   <p><b>Out of scope.</b> The MCU firmware, the serial protocol and step
   compression, none of which this architecture changes. Upstream Klipper's
   own kinematics, which continue to work unmodified. Machine mechanics and
   electrical design.</p>
 
-  <h2>Contents</h2>
-  <ol class="toc">
-      <li><span><span class="t">The problem and the idea</span>
-        <span class="d">Why a number in the core had to go, and what replaced it</span></span></li>
-      <li><span><span class="t">The axis roster</span>
-        <span class="d">Position layout, the accessors, and what each machine declares</span></span></li>
-      <li><span><span class="t">System architecture</span>
-        <span class="d">Where the fork touches the host stack, and what it leaves alone</span></span></li>
-      <li><span><span class="t">The life of a move</span>
-        <span class="d">From one G1 line to steps on the wire</span></span></li>
-      <li><span><span class="t">Move distance and speed</span>
-        <span class="d">Distance groups, and why the bed does not slow the gantry</span></span></li>
-      <li><span><span class="t">The kinematics engine</span>
-        <span class="d">One engine, a module per machine flavour</span></span></li>
-      <li><span><span class="t">Homing</span>
-        <span class="d">The G28 sequence for a three-motor bed</span></span></li>
-      <li><span><span class="t">Derived bed-joint carriages</span>
-        <span class="d">Geometry, equations, and the two selectable behaviours</span></span></li>
-      <li><span><span class="t">The rotary axis</span>
-        <span class="d">Coordinated and slaved motion, homed and un-homed</span></span></li>
-      <li><span><span class="t">Bed queries</span>
-        <span class="d">How seven modules stopped guessing which axes carry the bed</span></span></li>
-      <li><span><span class="t">Configuration</span>
-        <span class="d">Choosing a flavour and setting every option</span></span></li>
-      <li><span><span class="t">What changes for the operator</span>
-        <span class="d">G-code, commands and status</span></span></li>
-      <li><span><span class="t">Extending and maintaining</span>
-        <span class="d">Adding a flavour, and surviving the next upstream rebase</span></span></li>
-  </ol>
 </section>
 
 <!-- ============================ 1 ================================== -->
@@ -284,13 +288,13 @@
   (<code>pos[:3]</code>), literals (<code>range(3)</code>), axis strings
   (<code>"xyz"</code>) and fixed indexes (the extruder at 3).</p>
 
-  <p>The Turn machines need five: a cartesian gantry over a bed carried by
-  three independent vertical motors. The previous fork answered by changing
-  every three into a five. That works, but it makes each new machine another
-  sweep through the whole tree, and it puts the fork permanently at odds with
-  upstream, which keeps adding code that assumes three.</p>
+    <p>The Turn machines need five: a cartesian gantry over a bed carried by
+  three independent vertical motors. The previous fork changed every three
+  into a five. That works, but each machine repeats the sweep and the fork
+  diverges further from upstream, which continues to add code assuming
+  three.</p>
 
-  <p>This fork removes the number instead.</p>
+  <p>This architecture removes the number instead.</p>
 
   <div class="note">
     <b>The idea.</b> The kinematics class owns the axis roster. It publishes
@@ -341,15 +345,15 @@
     differs between them.</figcaption>
   </figure>
 
-  <h3>What this buys</h3>
+    <h3>Consequences</h3>
   <ul>
-    <li><b>A rebase that converges.</b> When upstream adds a module that
-    assumes three axes, the fix is mechanical and local: ask the toolhead
+        <li><b>A rebase that converges.</b> When upstream adds a module
+    assuming three axes, the fix is mechanical and local: ask the toolhead
     instead of writing a literal.</li>
     <li><b>Stock kinematics stay on the same path.</b> They run through
     this motion core at three axes rather than around it, so none of them
     becomes a special case to be worked around.</li>
-    <li><b>Machines as configuration.</b> A new flavour is a roster
+        <li><b>Machines as configuration.</b> A variant is a roster
     declaration, not a copy of the kinematics.</li>
   </ul>
 </section>
@@ -488,9 +492,9 @@
 <section>
   <h2><span class="num">3</span>System architecture</h2>
 
-  <p>The fork touches the host process only. The MCU firmware, the serial
-  protocol and step compression are untouched, so one firmware serves every
-  machine and no board is reflashed when a flavour changes.</p>
+    <p>The fork touches the host process only. The MCU firmware, the serial
+  protocol and step compression are unchanged, so one firmware serves every
+  machine and no board is reflashed when the variant changes.</p>
 
   <figure>
     <svg viewBox="0 0 700 468" role="img">
@@ -718,10 +722,10 @@ int    trapq_get_kin_axes(void);   /* compiled maximum, checked at startup */</c
   <h2><span class="num">5</span>Move distance and speed</h2>
 
   <p>Upstream measures a move by the euclidean distance over x, y and z, and a
-  single feed rate then applies to that distance. With three motors under one
-  bed this is the wrong measure: a pure tilt, where Z rises and A falls, has a
-  large euclidean length but each motor only travels a little, and combining
-  them into one distance makes every tilt needlessly slow.</p>
+  single feed rate then applies to that distance. With   three motors under one bed this is the wrong measure: a pure tilt, where Z
+  rises and A falls, has a large euclidean length though each motor travels
+  little, and combining them into one distance makes every tilt
+  unnecessarily slow.</p>
 
   <p>A kinematics may therefore publish <code>distance_groups</code>: a list of
   axis-index tuples. Each group contributes the euclidean norm of its own
@@ -785,9 +789,9 @@ int    trapq_get_kin_axes(void);   /* compiled maximum, checked at startup */</c
 v      = min over groups of  max_velocity[group] * move_d / group_d
 a      = min over groups of  max_accel[group]    * move_d / group_d</code></pre>
 
-  <p>One group covering every axis reproduces upstream exactly, and is the
-  default for a kinematics that publishes nothing. That is what keeps a stock
-  printer's behaviour bit-for-bit unchanged.</p>
+    <p>One group covering every axis reproduces upstream exactly, and is the
+  default for a kinematics that publishes nothing. A stock printer's
+  behaviour is therefore unchanged.</p>
 
   <div class="note">
     <b>Axes in no group.</b> An axis left out of every group is carried along
@@ -802,9 +806,9 @@ a      = min over groups of  max_accel[group]    * move_d / group_d</code></pre>
 <section>
   <h2><span class="num">6</span>The kinematics engine</h2>
 
-  <p>There is one engine. A flavour module declares a roster and nothing
-  else; the engine builds the rails, homes them, range-checks moves and
-  applies the per-group limits.</p>
+    <p>One engine serves every variant. A flavour module declares a roster
+  and nothing else; the engine builds the rails, homes them, range-checks
+  moves and applies the per-group limits.</p>
 
   <figure>
     <svg viewBox="0 0 700 380" role="img">
@@ -882,9 +886,9 @@ a      = min over groups of  max_accel[group]    * move_d / group_d</code></pre>
       <text class="xs" x="484" y="338">or none when slaved</text>
       <text class="mono xs" x="484" y="356">max_&lt;letter&gt;_velocity / _accel</text>
     </svg>
-    <figcaption><b>Figure 6.</b> The flavour supplies a list; the engine
-    supplies the behaviour. Adding a machine does not mean subclassing an
-    existing one.</figcaption>
+        <figcaption><b>Figure 6.</b> The flavour supplies a list; the engine
+    supplies the behaviour. Adding a machine does not require
+    subclassing.</figcaption>
   </figure>
 
   <p>An <code>AxisDef</code> is a letter, a motion group and optionally a
@@ -1037,12 +1041,11 @@ csx  = sqrt(d_x^2 - z_ab^2)            projected A-B separation
 U    = mid_x + z_mz*z_ab/csx - csx/2   A joint world X
 V    = mid_x + z_mz*z_ab/csx + csx/2   B joint world X</code></pre>
 
-  <p>Because the position is recomputed from whatever the bed axes actually
-  are, the carriages follow every bed transform &ndash; z_tilt,
-  <code>SET_GCODE_OFFSET</code>, bed mesh, probe lifts &ndash; with no code of
-  their own, and homing them is unnecessary. The G-code is unchanged: there is
-  no U or V word, and the same file runs with or without the carriages
-  fitted.</p>
+    <p>The position is recomputed from the current bed axes, so the carriages
+  follow every bed transform &ndash; z_tilt, <code>SET_GCODE_OFFSET</code>,
+  bed mesh, probe lifts &ndash; with no code of their own, and homing them is
+  unnecessary. The g-code is unchanged: there is no U or V word, and the same
+  file runs with or without the carriages fitted.</p>
 
   <h3>Why the travel check is sampled</h3>
   <p>U is nonlinear in the bed pose. A move whose two endpoints are both
@@ -1104,7 +1107,7 @@ V    = mid_x + z_mz*z_ab/csx + csx/2   B joint world X</code></pre>
     <figcaption><b>Figure 9.</b> <code>travel_check: endpoints</code> sees only
     the two hollow markers and passes this move.
     <code>travel_check: sampled</code> walks the path and rejects it. The
-    sample count scales with how far the bed pose actually travels, so an
+    sample count scales with how far the bed pose travels, so an
     ordinary small adjustment still costs two evaluations.</figcaption>
   </figure>
 
@@ -1192,10 +1195,9 @@ V    = mid_x + z_mz*z_ab/csx + csx/2   B joint world X</code></pre>
       <rect class="box" x="0" y="216" width="700" height="32" rx="3"/>
       <text class="xs" x="12" y="236">A solo <tspan class="mono">G1 R90</tspan> works in both modes: with R in no group the move distance falls back to the largest single axis distance, and its own limits then apply.</text>
     </svg>
-    <figcaption><b>Figure 10.</b> The trade-off is explicit. Slaved motion
-    keeps the linear path at full speed and lets the rotary rate follow it;
-    coordinated motion keeps the rotary inside its limit and slows the path to
-    match.</figcaption>
+        <figcaption><b>Figure 10.</b> Slaved motion keeps the linear path at
+    full speed and lets the rotary rate follow it; coordinated motion keeps
+    the rotary inside its limit and slows the path to match.</figcaption>
   </figure>
 </section>
 
@@ -1203,10 +1205,10 @@ V    = mid_x + z_mz*z_ab/csx + csx/2   B joint world X</code></pre>
 <section>
   <h2><span class="num">10</span>Bed queries</h2>
 
-  <p>Probing and bed levelling are full of the assumption that the bed is the
-  Z axis. In the previous fork that assumption had been rewritten as
-  &ldquo;axes 2, 3 and 4&rdquo; in seven separate modules. Each copy was a
-  place for the next machine to break.</p>
+    <p>Probing and bed levelling assume throughout that the bed is the Z axis.
+  In the previous fork that assumption was rewritten as &ldquo;axes 2, 3 and
+  4&rdquo; in seven separate modules, each copy a place for the next machine
+  to break.</p>
 
   <figure>
     <svg viewBox="0 0 700 320" role="img">
@@ -1266,11 +1268,11 @@ V    = mid_x + z_mz*z_ab/csx + csx/2   B joint world X</code></pre>
     upstream behaviour without a special case.</figcaption>
   </figure>
 
-  <p>The same helper provides the two position utilities these modules need:
-  <code>bed_delta_position()</code> shifts every bed axis by a delta, and
+    <p>The same helper provides the two position utilities these modules need.
+  <code>bed_delta_position()</code> shifts every bed axis by a delta.
   <code>bed_target_position()</code> moves the bed to an absolute height while
-  carrying the other motors by the same amount &ndash; which is what preserves
-  a <code>Z_TILT_ADJUST</code> correction across a probe lift.</p>
+  carrying the other motors by the same amount, which preserves a
+  <code>Z_TILT_ADJUST</code> correction across a probe lift.</p>
 </section>
 
 <!-- ============================ 11 ================================= -->
@@ -1441,8 +1443,8 @@ position_max: 120</code></pre>
     <b>Macros.</b> <code>printer.toolhead.position.a</code> and
     <code>axis_maximum.b</code> work because the <code>Coord</code> class
     carries one attribute per roster letter. On a stock three axis printer
-    those attributes simply do not exist, which is the correct answer rather
-    than a silent zero.
+    those attributes do not exist, which is the correct answer rather than a
+    silent zero.
   </div>
 </section>
 
@@ -1504,8 +1506,7 @@ position_max: 120</code></pre>
     <b>The rule.</b> Never write a literal kinematic axis index. If a new
     upstream module indexes a position, decide whether it means the kinematic
     axes &ndash; then convert it &ndash; or something else, and leave it alone.
-    A new upstream kinematics needs no work at all: it simply runs at three
-    axes.
+    A new upstream kinematics needs no work: it runs at three axes.
   </div>
 
   <h3>Where things live</h3>
