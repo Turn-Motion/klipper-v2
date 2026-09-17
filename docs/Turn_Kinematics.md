@@ -328,13 +328,11 @@ tilts the plate slightly during `PROBE_CALIBRATE`, `Z_ENDSTOP_CALIBRATE`
 and every `TESTZ` jog, so the offset is calibrated at a tilted pose rather
 than a level one.
 
-The module is untouched by the fork and the old fork behaved the same way,
-so this is long-standing rather than new. It is recorded rather than fixed
-because patching it adds a rebase conflict point in a file the fork
-otherwise never touches. The fix, when it is wanted, is to build the
-coordinate with `axis_roster.bed_target_position()` inside `move_z()` and
-to read the bed height from `axis_roster.get_bed_axes(printer)[0]` rather
-than index 2.
+The module is untouched by the fork, so it does not go through the roster.
+Building its coordinate with `axis_roster.bed_target_position()` inside
+`move_z()`, and reading the bed height from
+`axis_roster.get_bed_axes(printer)[0]` rather than index 2, would bring it
+in line.
 
 The same z-only pattern is in `probe_eddy_current.py`,
 `temperature_probe.py` and the bed mesh scan helper. Those matter only on
@@ -344,8 +342,7 @@ a machine that enables them.
 
 **A new machine flavour.** Add a module in `klippy/kinematics/` with an
 `AXES` list and a `load_kinematics` that calls `AxisKinematics`. Do not
-subclass an existing flavour. Add a sim profile and a line in the
-verification gate.
+subclass an existing flavour, and add a worked example in `config/`.
 
 **A new derived stepper.** Write a C solver in `klippy/chelper/` that
 reads the axes it depends on from `move_get_coord()`, register it in
@@ -358,25 +355,3 @@ ignore them.
 **A new axis on an existing flavour.** Add an `AxisDef`. If it needs
 limits of its own, it is a `ROTARY`-style group; if it moves with the
 bed, it is `VERTICAL` and it becomes a bed axis automatically.
-
-## 8. Verifying a change
-
-All of it runs in Docker; no toolchain is needed on the host. See
-[FORK_CHANGES.md](../FORK_CHANGES.md) section 7 for the commands.
-
-1. **Upstream regression suite** - 34 tests, all running at three
-   kinematic axes. This is the check that the generalisation did not
-   change upstream behaviour.
-2. **`sim/verify-axes.sh`** - builds once and exercises every flavour:
-   the unit tests (`test_axis_motion.py`, `test_bed_transforms.py`,
-   `test_uv_derived.py` against a vendored reference solver with the
-   compiled C solver required), then klippy in batch mode against the
-   baseline, derived-carriage and rotary profiles. The first two run the
-   *same* g-code, which is the point.
-3. **Differential motion check** - run two trees against the same g-code
-   with `[move_capture]` and diff with `sim/compare_moves.py`. Identical
-   positions and extrusion per move are expected.
-4. **On the machine** - `G28`, `PROBE_ACCURACY`, two consecutive
-   `Z_TILT_ADJUST` (they should converge), and a short print.
-
-The unit tests also run standalone with plain Python and no compiler.
