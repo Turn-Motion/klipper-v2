@@ -1,21 +1,39 @@
 # Turn multi-axis kinematics
 
-How this fork extends upstream Klipper, and how to configure a machine
-with it.
+**Software architecture document**
 
-This document is the architecture overview in text form.
-[Turn_Kinematics_Architecture.pdf](Turn_Kinematics_Architecture.pdf) is the
-same material with diagrams, for reading away from the code;
-[FORK_CHANGES.md](../FORK_CHANGES.md) is the maintenance ledger, the
-file-by-file list of what differs from upstream and the checklist for
-rebasing onto a new upstream release.
+| | |
+|---|---|
+| Status | Draft |
+| Owner | Turn-Motion firmware |
+| Last updated | 17 September 2026 |
+| Applies to | `cartesianxy3z`, `cartesianxy3zr`, and the optional derived bed joint carriages |
+| Baseline | Klipper3d/klipper @ `2d7717e3` |
+| Related | [Turn_Kinematics_Architecture.pdf](Turn_Kinematics_Architecture.pdf) (same material with diagrams), [FORK_CHANGES.md](../FORK_CHANGES.md) (maintenance ledger) |
 
-- **Upstream base:** https://github.com/Klipper3d/klipper, commit
-  `2d7717e3` (`temperature_probe: Use bed_z as toolhead zero reference`).
-- **One repository, one build, one firmware.** Which machine a build
-  behaves like is decided entirely by `printer.cfg`. No MCU-side changes
-  are involved, so no board needs a different flash, and the stock
-  Klipper kinematics still run from the same build.
+## Purpose and scope
+
+This document describes the motion architecture of the Turn Klipper fork:
+how many kinematic axes a printer has, which component decides that, and
+how the rest of the host software is written so that the answer can differ
+from one machine to the next. It is the reference for anyone changing
+motion, homing, probing or g-code handling in this repository, and for
+anyone configuring a machine against it.
+
+**In scope.** The axis roster and the interfaces built on it, the
+kinematics engine and the machine variants it serves, the runtime path a
+move takes, the configuration surface of each variant, and the conventions
+that keep the fork maintainable against upstream.
+
+**Out of scope.** The MCU firmware, the serial protocol and step
+compression, none of which this architecture changes. Upstream Klipper's
+own kinematics, which continue to work unmodified. Machine mechanics and
+electrical design.
+
+One repository, one build, one firmware: which machine a build behaves
+like is decided entirely by `printer.cfg`. No MCU-side change is involved,
+so no board needs a different flash, and the stock Klipper kinematics run
+from the same build.
 
 ## 1. The one idea
 

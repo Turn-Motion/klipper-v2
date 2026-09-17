@@ -4,177 +4,184 @@
 <meta charset="utf-8">
 <title>Turn Multi-Axis Kinematics - Architecture and Design</title>
 <style>
-  @page { size: A4; margin: 18mm 17mm 16mm 17mm; }
-  @page :first { margin: 0; }
+  /* ---------------------------------------------------------------
+     Conventional software architecture document.
+     One accent colour (blue) over a neutral grey scale.  Colour is
+     used only where it carries meaning: the accent marks structure,
+     and the three diagram tints separate code we add, code we modify
+     and code we leave alone.  Everything else is greyscale, so the
+     document prints cleanly in black and white.
+     --------------------------------------------------------------- */
+  @page { size: A4; margin: 20mm 18mm 18mm 18mm; }
 
   :root {
-    --ink: #17222a;
-    --muted: #5b6a75;
-    --rule: #d3dade;
-    --accent: #0f5f6b;
-    --accent-soft: #e3f0f2;
-    --mod: #fdf1e2;
-    --mod-line: #b3762a;
-    --up: #f3f5f6;
-    --up-line: #93a1a9;
-    --code-bg: #f6f8f8;
+    --text: #172b4d;
+    --muted: #6b778c;
+    --border: #dfe1e6;
+    --border-strong: #c1c7d0;
+    --subtle: #f4f5f7;
+    --subtle-2: #ebecf0;
+    --subtle-3: #fafbfc;
+    --accent: #0052cc;
+    --accent-bg: #deebff;
   }
 
   * { box-sizing: border-box; }
   html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body {
     margin: 0;
-    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-    font-size: 10.2pt;
-    line-height: 1.52;
-    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+                 Arial, sans-serif;
+    font-size: 10pt;
+    line-height: 1.55;
+    color: var(--text);
   }
 
-  /* ---------- cover ---------- */
-  .cover {
-    height: 297mm;
-    padding: 34mm 22mm 20mm 22mm;
-    page-break-after: always;
-    position: relative;
-    background: linear-gradient(180deg, #0f5f6b 0 84mm, #ffffff 84mm 100%);
-    color: var(--ink);
+  /* ---------- title block ---------- */
+  .doctype {
+    font-size: 8.5pt; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 3mm 0; font-weight: 600;
   }
-  .cover .eyebrow {
-    color: #bfe2e6; font-size: 9.5pt; letter-spacing: .16em;
-    text-transform: uppercase; margin: 0 0 6mm 0;
+  h1 {
+    font-size: 21pt; font-weight: 600; line-height: 1.2;
+    margin: 0 0 3mm 0; letter-spacing: -.01em;
   }
-  .cover h1 {
-    color: #fff; font-size: 27pt; line-height: 1.15; margin: 0 0 4mm 0;
-    font-weight: 600; letter-spacing: -.01em;
+  .lede {
+    font-size: 11pt; color: var(--muted); margin: 0 0 7mm 0;
+    max-width: 150mm; line-height: 1.5;
   }
-  .cover .sub { color: #d8eef0; font-size: 12pt; margin: 0; font-weight: 400; }
-  .cover .abstract {
-    margin-top: 30mm; font-size: 11pt; line-height: 1.6; max-width: 135mm;
+
+  table.meta { width: 100%; border-collapse: collapse; margin: 0 0 8mm 0; }
+  table.meta th {
+    width: 38mm; text-align: left; font-weight: 600; font-size: 9.2pt;
+    color: var(--muted); padding: 1.8mm 4mm 1.8mm 0;
+    border: none; border-bottom: 1px solid var(--border);
+    vertical-align: top; background: none;
   }
-  .cover .facts {
-    margin-top: 14mm; border-top: 1px solid var(--rule);
-    padding-top: 5mm; font-size: 9.5pt; color: var(--muted);
-  }
-  .cover .facts div { margin: 1.6mm 0; }
-  .cover .facts b { color: var(--ink); font-weight: 600; }
-  .cover .foot {
-    position: absolute; left: 22mm; right: 22mm; bottom: 18mm;
-    font-size: 9pt; color: var(--muted);
-    border-top: 1px solid var(--rule); padding-top: 4mm;
+  table.meta td {
+    font-size: 9.2pt; padding: 1.8mm 0; border: none;
+    border-bottom: 1px solid var(--border); vertical-align: top;
   }
 
   /* ---------- structure ---------- */
   h2 {
-    font-size: 15pt; color: var(--accent); margin: 0 0 4mm 0;
-    padding-bottom: 2mm; border-bottom: 2px solid var(--accent);
-    font-weight: 600; page-break-after: avoid;
-  }
-  h2 .num { color: #7fb3bb; margin-right: 3mm; font-variant-numeric: tabular-nums; }
-  h3 {
-    font-size: 11.4pt; margin: 7mm 0 2.5mm 0; font-weight: 600;
-    color: var(--ink); page-break-after: avoid;
-  }
-  h4 {
-    font-size: 10.2pt; margin: 5mm 0 1.5mm 0; font-weight: 600;
-    color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+    font-size: 13pt; font-weight: 600; color: var(--text);
+    margin: 0 0 4mm 0; padding-bottom: 2mm;
+    border-bottom: 1px solid var(--border-strong);
     page-break-after: avoid;
   }
+  h2 .num { color: var(--muted); font-weight: 600; margin-right: 3mm;
+            font-variant-numeric: tabular-nums; }
+  h3 {
+    font-size: 10.8pt; font-weight: 600; margin: 6mm 0 2mm 0;
+    page-break-after: avoid;
+  }
+  h4 {
+    font-size: 9.4pt; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em;
+    margin: 5mm 0 1.5mm 0; page-break-after: avoid;
+  }
   section { page-break-before: always; }
-  section.contents { page-break-before: avoid; }
+  section.front { page-break-before: avoid; }
   p { margin: 0 0 3mm 0; }
-  ul, ol { margin: 0 0 3mm 0; padding-left: 5mm; }
+  ul, ol { margin: 0 0 3mm 0; padding-left: 5.5mm; }
   li { margin: 0 0 1.4mm 0; }
+  b, strong { font-weight: 600; }
+
   code, .mono {
-    font-family: "Cascadia Mono", Consolas, "Liberation Mono", monospace;
-    font-size: 8.9pt; background: var(--code-bg); padding: 0 .6mm;
-    border-radius: 1px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 8.8pt; background: var(--subtle); color: var(--text);
+    padding: .3mm .8mm; border-radius: .6mm;
   }
   pre {
-    font-family: "Cascadia Mono", Consolas, "Liberation Mono", monospace;
-    font-size: 8.5pt; line-height: 1.45; background: var(--code-bg);
-    border-left: 2.5px solid var(--accent); padding: 3mm 4mm;
-    margin: 0 0 4mm 0; overflow: hidden; page-break-inside: avoid;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 8.4pt; line-height: 1.45; color: var(--text);
+    background: var(--subtle); border: 1px solid var(--border);
+    border-radius: 1mm; padding: 3mm 4mm; margin: 0 0 4mm 0;
+    page-break-inside: avoid;
   }
   pre code { background: none; padding: 0; font-size: inherit; }
 
   table {
     width: 100%; border-collapse: collapse; margin: 0 0 4mm 0;
-    font-size: 9.2pt; page-break-inside: avoid;
+    font-size: 9.1pt; page-break-inside: avoid;
   }
   th {
-    text-align: left; background: var(--accent-soft); color: var(--accent);
-    font-weight: 600; padding: 2mm 2.5mm; border-bottom: 1px solid #9ec8ce;
-    vertical-align: bottom;
+    text-align: left; background: var(--subtle); color: var(--text);
+    font-weight: 600; padding: 2mm 2.5mm;
+    border: 1px solid var(--border); vertical-align: bottom;
   }
-  td { padding: 2mm 2.5mm; border-bottom: 1px solid var(--rule); vertical-align: top; }
-  tr:last-child td { border-bottom: none; }
-  td code { font-size: 8.4pt; }
+  td {
+    padding: 2mm 2.5mm; border: 1px solid var(--border);
+    vertical-align: top;
+  }
+  td code { font-size: 8.3pt; }
 
   figure { margin: 0 0 5mm 0; page-break-inside: avoid; }
   figure svg { width: 100%; height: auto; display: block; }
-  figcaption {
-    font-size: 8.8pt; color: var(--muted); margin-top: 2mm;
-    padding-top: 1.6mm; border-top: 1px solid var(--rule);
-  }
-  figcaption b { color: var(--accent); font-weight: 600; }
+  figcaption { font-size: 8.6pt; color: var(--muted); margin-top: 2mm; }
+  figcaption b { color: var(--text); font-weight: 600; }
 
-  .note {
-    background: var(--accent-soft); border-left: 2.5px solid var(--accent);
-    padding: 3mm 4mm; margin: 0 0 4mm 0; font-size: 9.4pt;
+  /* panels: a left rule and a tint, nothing louder */
+  .note, .warn {
+    border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    background: var(--subtle-3); border-radius: 1mm;
+    padding: 3mm 4mm; margin: 0 0 4mm 0; font-size: 9.3pt;
     page-break-inside: avoid;
   }
-  .note b { color: var(--accent); }
-  .warn {
-    background: var(--mod); border-left: 2.5px solid var(--mod-line);
-    padding: 3mm 4mm; margin: 0 0 4mm 0; font-size: 9.4pt;
-    page-break-inside: avoid;
-  }
-  .warn b { color: #8a5a1d; }
+  .warn { border-left-color: var(--muted); background: var(--subtle); }
+  .note b, .warn b { color: var(--text); }
 
-  .legend { display: flex; gap: 6mm; font-size: 8.6pt; color: var(--muted); margin: 2mm 0 0 0; }
+  .legend {
+    display: flex; gap: 7mm; font-size: 8.4pt; color: var(--muted);
+    margin: 2mm 0 0 0;
+  }
   .legend span { display: flex; align-items: center; gap: 1.6mm; }
-  .chip { width: 3.4mm; height: 3.4mm; border-radius: 1px; display: inline-block; }
-  .chip-fork { background: var(--accent-soft); border: 1px solid var(--accent); }
-  .chip-mod  { background: var(--mod); border: 1px solid var(--mod-line); }
-  .chip-up   { background: var(--up); border: 1px solid var(--up-line); }
+  .chip { width: 3.2mm; height: 3.2mm; border-radius: .5mm; display: inline-block; }
+  .chip-fork { background: var(--accent-bg); border: 1px solid var(--accent); }
+  .chip-mod  { background: var(--subtle-2); border: 1px solid var(--muted); }
+  .chip-up   { background: var(--subtle-3); border: 1px solid var(--border-strong); }
 
-  .toc { font-size: 10.4pt; }
-  .toc ol { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
-  .toc li {
-    counter-increment: toc; padding: 2.2mm 0;
-    border-bottom: 1px solid var(--rule); display: flex; gap: 4mm;
+  ol.toc { list-style: none; padding: 0; margin: 0; counter-reset: toc; }
+  ol.toc li {
+    counter-increment: toc; padding: 1.8mm 0;
+    border-bottom: 1px solid var(--border); display: flex; gap: 4mm;
   }
-  .toc li::before {
-    content: counter(toc); color: #7fb3bb; font-weight: 600;
+  ol.toc li::before {
+    content: counter(toc) "."; color: var(--muted); font-weight: 600;
     min-width: 7mm; font-variant-numeric: tabular-nums;
   }
-  .toc .t { font-weight: 600; }
-  .toc .d { color: var(--muted); font-size: 9.2pt; display: block; font-weight: 400; }
+  ol.toc .t { font-weight: 600; }
+  ol.toc .d { color: var(--muted); font-size: 9pt; display: block;
+              font-weight: 400; }
 
-  .cols { display: flex; gap: 6mm; }
-  .cols > * { flex: 1; }
-
-  /* ---------- svg shared ---------- */
+  /* ---------- diagrams ---------- */
   svg text {
-    font-family: "Segoe UI", Arial, sans-serif; font-size: 11px; fill: #17222a;
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+    font-size: 11px; fill: #172b4d;
   }
   svg .ttl { font-weight: 600; font-size: 11.5px; }
-  svg .sm { font-size: 9.5px; fill: #5b6a75; }
-  svg .xs { font-size: 8.5px; fill: #5b6a75; }
+  svg .sm { font-size: 9.5px; fill: #6b778c; }
+  svg .xs { font-size: 8.5px; fill: #6b778c; }
   svg .mono { font-family: Consolas, monospace; font-size: 9.5px; }
   svg .b { font-weight: 600; }
-  svg .box { fill: #fff; stroke: #93a1a9; stroke-width: 1.1; }
-  svg .fork { fill: #e3f0f2; stroke: #0f5f6b; stroke-width: 1.2; }
-  svg .mod  { fill: #fdf1e2; stroke: #b3762a; stroke-width: 1.2; }
-  svg .up   { fill: #f3f5f6; stroke: #93a1a9; stroke-width: 1.1; }
-  svg .accent-t { fill: #0f5f6b; }
-  svg .ln { stroke: #5b6a75; stroke-width: 1.2; fill: none; }
-  svg .ln-dash { stroke: #93a1a9; stroke-width: 1; fill: none; stroke-dasharray: 3 2.5; }
-  svg .arw { stroke: #5b6a75; stroke-width: 1.2; fill: none; marker-end: url(#ah); }
-  svg .arw-a { stroke: #0f5f6b; stroke-width: 1.5; fill: none; marker-end: url(#aha); }
-  svg .grid { stroke: #e6ebec; stroke-width: 1; }
-  /* Last, so it wins over the size classes above: a CSS rule also beats a
-     fill="" attribute, so light-on-dark text needs a class of its own. */
+  svg .box { fill: #ffffff; stroke: #c1c7d0; stroke-width: 1; }
+  svg .fork { fill: #deebff; stroke: #0052cc; stroke-width: 1.1; }
+  svg .mod  { fill: #ebecf0; stroke: #6b778c; stroke-width: 1.1; }
+  svg .up   { fill: #fafbfc; stroke: #c1c7d0; stroke-width: 1; }
+  svg .accent-t { fill: #0052cc; }
+  svg .ln { stroke: #6b778c; stroke-width: 1.1; fill: none; }
+  svg .ln-dash { stroke: #c1c7d0; stroke-width: 1; fill: none;
+                 stroke-dasharray: 3 2.5; }
+  svg .arw { stroke: #6b778c; stroke-width: 1.1; fill: none;
+             marker-end: url(#ah); }
+  svg .arw-a { stroke: #0052cc; stroke-width: 1.3; fill: none;
+               marker-end: url(#aha); }
+  svg .grid { stroke: #ebecf0; stroke-width: 1; }
+  svg .curve { stroke: #0052cc; stroke-width: 2; fill: none; }
+  svg .limit { stroke: #6b778c; stroke-width: 1.2; fill: none;
+               stroke-dasharray: 4 3; }
+  /* last, so it wins over the size classes above */
   svg .on-dark { fill: #ffffff; }
 </style>
 </head>
@@ -184,48 +191,59 @@
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
             markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#5b6a75"/>
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#6b778c"/>
     </marker>
     <marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6"
             markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 1 L 10 5 L 0 9 z" fill="#0f5f6b"/>
+      <path d="M 0 1 L 10 5 L 0 9 z" fill="#0052cc"/>
     </marker>
   </defs>
 </svg>
 
-<!-- ============================= COVER ============================= -->
-<div class="cover">
-  <p class="eyebrow">Turn-Motion &middot; Klipper fork</p>
-  <h1>Multi-Axis Kinematics</h1>
-  <p class="sub">Architecture and design</p>
+<!-- ========================= TITLE BLOCK ========================= -->
+<section class="front">
+  <p class="doctype">Software architecture document</p>
+  <h1>Turn Multi-Axis Kinematics</h1>
+  <p class="lede">How the Turn Klipper fork lets the kinematics class
+  define a printer's axes instead of hard-coding them, and how each
+  machine is configured against it.</p>
 
-  <div class="abstract">
-    <p>Upstream Klipper plans exactly three kinematic axes. This fork removes
-    that number from the motion core: the kinematics class owns the axis
-    roster and everything else reads it. One repository, one build and one
-    firmware then serve a bed carried by three vertical motors, the same
-    machine with a rotary axis, the same machine with derived bed-joint
-    carriages, and every stock Klipper printer, with <code>printer.cfg</code>
-    choosing between them.</p>
-  </div>
+  <table class="meta">
+    <tr><th>Status</th><td>Draft</td></tr>
+    <tr><th>Owner</th><td>Turn-Motion firmware</td></tr>
+    <tr><th>Last updated</th><td>17 September 2026</td></tr>
+    <tr><th>Applies to</th>
+        <td><code>cartesianxy3z</code>, <code>cartesianxy3zr</code>, and the
+        optional derived bed joint carriages</td></tr>
+    <tr><th>Baseline</th>
+        <td>Klipper3d/klipper @ <code>2d7717e3</code></td></tr>
+    <tr><th>Related documents</th>
+        <td><code>docs/Turn_Kinematics.md</code> - this document as text<br>
+        <code>FORK_CHANGES.md</code> - the file-by-file maintenance ledger,
+        and the procedure for moving to a new upstream release</td></tr>
+  </table>
 
-  <div class="facts">
-    <div><b>Repository</b> &nbsp; Turn-Motion/klipper-v2</div>
-    <div><b>Upstream base</b> &nbsp; Klipper3d/klipper @ 2d7717e3</div>
-    <div><b>Kinematics</b> &nbsp; cartesianxy3z &middot; cartesianxy3zr &middot; + bed joint carriages</div>
-  </div>
+  <h2>Purpose and scope</h2>
 
-  <div class="foot">
-    Companion documents: <b>docs/Turn_Kinematics.md</b> (the same material as
-    text) and <b>FORK_CHANGES.md</b> (the file-by-file maintenance ledger).
-  </div>
-</div>
+  <p>This document describes the motion architecture of the Turn Klipper
+  fork: how many kinematic axes a printer has, which component decides
+  that, and how the rest of the host software is written so that the
+  answer can differ from one machine to the next. It is the reference for
+  anyone changing motion, homing, probing or g-code handling in this
+  repository, and for anyone configuring a machine against it.</p>
 
-<!-- ============================ CONTENTS =========================== -->
-<section class="contents">
-  <h2><span class="num">&mdash;</span>Contents</h2>
-  <div class="toc">
-    <ol>
+  <p><b>In scope.</b> The axis roster and the interfaces built on it, the
+  kinematics engine and the machine variants it serves, the runtime path a
+  move takes, the configuration surface of each variant, and the
+  conventions that keep the fork maintainable against upstream.</p>
+
+  <p><b>Out of scope.</b> The MCU firmware, the serial protocol and step
+  compression, none of which this architecture changes. Upstream Klipper's
+  own kinematics, which continue to work unmodified. Machine mechanics and
+  electrical design.</p>
+
+  <h2>Contents</h2>
+  <ol class="toc">
       <li><span><span class="t">The problem and the idea</span>
         <span class="d">Why a number in the core had to go, and what replaced it</span></span></li>
       <li><span><span class="t">The axis roster</span>
@@ -252,8 +270,7 @@
         <span class="d">G-code, commands and status</span></span></li>
       <li><span><span class="t">Extending and maintaining</span>
         <span class="d">Adding a flavour, and surviving the next upstream rebase</span></span></li>
-    </ol>
-  </div>
+  </ol>
 </section>
 
 <!-- ============================ 1 ================================== -->
@@ -428,9 +445,8 @@
       <text class="mono" x="12" y="271">toolhead.get_axis_names() -&gt; "xyzab"</text>
       <text class="mono" x="12" y="285">toolhead.get_axis_count() -&gt; 5      toolhead.get_extruder_index() -&gt; 5</text>
     </svg>
-    <figcaption><b>Figure 2.</b> The kinematic axes are teal, the extruder
-    amber, the optional extra axes grey. The extruder index is the axis
-    count; nothing in the host code may assume a number.</figcaption>
+    <figcaption><b>Figure 2.</b> The extruder index is the axis count.
+    Nothing in the host code may assume a number.</figcaption>
     <div class="legend">
       <span><i class="chip chip-fork"></i>kinematic axes</span>
       <span><i class="chip chip-mod"></i>extruder</span>
@@ -480,7 +496,7 @@
     <svg viewBox="0 0 700 468" role="img">
       <!-- host frame -->
       <rect x="4" y="4" width="470" height="404" rx="4" fill="none"
-            stroke="#c3ccd1" stroke-width="1" stroke-dasharray="4 3"/>
+            stroke="#dfe1e6" stroke-width="1" stroke-dasharray="4 3"/>
       <text class="xs b" x="14" y="20">KLIPPY HOST PROCESS</text>
 
       <!-- layers -->
@@ -558,10 +574,9 @@
       <text class="xs" x="502" y="162">these run at three axes</text>
       <text class="xs" x="502" y="173">from the same build</text>
     </svg>
-    <figcaption><b>Figure 3.</b> The host stack. Teal is fork-only code, amber
-    is upstream code the fork modifies, grey is upstream code left alone. The
-    modification is always the same in kind: replace a fixed axis count with a
-    question to the roster.</figcaption>
+    <figcaption><b>Figure 3.</b> The host stack, shaded by ownership as the
+    key below shows. The modification is always the same in kind: replace a
+    fixed axis count with a question to the roster.</figcaption>
     <div class="legend">
       <span><i class="chip chip-fork"></i>fork-only</span>
       <span><i class="chip chip-mod"></i>upstream, modified</span>
@@ -605,7 +620,7 @@ int    trapq_get_kin_axes(void);   /* compiled maximum, checked at startup */</c
       <!-- step blocks -->
       <g>
         <rect class="mod" x="0" y="28" width="470" height="46" rx="3"/>
-        <circle cx="20" cy="51" r="9" fill="#0f5f6b"/>
+        <circle cx="20" cy="51" r="9" fill="#0052cc"/>
         <text x="20" y="55" text-anchor="middle" class="b on-dark">1</text>
         <text class="b" x="38" y="47">gcode_move.cmd_G1</text>
         <text class="sm" x="38" y="63">axis_map {X:0 Y:1 Z:2 A:3 B:4 E:5} built from the roster</text>
@@ -615,7 +630,7 @@ int    trapq_get_kin_axes(void);   /* compiled maximum, checked at startup */</c
 
       <g>
         <rect class="up" x="0" y="88" width="470" height="40" rx="3"/>
-        <circle cx="20" cy="108" r="9" fill="#0f5f6b"/>
+        <circle cx="20" cy="108" r="9" fill="#0052cc"/>
         <text x="20" y="112" text-anchor="middle" class="b on-dark">2</text>
         <text class="b" x="38" y="106">move transforms</text>
         <text class="sm" x="38" y="121">bed_mesh / bed_tilt adjust every bed axis, not just Z</text>
@@ -625,7 +640,7 @@ int    trapq_get_kin_axes(void);   /* compiled maximum, checked at startup */</c
 
       <g>
         <rect class="mod" x="0" y="142" width="470" height="56" rx="3"/>
-        <circle cx="20" cy="170" r="9" fill="#0f5f6b"/>
+        <circle cx="20" cy="170" r="9" fill="#0052cc"/>
         <text x="20" y="174" text-anchor="middle" class="b on-dark">3</text>
         <text class="b" x="38" y="160">toolhead.Move()</text>
         <text class="sm" x="38" y="175">axes_d = [100, 0, 0, 5, 5, 0]</text>
@@ -637,7 +652,7 @@ int    trapq_get_kin_axes(void);   /* compiled maximum, checked at startup */</c
 
       <g>
         <rect class="fork" x="0" y="212" width="470" height="56" rx="3"/>
-        <circle cx="20" cy="240" r="9" fill="#0f5f6b"/>
+        <circle cx="20" cy="240" r="9" fill="#0052cc"/>
         <text x="20" y="244" text-anchor="middle" class="b on-dark">4</text>
         <text class="b" x="38" y="230">kin.check_move()</text>
         <text class="sm" x="38" y="245">range check per axis; speed set by the slowest group;</text>
@@ -650,7 +665,7 @@ int    trapq_get_kin_axes(void);   /* compiled maximum, checked at startup */</c
 
       <g>
         <rect class="up" x="0" y="282" width="470" height="40" rx="3"/>
-        <circle cx="20" cy="302" r="9" fill="#0f5f6b"/>
+        <circle cx="20" cy="302" r="9" fill="#0052cc"/>
         <text x="20" y="306" text-anchor="middle" class="b on-dark">5</text>
         <text class="b" x="38" y="300">LookAheadQueue</text>
         <text class="sm" x="38" y="315">junction speeds over every kinematic axis, then trapezoid</text>
@@ -660,7 +675,7 @@ int    trapq_get_kin_axes(void);   /* compiled maximum, checked at startup */</c
 
       <g>
         <rect class="mod" x="0" y="336" width="470" height="52" rx="3"/>
-        <circle cx="20" cy="362" r="9" fill="#0f5f6b"/>
+        <circle cx="20" cy="362" r="9" fill="#0052cc"/>
         <text x="20" y="366" text-anchor="middle" class="b on-dark">6</text>
         <text class="b" x="38" y="354">trapq_append()</text>
         <text class="mono sm" x="38" y="370">(tq, t, at, ct, dt, naxes=5,</text>
@@ -672,7 +687,7 @@ int    trapq_get_kin_axes(void);   /* compiled maximum, checked at startup */</c
 
       <g>
         <rect class="fork" x="0" y="402" width="470" height="56" rx="3"/>
-        <circle cx="20" cy="430" r="9" fill="#0f5f6b"/>
+        <circle cx="20" cy="430" r="9" fill="#0052cc"/>
         <text x="20" y="434" text-anchor="middle" class="b on-dark">7</text>
         <text class="b" x="38" y="420">itersolve, once per stepper</text>
         <text class="sm" x="38" y="435">kin_axis: stepper_a reads coord.axis[3]</text>
@@ -685,7 +700,7 @@ int    trapq_get_kin_axes(void);   /* compiled maximum, checked at startup */</c
 
       <g>
         <rect class="up" x="0" y="472" width="470" height="40" rx="3"/>
-        <circle cx="20" cy="492" r="9" fill="#0f5f6b"/>
+        <circle cx="20" cy="492" r="9" fill="#0052cc"/>
         <text x="20" y="496" text-anchor="middle" class="b on-dark">8</text>
         <text class="b" x="38" y="490">stepcompress &rarr; MCU</text>
         <text class="sm" x="38" y="505">unchanged from upstream</text>
@@ -740,22 +755,22 @@ int    trapq_get_kin_axes(void);   /* compiled maximum, checked at startup */</c
       <text class="ttl" x="0" y="180">Time each group needs</text>
       <g>
         <text class="mono sm" x="0" y="205">XY  100.0 mm</text>
-        <rect x="120" y="194" width="400" height="14" rx="2" fill="#0f5f6b"/>
+        <rect x="120" y="194" width="400" height="14" rx="2" fill="#0052cc"/>
         <text class="xs b" x="528" y="205">1.000 s</text>
 
         <text class="mono sm" x="0" y="227">Z     5.0 mm</text>
-        <rect x="120" y="216" width="238" height="14" rx="2" fill="#7fb3bb"/>
+        <rect x="120" y="216" width="238" height="14" rx="2" fill="#b3d4ff"/>
         <text class="xs" x="366" y="227">0.595 s</text>
 
         <text class="mono sm" x="0" y="249">A     8.0 mm</text>
-        <rect x="120" y="238" width="381" height="14" rx="2" fill="#7fb3bb"/>
+        <rect x="120" y="238" width="381" height="14" rx="2" fill="#b3d4ff"/>
         <text class="xs" x="509" y="249">0.952 s</text>
 
         <text class="mono sm" x="0" y="271">B     3.0 mm</text>
-        <rect x="120" y="260" width="143" height="14" rx="2" fill="#7fb3bb"/>
+        <rect x="120" y="260" width="143" height="14" rx="2" fill="#b3d4ff"/>
         <text class="xs" x="271" y="271">0.357 s</text>
       </g>
-      <path class="ln-dash" d="M 520 188 L 520 282" stroke="#0f5f6b"/>
+      <path class="ln-dash" d="M 520 188 L 520 282" stroke="#0052cc"/>
       <text class="xs b accent-t" x="524" y="292">move takes 1.000 s &mdash; the gantry wins here</text>
       <text class="xs" x="0" y="292">move_d = max(100.0, 5.0, 8.0, 3.0) = 100.0 mm</text>
     </svg>
@@ -889,20 +904,20 @@ a      = min over groups of  max_accel[group]    * move_d / group_d</code></pre>
 
   <figure>
     <svg viewBox="0 0 700 396" role="img">
-      <path class="ln" d="M 40 30 L 40 372" stroke="#c3ccd1"/>
+      <path class="ln" d="M 40 30 L 40 372" stroke="#dfe1e6"/>
 
-      <circle cx="40" cy="44" r="7" fill="#0f5f6b"/>
+      <circle cx="40" cy="44" r="7" fill="#0052cc"/>
       <rect class="mod" x="62" y="26" width="480" height="36" rx="3"/>
       <text class="b" x="74" y="42">G28</text>
       <text class="sm" x="74" y="56">axes to home come from the roster, not from a fixed list</text>
 
-      <circle cx="40" cy="96" r="7" fill="#0f5f6b"/>
+      <circle cx="40" cy="96" r="7" fill="#0052cc"/>
       <rect class="fork" x="62" y="78" width="480" height="52" rx="3"/>
       <text class="b" x="74" y="94">Derived carriages leave the motion queue</text>
       <text class="sm" x="74" y="108">homing_mode: detached &mdash; the forced start pose is one the rigid</text>
       <text class="sm" x="74" y="122">plate cannot occupy, so a position derived from it is meaningless</text>
 
-      <circle cx="40" cy="164" r="7" fill="#0f5f6b"/>
+      <circle cx="40" cy="164" r="7" fill="#0052cc"/>
       <rect class="fork" x="62" y="140" width="480" height="66" rx="3"/>
       <text class="b" x="74" y="156">Vertical group &mdash; coordinated fast approach</text>
       <text class="sm" x="74" y="170">one move drives Z, A and B towards their endstops together</text>
@@ -910,18 +925,18 @@ a      = min over groups of  max_accel[group]    * move_d / group_d</code></pre>
       <text class="sm" x="74" y="198">then all three back off 2 mm</text>
       <text class="mono xs" x="556" y="176">15 mm/s</text>
 
-      <circle cx="40" cy="238" r="7" fill="#0f5f6b"/>
+      <circle cx="40" cy="238" r="7" fill="#0052cc"/>
       <rect class="fork" x="62" y="216" width="480" height="52" rx="3"/>
       <text class="b" x="74" y="232">Vertical axes &mdash; individually, for precision</text>
       <text class="sm" x="74" y="246">Z, then A, then B through the normal homing module,</text>
       <text class="sm" x="74" y="260">each with its own endstop, retract and second pass</text>
 
-      <circle cx="40" cy="296" r="7" fill="#0f5f6b"/>
+      <circle cx="40" cy="296" r="7" fill="#0052cc"/>
       <rect class="mod" x="62" y="278" width="480" height="40" rx="3"/>
       <text class="b" x="74" y="294">Planar axes</text>
       <text class="sm" x="74" y="308">X then Y, dual carriage aware, with the bed already clear</text>
 
-      <circle cx="40" cy="352" r="7" fill="#0f5f6b"/>
+      <circle cx="40" cy="352" r="7" fill="#0052cc"/>
       <rect class="box" x="62" y="330" width="480" height="48" rx="3"/>
       <text class="b" x="74" y="346">Anything else with an endstop</text>
       <text class="sm" x="74" y="360">a rotary axis is homed here if it has one, and silently</text>
@@ -958,20 +973,20 @@ a      = min over groups of  max_accel[group]    * move_d / group_d</code></pre>
       <text class="ttl" x="0" y="14">Plan view of the bed plate</text>
 
       <!-- plate -->
-      <path d="M 120 60 L 560 60 L 560 200 L 120 200 z" fill="#e3f0f2"
-            stroke="#0f5f6b" stroke-width="1.4"/>
-      <text class="sm" x="340" y="136" text-anchor="middle" fill="#0f5f6b">rigid bed plate</text>
+      <path d="M 120 60 L 560 60 L 560 200 L 120 200 z" fill="#deebff"
+            stroke="#0052cc" stroke-width="1.4"/>
+      <text class="sm" x="340" y="136" text-anchor="middle" fill="#0052cc">rigid bed plate</text>
 
       <!-- joints -->
-      <circle cx="150" cy="185" r="8" fill="#fff" stroke="#17222a" stroke-width="1.4"/>
+      <circle cx="150" cy="185" r="8" fill="#fff" stroke="#172b4d" stroke-width="1.4"/>
       <text class="b" x="150" y="212" text-anchor="middle">A</text>
       <text class="xs" x="150" y="226" text-anchor="middle">x = &minus;23</text>
 
-      <circle cx="530" cy="185" r="8" fill="#fff" stroke="#17222a" stroke-width="1.4"/>
+      <circle cx="530" cy="185" r="8" fill="#fff" stroke="#172b4d" stroke-width="1.4"/>
       <text class="b" x="530" y="212" text-anchor="middle">B</text>
       <text class="xs" x="530" y="226" text-anchor="middle">x = +623</text>
 
-      <circle cx="340" cy="78" r="8" fill="#fff" stroke="#17222a" stroke-width="1.4"/>
+      <circle cx="340" cy="78" r="8" fill="#fff" stroke="#172b4d" stroke-width="1.4"/>
       <text class="b" x="340" y="52" text-anchor="middle">Z</text>
       <text class="xs" x="340" y="38" text-anchor="middle">opposite edge</text>
 
@@ -1052,20 +1067,20 @@ V    = mid_x + z_mz*z_ab/csx + csx/2   B joint world X</code></pre>
       <text class="xs" x="20" y="60">U (mm)</text>
 
       <!-- limit -->
-      <path class="ln-dash" d="M 80 166.7 L 660 166.7" stroke="#b3762a" stroke-width="1.3"/>
-      <text class="xs b" x="88" y="182" fill="#b3762a">position_min = 5 mm</text>
+      <path class="limit" d="M 80 166.7 L 660 166.7"/>
+      <text class="xs b" x="88" y="182" fill="#6b778c">position_min = 5 mm</text>
 
       <!-- forbidden band -->
-      <rect x="80" y="166.7" width="580" height="83.3" fill="#b3762a" opacity="0.07"/>
-      <text class="xs" x="612" y="200" text-anchor="middle" fill="#8a5a1d">below the</text>
-      <text class="xs" x="612" y="212" text-anchor="middle" fill="#8a5a1d">rail limit</text>
+      <rect x="80" y="166.7" width="580" height="83.3" fill="#6b778c" opacity="0.07"/>
+      <text class="xs" x="612" y="200" text-anchor="middle" fill="#42526e">below the</text>
+      <text class="xs" x="612" y="212" text-anchor="middle" fill="#42526e">rail limit</text>
 
       <!-- curve -->
-      <polyline class="ln" stroke="#0f5f6b" stroke-width="2" fill="none"
+      <polyline class="curve"
         points="80.0,82.3 89.3,93.4 98.7,104.2 108.0,114.5 117.3,124.5 126.7,134.1 136.0,143.3 145.3,152.1 154.7,160.5 164.0,168.5 173.3,176.1 182.7,183.4 192.0,190.2 201.3,196.7 210.7,202.8 220.0,208.6 229.3,213.9 238.7,218.9 248.0,223.5 257.3,227.8 266.7,231.6 276.0,235.1 285.3,238.2 294.7,241.0 304.0,243.4 313.3,245.4 322.7,247.1 332.0,248.3 341.3,249.3 350.7,249.8 360.0,250.0 369.3,249.8 378.7,249.3 388.0,248.3 397.3,247.1 406.7,245.4 416.0,243.4 425.3,241.0 434.7,238.2 444.0,235.1 453.3,231.6 462.7,227.8 472.0,223.5 481.3,218.9 490.7,213.9 500.0,208.6 509.3,202.8 518.7,196.7 528.0,190.2 537.3,183.4 546.7,176.1 556.0,168.5 565.3,160.5 574.7,152.1 584.0,143.3 593.3,134.1 602.7,124.5 612.0,114.5 621.3,104.2 630.7,93.4 640.0,82.3"/>
 
       <!-- sampled points -->
-      <g fill="#0f5f6b">
+      <g fill="#0052cc">
         <circle cx="115.0" cy="122.1" r="2.6"/><circle cx="150.0" cy="156.3" r="2.6"/>
         <circle cx="185.0" cy="185.1" r="2.6"/><circle cx="220.0" cy="208.6" r="2.6"/>
         <circle cx="255.0" cy="226.7" r="2.6"/><circle cx="290.0" cy="239.7" r="2.6"/>
@@ -1077,12 +1092,12 @@ V    = mid_x + z_mz*z_ab/csx + csx/2   B joint world X</code></pre>
       </g>
 
       <!-- endpoints -->
-      <circle cx="80" cy="82.3" r="5" fill="#fff" stroke="#b3762a" stroke-width="2"/>
-      <circle cx="640" cy="82.3" r="5" fill="#fff" stroke="#b3762a" stroke-width="2"/>
-      <text class="xs b" x="94" y="78" fill="#8a5a1d">endpoints: 10.06 mm &mdash; both inside the rail</text>
+      <circle cx="80" cy="82.3" r="5" fill="#fff" stroke="#6b778c" stroke-width="2"/>
+      <circle cx="640" cy="82.3" r="5" fill="#fff" stroke="#6b778c" stroke-width="2"/>
+      <text class="xs b" x="94" y="78" fill="#42526e">endpoints: 10.06 mm &mdash; both inside the rail</text>
 
       <!-- callout into the empty middle of the curve -->
-      <path class="ln-dash" d="M 360 128 L 360 244" stroke="#0f5f6b"/>
+      <path class="ln-dash" d="M 360 128 L 360 244" stroke="#0052cc"/>
       <text class="xs b accent-t" x="360" y="110" text-anchor="middle">sampled: 0.00 mm at mid-move</text>
       <text class="xs b accent-t" x="360" y="122" text-anchor="middle">&mdash; move rejected</text>
     </svg>
@@ -1162,12 +1177,12 @@ V    = mid_x + z_mz*z_ab/csx + csx/2   B joint world X</code></pre>
 
       <!-- bars -->
       <text class="sm b" x="0" y="164">coordinated</text>
-      <rect x="110" y="152" width="460" height="16" rx="2" fill="#0f5f6b"/>
+      <rect x="110" y="152" width="460" height="16" rx="2" fill="#0052cc"/>
       <text class="xs b" x="578" y="164">2.00 s</text>
       <text class="xs on-dark" x="120" y="164">XY 100 mm at 50 mm/s &nbsp;|&nbsp; R 180 deg at 90 deg/s</text>
 
       <text class="sm b" x="0" y="196">slaved</text>
-      <rect x="110" y="184" width="230" height="16" rx="2" fill="#b3762a"/>
+      <rect x="110" y="184" width="230" height="16" rx="2" fill="#6b778c"/>
       <text class="xs b" x="348" y="196">1.00 s</text>
       <text class="xs on-dark" x="120" y="196">XY 100 mm at 100 mm/s &nbsp;|&nbsp; R 180 deg/s</text>
 
