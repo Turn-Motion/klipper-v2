@@ -221,6 +221,7 @@ that calls `AxisKinematics`.  Do not subclass an existing flavour.
 | `test/test_axis_motion.py` | **fork-only** | the axis roster, distance groups, move checking, both rotary modes and the derived carriage range check |
 | `test/test_bed_transforms.py` | **fork-only** | the bed-adjusting g-code transforms, which have no upstream test of their own |
 | `test/test_z_tilt.py` | **fork-only** | the direction of the bed levelling correction, and that a levelling pass preserves offsets it did not set.  Getting the direction wrong does not fail loudly - it doubles the tilt - so it is pinned three ways: upstream's walk replayed, the coordinated move driven with a stubbed toolhead, and a simulated plate on the real screw geometry |
+| `test/test_z_tilt_command.py` | **fork-only** | a real `Z_TILT_ADJUST` end to end, through the real g-code dispatcher, `gcode_move`, probe point helper and manual probe helper, against a simulated plate on the real screw geometry.  Complements `test/test_z_tilt.py`: that one checks the arithmetic, this one checks the command.  Its bed model is derived from what the probe measures rather than from upstream's stepper walk, so the two agreeing is evidence rather than a shared assumption.  Also asserts that the wrong sign and an assigned - rather than added - offset both fail it |
 | `test/test_uv_derived.py` | **fork-only** | the derived carriage equations against `test/reference`, with the compiled C solver required |
 | `sim/verify-axes.sh` | **fork-only** | one build, three profiles: the gate for every flavour |
 | `sim/compare_moves.py` | **fork-only** | diffs two `[move_capture]` captures move by move |
@@ -347,8 +348,16 @@ The unit tests also run standalone with plain Python, no compiler:
 ```
 python test/test_axis_motion.py
 python test/test_bed_transforms.py
+python test/test_z_tilt.py
+python test/test_z_tilt_command.py
 python test/test_uv_derived.py
 ```
+
+`test/test_z_tilt_command.py` is worth singling out: it runs the real
+`Z_TILT_ADJUST` command against a simulated bed without needing a
+compiler or a printer, because nothing on that path touches the compiled
+motion core.  Levelling the wrong way round does not fail loudly on a
+machine, so this is the cheapest gate that would catch it.
 
 ### 7.3 Differential motion check
 

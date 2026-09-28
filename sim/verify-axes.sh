@@ -11,6 +11,9 @@
 #        test_axis_motion.py  - axis roster, distance groups, move checking,
 #                               the rotary modes, the derived carriages
 #        test_bed_transforms.py - the g-code transforms that adjust the bed
+#        test_z_tilt.py       - the direction of the bed levelling correction
+#        test_z_tilt_command.py - a real Z_TILT_ADJUST end to end against a
+#                               simulated plate
 #        test_uv_derived.py   - the derived carriage equations against the
 #                               vendored reference solver, with the compiled
 #                               C solver REQUIRED
@@ -72,6 +75,12 @@ python /klipper/test/test_axis_motion.py || fail "test_axis_motion.py"
 echo
 echo "--- test_bed_transforms.py (bed_tilt, z_thermal_adjust, bed_mesh) ---"
 python /klipper/test/test_bed_transforms.py || fail "test_bed_transforms.py"
+echo
+echo "--- test_z_tilt.py (the direction of the levelling correction) ---"
+python /klipper/test/test_z_tilt.py || fail "test_z_tilt.py"
+echo
+echo "--- test_z_tilt_command.py (a real Z_TILT_ADJUST end to end) ---"
+python /klipper/test/test_z_tilt_command.py || fail "test_z_tilt_command.py"
 echo
 # REQUIRE_C_SOLVER makes an unavailable compiled solver a hard failure, so
 # this stage cannot silently degrade to the Python transcription.
