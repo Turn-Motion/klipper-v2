@@ -78,31 +78,48 @@ class ZAdjustHelper:
         toolhead.set_position(curpos)
     def _adjust_axes(self, stepper_axes, adjustments, speed):
         # Each bed motor is its own kinematic axis (Z, A, B), so all of
-        # them can be corrected in one coordinated move.  Only the
-        # differences between the motors matter - remove the mean so the
-        # bed height itself is unchanged.
+        # them can be corrected in one coordinated move rather than by
+        # upstream's detach / move / reattach walk.
+        #
+        # An adjustment is the fitted bed height at that screw, so a
+        # positive value means the bed sits closer to the nozzle there and
+        # the screw must move away from it (+Z).  Upstream reaches the same
+        # result indirectly: replaying its walk for [+0.4, 0, -0.4] leaves
+        # the steppers displaced by [+0.8, +0.4, 0], which is +adjustment
+        # once the common offset is removed.  Subtracting here doubled
+        # every tilt instead of removing it.
+        #
+        # The mean is removed because upstream's walk only ever produces a
+        # relative displacement, whereas moving directly to curpos + adj
+        # would also shift the bed bodily by mean(adj).
         toolhead = self.printer.lookup_object('toolhead')
         mean_adj = sum(adjustments) / len(adjustments)
         curpos = toolhead.get_position()
         final_pos = list(curpos)
         for axis, adj in zip(stepper_axes, adjustments):
-            final_pos[axis] = curpos[axis] - (adj - mean_adj)
+            final_pos[axis] = curpos[axis] + (adj - mean_adj)
         toolhead.move(final_pos, speed)
         toolhead.set_position(final_pos)
-        # Apply session gcode offsets so that Z, A, and B all report the
-        # same coordinate despite being at different physical positions.
-        # Equivalent to SET_GCODE_OFFSET A=.. B=.. - future moves then
-        # carry the tilt correction transparently.  Nothing is saved to
-        # the config file.
+        # Shift each bed axis' session g-code offset by exactly the distance
+        # that axis moved, so the commanded coordinate is unchanged and
+        # future moves carry the correction transparently.  Nothing is saved
+        # to the config file.
+        #
+        # This is deliberately an ADDITION rather than an assignment.  The
+        # correction is a calibration, not a pose: whatever the offsets held
+        # beforehand - a tool change offset, a babystep, an earlier probe
+        # calibration - is state this module does not own, and assigning an
+        # absolute value silently discarded it.  Adding the delta also keeps
+        # a deliberately tilted bed pose intact, which matters here because
+        # the bed axes are commandable in their own right rather than being
+        # levelling screws alone.
         bed_axes = axis_roster.get_bed_axes(self.printer)
-        z_ref = final_pos[bed_axes[0]]
         axis_names = self.printer.lookup_object('toolhead').get_axis_names()
         gcode_move = self.printer.lookup_object('gcode_move')
         for axis in set(stepper_axes):
-            desired_offset = final_pos[axis] - z_ref
-            delta = desired_offset - gcode_move.homing_position[axis]
+            delta = final_pos[axis] - curpos[axis]
             gcode_move.base_position[axis] += delta
-            gcode_move.homing_position[axis] = desired_offset
+            gcode_move.homing_position[axis] += delta
         gcode_move.reset_last_position()
         logging.info("z_tilt: physical %s, gcode offsets %s",
                      " ".join(["%s=%.6f" % (axis_names[a].upper(),

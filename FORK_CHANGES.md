@@ -191,8 +191,9 @@ that calls `AxisKinematics`.  Do not subclass an existing flavour.
 |------|--------|-----|
 | `klippy/extras/probe.py` | `bed_lift_coord()` / `bed_descend_position()` move every bed axis by the same **delta** as Z (used by PROBE_CALIBRATE, PROBE_ACCURACY, sample retract, `ProbePointsHelper._raise_tool`, `DescendToEndstopHelper`); `LookupZSteppers` takes `axis_roster.get_bed_steppers`; `probe_travel_limit` option (default `max(-1.5, position_min)`) | the bed motors carry the bed together; a z_tilt correction between them must survive probe lifts; the probe trigger must halt all of them |
 | `klippy/extras/load_cell_probe.py` | uses `probe.bed_descend_position`, `probe_travel_limit` and `axis_roster.bed_delta_position` | same |
-| `klippy/extras/z_tilt.py` | `ZAdjustHelper` takes its steppers from `axis_roster.get_bed_steppers`; when they map to different axes it uses `_adjust_axes`: one coordinated move (mean-relative corrections) and session g-code offsets so every bed axis reports the same coordinate.  Stock multi-Z path kept for other kinematics | per-axis levelling of the bed |
-| `klippy/extras/bed_mesh.py`, `bed_tilt.py`, `z_thermal_adjust.py` | Z adjustments applied to every bed axis (`bed_tilt` reads a `<axis>_adjust` option per extra bed axis) | |
+| `klippy/extras/z_tilt.py` | `ZAdjustHelper` takes its steppers from `axis_roster.get_bed_steppers`; when they map to different axes it uses `_adjust_axes`: one coordinated move (mean-relative corrections) and session g-code offsets so every bed axis reports the same coordinate.  Stock multi-Z path kept for other kinematics.  **The correction is `curpos + (adj - mean)`** - an adjustment is the fitted bed height at that screw, so a positive value moves that screw away from the nozzle, matching what upstream's detach/reattach walk produces.  **The offsets are shifted by the distance each axis moved, not assigned absolutely**, so offsets this module does not own (tool change, babystep, probe calibration) survive a levelling pass | per-axis levelling of the bed |
+| `klippy/extras/bed_mesh.py`, `bed_tilt.py`, `z_thermal_adjust.py` | Z adjustments applied to every bed axis (`bed_tilt` reads a `<axis>_adjust` option per extra bed axis); the rapid scan's lift and descent go through `axis_roster.bed_lift_coord` | a scan must run over the bed as levelled, not over a plate flattened by its own lift |
+| `klippy/extras/manual_probe.py` | `move_z` jogs every bed motor together through `axis_roster.bed_lift_coord` | jogging the z axis alone tips a multi-screw bed, so the height being calibrated would not be the height printed at |
 
 ### 4.5 Print recovery and estimation
 
@@ -219,6 +220,7 @@ that calls `AxisKinematics`.  Do not subclass an existing flavour.
 | `test/reference/printerkin/` | **fork-only**, vendored **verbatim** from the Turn-Motion reference implementation | it is the independent oracle the derived bed joint solver is checked against; do not reformat it, do not "fix" it, re-vendor it if its source changes |
 | `test/test_axis_motion.py` | **fork-only** | the axis roster, distance groups, move checking, both rotary modes and the derived carriage range check |
 | `test/test_bed_transforms.py` | **fork-only** | the bed-adjusting g-code transforms, which have no upstream test of their own |
+| `test/test_z_tilt.py` | **fork-only** | the direction of the bed levelling correction, and that a levelling pass preserves offsets it did not set.  Getting the direction wrong does not fail loudly - it doubles the tilt - so it is pinned three ways: upstream's walk replayed, the coordinated move driven with a stubbed toolhead, and a simulated plate on the real screw geometry |
 | `test/test_uv_derived.py` | **fork-only** | the derived carriage equations against `test/reference`, with the compiled C solver required |
 | `sim/verify-axes.sh` | **fork-only** | one build, three profiles: the gate for every flavour |
 | `sim/compare_moves.py` | **fork-only** | diffs two `[move_capture]` captures move by move |
@@ -247,28 +249,6 @@ compiler, so they are usable without Docker.
 - The derived bed joint carriages are never homed; their position is
   recomputed from the bed pose, and their configured `position_min` /
   `position_max` are enforced by rejecting the move.
-
-### Known limitations
-
-- **Manual probing moves the Z motor alone.**
-  `klippy/extras/manual_probe.py` jogs the bed with
-  `toolhead.manual_move([None, None, z])`, which drives the z axis and
-  leaves the other bed motors where they are.  On a bed carried by three
-  motors that tilts the plate slightly during `PROBE_CALIBRATE`,
-  `Z_ENDSTOP_CALIBRATE` and every `TESTZ` jog, so the offset is
-  calibrated at a tilted pose rather than a level one.
-
-  The module is untouched by the fork, and the **old fork had the same
-  behaviour**, so this is long-standing rather than a regression.  It is
-  recorded rather than fixed because patching it adds a rebase conflict
-  point in a file the fork otherwise never touches; the fix, when it is
-  wanted, is to build the coordinate with
-  `axis_roster.bed_target_position()` in `move_z()` and to read the bed
-  height from `axis_roster.get_bed_axes(printer)[0]` instead of index 2.
-
-  The same z-only pattern is present in `probe_eddy_current.py`,
-  `temperature_probe.py` and the `bed_mesh` scan helper.  Those matter
-  only if the machine enables them; the Turn V2 config does not.
 
 Things that were in the old fork and are **deliberately not** here:
 the pre-merge load cell probe snapshot and its MCU protocol, the

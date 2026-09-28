@@ -3,6 +3,7 @@
 # Copyright (C) 2019-2026  Kevin O'Connor <kevin@koconnor.net>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
+import axis_roster
 import logging, bisect, collections
 
 # Main probe results tuple.  The probe estimates that if the toolhead
@@ -201,9 +202,15 @@ class ManualProbeHelper:
         curpos = self.toolhead.get_position()
         try:
             z_bob_pos = z_pos + Z_BOB_MINIMUM
+            # Every bed motor moves together.  Jogging the z axis alone
+            # would tip a multi-screw bed instead of raising it, so the
+            # height being calibrated would not be the height printed at.
             if curpos[2] < z_bob_pos:
-                self.toolhead.manual_move([None, None, z_bob_pos], self.speed)
-            self.toolhead.manual_move([None, None, z_pos], self.speed)
+                self.toolhead.manual_move(
+                    axis_roster.bed_lift_coord(self.printer, z_bob_pos),
+                    self.speed)
+            self.toolhead.manual_move(
+                axis_roster.bed_lift_coord(self.printer, z_pos), self.speed)
         except self.printer.command_error as e:
             self.finalize(False)
             raise

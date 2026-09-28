@@ -87,6 +87,24 @@ def bed_delta_position(printer, pos, delta):
         newpos[axis] += delta
     return newpos
 
+def bed_lift_coord(printer, height):
+    # A partial move coordinate that takes the bed to an absolute height
+    # while preserving the difference between the bed motors.  A tilt on a
+    # multi-screw bed lives entirely in those differences, so a move that
+    # gives every motor the same absolute target levels the bed part way
+    # through - which is not what any caller asking to "lift the bed"
+    # means.  Entries for the other axes are left as None so the move does
+    # not disturb them.
+    toolhead = printer.lookup_object('toolhead')
+    pos = toolhead.get_position()
+    coord = [None] * toolhead.get_axis_count()
+    bed_axes = get_bed_axes(printer)
+    if bed_axes:
+        delta = height - pos[bed_axes[0]]
+        for axis in bed_axes:
+            coord[axis] = pos[axis] + delta
+    return coord
+
 def bed_target_position(printer, pos, height):
     # Move the bed to an absolute height, carrying the other bed axes by
     # the same delta so that any tilt correction between them survives

@@ -372,22 +372,18 @@ will actually reach.
 
 ## 6. Known limitations
 
-**Manual probing moves the Z motor alone.** `manual_probe.py` jogs the bed
-with `toolhead.manual_move([None, None, z])`, which drives the z axis and
-leaves the other bed motors behind. On a bed carried by three motors that
-tilts the plate slightly during `PROBE_CALIBRATE`, `Z_ENDSTOP_CALIBRATE`
-and every `TESTZ` jog, so the offset is calibrated at a tilted pose rather
-than a level one.
+**Some upstream probing helpers still move the z axis alone.** A bed on
+several motors is raised by moving all of them together, so a helper that
+commands only z tips the plate rather than lifting it. The paths this fork
+uses go through `axis_roster.bed_lift_coord`, but `probe_eddy_current.py`
+and `temperature_probe.py` do not, and neither is used on the current
+machine. Anything enabling them needs the same treatment.
 
-The module is untouched by the fork, so it does not go through the roster.
-Building its coordinate with `axis_roster.bed_target_position()` inside
-`move_z()`, and reading the bed height from
-`axis_roster.get_bed_axes(printer)[0]` rather than index 2, would bring it
-in line.
-
-The same z-only pattern is in `probe_eddy_current.py`,
-`temperature_probe.py` and the bed mesh scan helper. Those matter only on
-a machine that enables them.
+**`SET_GCODE_OFFSET Z=` moves one motor of several.** A z-only offset tips
+the bed, which is what a babystep control sends. Macros work around it by
+naming every bed axis. Propagating a z offset to the other bed axes at the
+`gcode_move` level would fix babystepping, propagating only to axes the
+command did not name so that macros setting all of them stay correct.
 
 ## 7. Extending it
 

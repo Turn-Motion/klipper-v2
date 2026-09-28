@@ -43,15 +43,7 @@ def calc_probe_z_average(positions, method='average'):
 # bed motors by the same amount, so any tilt correction between them is
 # preserved.
 def bed_lift_coord(toolhead, z):
-    printer = toolhead.printer
-    pos = toolhead.get_position()
-    coord = [None] * toolhead.get_axis_count()
-    bed_axes = axis_roster.get_bed_axes(printer)
-    if bed_axes:
-        dz = z - pos[bed_axes[0]]
-        for axis in bed_axes:
-            coord[axis] = pos[axis] + dz
-    return coord
+    return axis_roster.bed_lift_coord(toolhead.printer, z)
 def bed_descend_position(toolhead, z):
     return axis_roster.bed_target_position(toolhead.printer,
                                            toolhead.get_position(), z)

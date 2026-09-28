@@ -1424,19 +1424,16 @@ position_max: 120</code></pre>
   </table>
 
   <div class="warn">
-    <b>Known limitation: manual probing moves the Z motor alone.</b>
-    <code>manual_probe.py</code> jogs the bed with
-    <code>manual_move([None, None, z])</code>, which drives the z axis and
-    leaves the other bed motors behind, so <code>PROBE_CALIBRATE</code>,
-    <code>Z_ENDSTOP_CALIBRATE</code> and every <code>TESTZ</code> jog tilt
-    the plate slightly and calibrate the offset at a tilted pose. The
-    module is untouched by the fork, so it does not go through the roster;
-    building its coordinate with
-    <code>axis_roster.bed_target_position()</code> inside
-    <code>move_z()</code> would bring it in line. The same pattern is in
-    <code>probe_eddy_current.py</code>, <code>temperature_probe.py</code>
-    and the bed mesh scan helper, which matter only if those modules are
-    enabled.
+    <b>Known limitation: a z-only offset tips the bed.</b>
+    <code>SET_GCODE_OFFSET Z=</code> moves one motor of several, which is
+    what a babystep control sends, so it pitches the plate rather than
+    raising it. Macros work around it by naming every bed axis. Propagating
+    a z offset to the other bed axes at the <code>gcode_move</code> level
+    would fix babystepping, propagating only to axes the command did not
+    name so that macros setting all of them stay correct. The same z-only
+    pattern remains in <code>probe_eddy_current.py</code> and
+    <code>temperature_probe.py</code>, neither of which this machine
+    enables.
   </div>
 
   <div class="note">

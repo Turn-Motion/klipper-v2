@@ -1243,8 +1243,11 @@ class RapidScanHelper:
             return
         pparams = pprobe.get_probe_params(gcmd)
         lift_speed = pparams["lift_speed"]
-        cur_pos[2] = self.scan_height + .5
-        toolhead.manual_move(cur_pos, lift_speed)
+        # Carry every bed motor, so the scan runs over the bed as it is
+        # levelled rather than over a plate flattened by the lift itself
+        toolhead.manual_move(
+            axis_roster.bed_lift_coord(self.printer, self.scan_height + .5),
+            lift_speed)
 
     def _move_to_scan_height(self, gcmd, scan_height):
         time_window = gcmd.get_float("SAMPLE_TIME")
@@ -1254,10 +1257,12 @@ class RapidScanHelper:
         pparams = pprobe.get_probe_params(gcmd)
         lift_speed = pparams["lift_speed"]
         probe_speed = pparams["probe_speed"]
-        cur_pos[2] = scan_height + .5
-        toolhead.manual_move(cur_pos, lift_speed)
-        cur_pos[2] = scan_height
-        toolhead.manual_move(cur_pos, probe_speed)
+        toolhead.manual_move(
+            axis_roster.bed_lift_coord(self.printer, scan_height + .5),
+            lift_speed)
+        toolhead.manual_move(
+            axis_roster.bed_lift_coord(self.printer, scan_height),
+            probe_speed)
         toolhead.dwell(time_window / 2 + .01)
 
     def _apply_offsets(self, point, offsets):
