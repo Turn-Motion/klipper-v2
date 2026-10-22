@@ -179,6 +179,7 @@ roster and nothing else; everything else is shared.
 | `klippy/kinematics/bed_joint_carriages.py` | `[bed_joint_carriages]`: the two horizontal bed joint slides, derived from the bed pose rather than commanded.  `travel_check: sampled|endpoints` and `homing_mode: detached|attached` select between the two implementations we have run. |
 | `klippy/kinematics/cartesianxy3z_safety.py` | Bed joint geometry checks (`[CartesianXY3ZSafety]` section, `CHECK_CARTESIANXY3Z_SAFETY`, `PREVIEW_MOVE`).  Pure fork code.  It is specific to the three-vertical-axis bed and indexes z, a and b at 2, 3 and 4, which holds for every flavour that enables it. |
 | `config/example-Turn-V2.cfg`, `config/example-cartesianxy3z-full.cfg`, `config/example-cartesianxy3zr.cfg`, `config/example-bed-joint-carriages.cfg`, `printer.cfg` | machine configs |
+| `config/rotary-axis.cfg` | **fork-only** | drop-in overlay that adds the R axis to an existing XY3Z machine config.  Included as the last line of `printer.cfg`, it overrides `kinematics` and adds the rotary limits without touching any other `[printer]` option, so commenting the include out reverts the machine.  Klipper applies include overrides linearly, which is what makes this work |
 | `docs/Turn_Kinematics.md` | **fork-only** architecture and configuration guide |
 | `docs/Turn_Kinematics_Architecture.html` / `.pdf`, `docs/build-architecture-pdf.sh` | **fork-only** the same guide with diagrams, and its build script |
 
