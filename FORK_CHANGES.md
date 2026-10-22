@@ -180,6 +180,9 @@ roster and nothing else; everything else is shared.
 | `klippy/kinematics/cartesianxy3z_safety.py` | Bed joint geometry checks (`[CartesianXY3ZSafety]` section, `CHECK_CARTESIANXY3Z_SAFETY`, `PREVIEW_MOVE`).  Pure fork code.  It is specific to the three-vertical-axis bed and indexes z, a and b at 2, 3 and 4, which holds for every flavour that enables it. |
 | `config/example-Turn-V2.cfg`, `config/example-cartesianxy3z-full.cfg`, `config/example-cartesianxy3zr.cfg`, `config/example-bed-joint-carriages.cfg`, `printer.cfg` | machine configs |
 | `config/rotary-axis.cfg` | **fork-only** | drop-in overlay that adds the R axis to an existing XY3Z machine config.  Included as the last line of `printer.cfg`, it overrides `kinematics` and adds the rotary limits without touching any other `[printer]` option, so commenting the include out reverts the machine.  Klipper applies include overrides linearly, which is what makes this work |
+| `sim/printer.sim.ztilt.cfg` | **fork-only** | a levelling profile with `[z_tilt]` and deliberately no `[probe]`, so `Z_TILT_ADJUST` falls back to manual probing and the trigger heights come from the g-code.  That is what makes the levelling direction testable in a simulator |
+| `gcode/ztilt_sign_check.gcode` | **fork-only** | states a bed 0.8 mm out of level at B and answers the manual probe at each point, so the correct correction is known in advance.  The gate asserts the magnitude and sign, not convergence: a static g-code file states its own trigger heights, so a second pass cannot prove the first one levelled anything |
+| `gcode/rotary_travel_check.gcode` | **fork-only** | finishes at a non-zero angle.  `rotary_smoke.gcode` returns R to zero, so its final position cannot show whether R moved at all |
 | `docs/Turn_Kinematics.md` | **fork-only** architecture and configuration guide |
 | `docs/Turn_Kinematics_Architecture.html` / `.pdf`, `docs/build-architecture-pdf.sh` | **fork-only** the same guide with diagrams, and its build script |
 
@@ -326,7 +329,10 @@ upstream behaviour: those configs all run with three kinematic axes.
 
 ### 7.2 The machine flavours
 
-`sim/verify-axes.sh` builds once and exercises every flavour:
+`sim/verify-axes.sh` builds once and exercises every flavour, then adds
+two targeted checks that the flavour runs cannot make on their own: that
+`Z_TILT_ADJUST` applies the correction the probed bed calls for, and that
+the rotary axis really travels rather than merely being accepted:
 
 ```
 docker compose -f docker-compose.sim.yml run --rm \
@@ -344,6 +350,26 @@ boots klippy in batch mode against `sim/printer.sim.cfg`,
 The first two run the *same* g-code, which is the point: adding the
 derived carriages must not change the g-code.
 
+Stages 7 and 8 are the two targeted checks.  Stage 7 runs
+`sim/printer.sim.ztilt.cfg`, which has no `[probe]`, so the trigger
+heights come from `gcode/ztilt_sign_check.gcode` and the correct
+correction is therefore known before the run: Z and A down by 0.267, B up
+by 0.533.  Inverting the sign in `z_tilt.py` flips all three and the stage
+fails, which has been checked by actually inverting it.  Note what the
+stage does *not* assert: a static g-code file states its own trigger
+heights, so the second pass reporting a level bed proves nothing about
+whether the first pass levelled it.  The magnitude and sign are the
+evidence; the second pass is only asserted to be stable.
+
+Stage 8 exists because `gcode/rotary_smoke.gcode` returns R to zero, so
+its final position is zero whether or not R ever moved.
+`gcode/rotary_travel_check.gcode` finishes at 45 degrees instead.  Note
+also that in batch mode the `stepper:` and `mcu:` lines of `GET_POSITION`
+report the *homed* positions for every axis, because the simulated MCU
+never steps the queued moves out; the `toolhead:` line is the one that
+shows what was planned.  Reading the stepper line as "the axis did not
+move" is a mistake this fork has already made once.
+
 The unit tests also run standalone with plain Python, no compiler:
 
 ```
@@ -353,6 +379,11 @@ python test/test_z_tilt.py
 python test/test_z_tilt_command.py
 python test/test_uv_derived.py
 ```
+
+The two batch stages above need the container, because they need a
+compiled MCU dictionary.  `test/test_z_tilt_command.py` covers the same
+levelling path without one, so it is the check to run when the container
+is unavailable.
 
 `test/test_z_tilt_command.py` is worth singling out: it runs the real
 `Z_TILT_ADJUST` command against a simulated bed without needing a

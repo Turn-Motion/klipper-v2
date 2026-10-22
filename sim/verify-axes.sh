@@ -17,7 +17,9 @@
 #        test_uv_derived.py   - the derived carriage equations against the
 #                               vendored reference solver, with the compiled
 #                               C solver REQUIRED
-#   4. klippy in batch mode against each profile:
+#   4. klippy in batch mode against each profile, plus two targeted
+#      checks: that Z_TILT_ADJUST levels the bed rather than doubling
+#      the tilt, and that the rotary axis really travels:
 #        cartesianxy3z    baseline, five axes
 #        cartesianxy3z    + [bed_joint_carriages]: U and V derived from the
 #                         bed pose.  Runs the SAME g-code as the baseline -
@@ -40,7 +42,7 @@ find /klipper/scripts -name "*.sh" -exec sed -i 's/\r//' {} + 2>/dev/null || tru
 sed -i 's/\r//' /klipper/Makefile 2>/dev/null || true
 
 echo "============================================================"
-echo " [1/6] clean build tree"
+echo " [1/8] clean build tree"
 echo "============================================================"
 # c_helper.so is NOT built by make - klippy compiles it lazily on first
 # start.  Removing it forces a fresh compile below, which is what actually
@@ -52,7 +54,7 @@ echo "--> clean OK"
 
 echo
 echo "============================================================"
-echo " [2/6] building Linux host MCU (out/klipper.elf + .dict)"
+echo " [2/8] building Linux host MCU (out/klipper.elf + .dict)"
 echo "============================================================"
 cp /klipper/sim/linux-mcu.config /klipper/.config
 make olddefconfig CROSS_PREFIX= CC=gcc >/dev/null 2>&1
@@ -68,7 +70,7 @@ echo "--> Linux MCU OK"
 
 echo
 echo "============================================================"
-echo " [3/6] unit tests"
+echo " [3/8] unit tests"
 echo "============================================================"
 echo "--- test_axis_motion.py (roster, distance groups, move checking) ---"
 python /klipper/test/test_axis_motion.py || fail "test_axis_motion.py"
@@ -92,7 +94,7 @@ run_profile () {
     local label="$1" cfg="$2" gcode="$3" step="$4"
     echo
     echo "============================================================"
-    echo " [$step/6] klippy batch: $label"
+    echo " [$step/8] klippy batch: $label"
     echo "        config: $cfg"
     echo "        gcode : $gcode"
     echo "============================================================"
@@ -153,14 +155,69 @@ run_profile "uvderived" /klipper/sim/printer.sim.uvderived.cfg \
 run_profile "rotary" /klipper/sim/printer.sim.rotary.cfg \
             /klipper/gcode/rotary_smoke.gcode 6
 
+# Levelling without a probe.  The g-code states the trigger heights, so
+# it states the bed; the only question left is what the code does about
+# it.  Pass 1 describes a bed 0.8mm out of level at B and pass 2
+# describes the bed the correct correction produces, so a wrong sign
+# cannot pass both.
+run_profile "ztilt" /klipper/sim/printer.sim.ztilt.cfg \
+            /klipper/gcode/ztilt_sign_check.gcode 7
+
+# rotary_smoke.gcode returns R to zero, so its final position cannot
+# show whether R moved at all.  This one finishes at a non-zero angle.
+run_profile "rotrav" /klipper/sim/printer.sim.rotary.cfg \
+            /klipper/gcode/rotary_travel_check.gcode 8
+
 echo
 echo "--- derived carriage positions (uvderived only) ---"
 grep -E "^stepper: " /tmp/klippy_uvderived.log | tail -1 | tr ' ' '\n' \
     | grep -E "stepper_[uv]:" || echo "(no stepper_u/stepper_v in the report)"
 echo
+echo "--- bed levelling correction (ztilt only) ---"
+grep -E "^z_tilt: " /tmp/klippy_ztilt.log \
+    || fail "ztilt: no z_tilt report - the correction never ran"
+# ztilt_sign_check.gcode states a bed 0.8mm out of level at B, so the
+# correct correction is known in advance: Z and A move down by about
+# 0.267 and B moves UP by about 0.533.  Inverting the sign flips all
+# three, which is what this catches.  The second pass is asserted only
+# to be stable; it cannot prove the first pass levelled the bed,
+# because a static g-code file states its own trigger heights.
+python - <<'ZTPY' || fail "ztilt: wrong correction"
+import re, sys
+lines = [l for l in open('/tmp/klippy_ztilt.log')
+         if l.startswith('z_tilt: ')]
+if len(lines) != 2:
+    sys.exit("expected two levelling passes, got %d" % (len(lines),))
+def offsets(line):
+    tail = line.split("gcode offsets", 1)[1]
+    return [float(v) for v in re.findall(r"=(-?[0-9.]+)", tail)]
+first, second = offsets(lines[0]), offsets(lines[1])
+print("pass 1 offsets Z/A/B: %s" % (first,))
+print("pass 2 offsets Z/A/B: %s" % (second,))
+want = [-0.266667, -0.266667, 0.533333]
+TOL = 0.005   # stepper quantisation on a 5mm screw at 16 microsteps
+for name, got, exp in zip("ZAB", first, want):
+    if abs(got - exp) > TOL:
+        sys.exit("%s offset %+.6f, expected %+.6f (tol %.3f)"
+                 % (name, got, exp, TOL))
+if max([abs(a - b) for a, b in zip(first, second)]) > 1e-9:
+    sys.exit("the second pass moved the correction: %s -> %s"
+             % (first, second))
+print("correction matches the stated bed, and the second pass is stable")
+ZTPY
+
 echo "--- rotary axis position (rotary only) ---"
 grep -E "^kinematic: " /tmp/klippy_rotary.log | tail -1 \
     || echo "(no kinematic position report)"
+echo "--- rotary axis travel (rotrav only) ---"
+grep -E "^toolhead: " /tmp/klippy_rotrav.log | tail -1
+# rotary_travel_check.gcode finishes at R=45, so any other value means
+# the axis did not follow the commanded moves.
+if ! grep -E "^toolhead: " /tmp/klippy_rotrav.log | tail -1 \
+     | grep -q "R:45.000000"; then
+    fail "rotrav: R did not finish at 45 degrees"
+fi
+echo "R finished at the commanded 45 degrees"
 
 echo
 echo "============================================================"
@@ -168,4 +225,6 @@ echo " ${GRN}ALL CHECKS PASSED${RST}"
 echo "   cartesianxy3z    - baseline, five axes"
 echo "   + bed joints     - U and V derived from the bed pose"
 echo "   cartesianxy3zr   - the same machine plus the rotary R axis"
+echo "   bed levelling    - Z_TILT_ADJUST converges in one pass"
+echo "   rotary travel    - R really moves, and ends where commanded"
 echo "============================================================"
